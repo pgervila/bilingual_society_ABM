@@ -55,7 +55,7 @@ class Simple_Language_Model(Model):
             y = random.randrange(self.grid_height)
             coord = (x,y)
             lang = np.random.choice([0,1,2], p=[0.25,0.65,0.1])
-            a = Simple_Language_Agent(id_, lang, S)
+            a = Simple_Language_Agent(self, id_, lang, S)
             self.add_agent(a, coord)
             id_ += 1
 

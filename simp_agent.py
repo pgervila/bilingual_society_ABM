@@ -5,7 +5,8 @@ import networkx as nx
 
 class Simple_Language_Agent:
 
-    def __init__(self, unique_id, language, S):
+    def __init__(self, model, unique_id, language, S):
+        self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.S = S
@@ -17,7 +18,7 @@ class Simple_Language_Agent:
         self.lang_freq['cat_pct_h'] = 0
 
 
-    def move_random(self, model):
+    def move_random(self):
         """ Take a random step into any surrounding cell
             All eight surrounding cells are available as choices
             Current cell is not an output choice
@@ -29,15 +30,15 @@ class Simple_Language_Agent:
                 * modifies self.pos attribute
         """
         x, y = self.pos  # attr pos is defined when adding agent to schedule
-        possible_steps = model.grid.get_neighborhood(
+        possible_steps = self.model.grid.get_neighborhood(
             (x, y),
             moore=True,
             include_center=False
         )
         chosen_cell = random.choice(possible_steps)
-        model.grid.move_agent(self, chosen_cell)
+        self.model.grid.move_agent(self, chosen_cell)
 
-    def speak(self, model, with_agent=None):
+    def speak(self, with_agent=None):
         """ Pick random lang_agent from current cell and start a conversation
             with it. It updates heard words in order to shape future vocab.
             Language of the conversation is determined by given laws,
@@ -57,20 +58,20 @@ class Simple_Language_Agent:
         if with_agent is None:
             pos = [self.pos]
             # get all agents currently placed on chosen cell
-            others = model.grid.get_cell_list_contents(pos)
+            others = self.model.grid.get_cell_list_contents(pos)
             ## linguistic model of encounter with another random agent
             if len(others) > 1:
                 other = random.choice(others)
                 self.get_conversation_lang(other)
                 # update lang status
-                self.update_lang_status(model)
-                other.update_lang_status(model)
+                self.update_lang_status()
+                other.update_lang_status()
         else:
             self.get_conversation_lang(with_agent)
             other = with_agent
             # update lang status
-            self.update_lang_status(model)
-            other.update_lang_status(model)
+            self.update_lang_status()
+            other.update_lang_status()
 
     def get_conversation_lang(self, other):
         # spa-bilingual
@@ -127,8 +128,8 @@ class Simple_Language_Agent:
         else:
             self.lang_freq['cat_pct_h'] = 0
 
-    def update_lang_switch(self, model):
-        if model.schedule.steps > 50:
+    def update_lang_switch(self):
+        if self.model.schedule.steps > 50:
             if self.language == 0:
                 if self.lang_freq['cat_pct_h'] >= 0.25:
                     self.language = 1
@@ -140,16 +141,16 @@ class Simple_Language_Agent:
                     self.language = 2
                 elif self.lang_freq['cat_pct_h'] <= 0.1:
                     self.language = 0
-    def update_lang_status(self, model):
+    def update_lang_status(self):
         # update lang experience
         self.update_lang_pcts()
         # check lang switch
-        self.update_lang_switch(model)
+        self.update_lang_switch()
 
 
     def step(self, model):
-        self.move_random(model)
-        self.speak(model)
+        self.move_random()
+        self.speak()
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)
