@@ -59,18 +59,18 @@ class Simple_Language_Agent:
             # get all agents currently placed on chosen cell
             others = model.grid.get_cell_list_contents(pos)
             ## linguistic model of encounter with another random agent
-            if len(others) >= 1:
+            if len(others) > 1:
                 other = random.choice(others)
                 self.get_conversation_lang(other)
+                # update lang status
+                self.update_lang_status(model)
+                other.update_lang_status(model)
         else:
             self.get_conversation_lang(with_agent)
             other = with_agent
-        # update lang experience
-        self.update_lang_pcts(self)
-        self.update_lang_pcts(other)
-        # check lang switch
-        self.check_lang_switch(self, model)
-        self.check_lang_switch(other, model)
+            # update lang status
+            self.update_lang_status(model)
+            other.update_lang_status(model)
 
     def get_conversation_lang(self, other):
         # spa-bilingual
@@ -117,37 +117,39 @@ class Simple_Language_Agent:
             self.lang_freq['heard'][l2] += 1
             other.lang_freq['spoken'][l2] += 1
 
-    def update_lang_pcts(self, agent):
-        if sum(agent.lang_freq['spoken']) != 0:
-            agent.lang_freq['cat_pct_s'] = round(agent.lang_freq['spoken'][1] / sum(agent.lang_freq['spoken']), 2)
+    def update_lang_pcts(self):
+        if sum(self.lang_freq['spoken']) != 0:
+            self.lang_freq['cat_pct_s'] = round(self.lang_freq['spoken'][1] / sum(self.lang_freq['spoken']), 2)
         else:
-            agent.lang_freq['cat_pct_s'] = 0
-        if sum(agent.lang_freq['heard']) != 0:
-            agent.lang_freq['cat_pct_h'] = round(agent.lang_freq['heard'][1] / sum(agent.lang_freq['heard']), 2)
+            self.lang_freq['cat_pct_s'] = 0
+        if sum(self.lang_freq['heard']) != 0:
+            self.lang_freq['cat_pct_h'] = round(self.lang_freq['heard'][1] / sum(self.lang_freq['heard']), 2)
         else:
-            agent.lang_freq['cat_pct_h'] = 0
+            self.lang_freq['cat_pct_h'] = 0
 
-    def check_lang_switch(self, agent, model):
-        if model.schedule.steps > 100:
-            if agent.language == 0:
-                if agent.lang_freq['cat_pct_h'] >= 0.25:
-                    agent.language = 1
-            elif agent.language == 2:
-                if agent.lang_freq['cat_pct_h'] <= 0.75:
-                    agent.language = 1
+    def update_lang_switch(self, model):
+        if model.schedule.steps > 50:
+            if self.language == 0:
+                if self.lang_freq['cat_pct_h'] >= 0.25:
+                    self.language = 1
+            elif self.language == 2:
+                if self.lang_freq['cat_pct_h'] <= 0.75:
+                    self.language = 1
             else:
-                if agent.lang_freq['cat_pct_h'] >= 0.9:
-                    agent.language = 2
-                elif agent.lang_freq['cat_pct_h'] <= 0.1:
-                    agent.language = 0
-
-
+                if self.lang_freq['cat_pct_h'] >= 0.9:
+                    self.language = 2
+                elif self.lang_freq['cat_pct_h'] <= 0.1:
+                    self.language = 0
+    def update_lang_status(self, model):
+        # update lang experience
+        self.update_lang_pcts()
+        # check lang switch
+        self.update_lang_switch(model)
 
 
     def step(self, model):
         self.move_random(model)
         self.speak(model)
-
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)

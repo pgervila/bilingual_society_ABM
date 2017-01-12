@@ -22,7 +22,7 @@ from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, width=10, height=10, alpha=1.1,
+    def __init__(self, num_people, width=5, height=5, alpha=1.1,
                  max_people_factor=5):
         self.num_people = num_people
         self.grid_width = width
@@ -49,16 +49,21 @@ class Simple_Language_Model(Model):
         self.family_networks = nx.DiGraph()
 
         S = 0.5
-        for id_, coord in zip(range(num_people), itertools.product(range(self.grid_width),
-                                                                   range(self.grid_height))
-                              ):
+        id_ = 0
+        for _ in zip(range(num_people)):
+            x = random.randrange(self.grid_width)
+            y = random.randrange(self.grid_height)
+            coord = (x,y)
             lang = np.random.choice([0,1,2], p=[0.25,0.65,0.1])
             a = Simple_Language_Agent(id_, lang, S)
             self.add_agent(a, coord)
+            id_ += 1
 
         # Data Collector
         self.datacollector = DataCollector(
-            model_reporters={"count_lang": lambda m: m.get_lang_stats()}
+            model_reporters={"count_spa": lambda m: m.get_lang_stats(0),
+                             "count_bil": lambda m: m.get_lang_stats(1),
+                             "count_cat": lambda m: m.get_lang_stats(2)}
         )
 
 
@@ -94,17 +99,16 @@ class Simple_Language_Model(Model):
         plt.title(ag_attr)
         plt.show()
 
-    def get_lang_stats(self):
+    def get_lang_stats(self, i):
         ag_lang_list = [ag.language for ag in self.schedule.agents]
+        num_ag = len(ag_lang_list)
         lang_counts = Counter(ag_lang_list)
-        return lang_counts[1]
-
+        return lang_counts[i]/num_ag
 
     def step(self):
         #self.get_lang_stats()
         self.datacollector.collect(self)
         self.schedule.step()
-
 
     def run_model(self, steps):
         for _ in range(steps):
