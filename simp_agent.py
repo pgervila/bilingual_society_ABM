@@ -148,7 +148,7 @@ class Simple_Language_Agent:
         self.update_lang_switch()
 
 
-    def step(self, model):
+    def step(self):
         self.move_random()
         self.speak()
 
