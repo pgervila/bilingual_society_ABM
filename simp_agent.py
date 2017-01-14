@@ -90,8 +90,7 @@ class Simple_Language_Agent:
             if sum(self.lang_freq['spoken']) != 0:
                 p10 = self.lang_freq['spoken'][0]/sum(self.lang_freq['spoken'])
                 p11 = 1 - p10
-                #l1 = np.random.choice([0,1], p=[p10,p11])
-                l1 = np.random.binomial(1,p11,1)[0]
+                l1 = np.random.binomial(1,p11)
             else:
                 l1 = random.choice([0,1])
             self.lang_freq['spoken'][l1] += 1
@@ -104,8 +103,7 @@ class Simple_Language_Agent:
             if sum(self.lang_freq['spoken']) != 0:
                 p10 = self.lang_freq['spoken'][0]/sum(self.lang_freq['spoken'])
                 p11 = 1 - p10
-                #l1 = np.random.choice([0,1], p=[p10,p11])
-                l1 = np.random.binomial(1, p11, 1)[0]
+                l1 = np.random.binomial(1, p11)
             else:
                 l1 = random.choice([0, 1])
             self.lang_freq['spoken'][l1] += 1
@@ -114,8 +112,7 @@ class Simple_Language_Agent:
             if sum(other.lang_freq['spoken']) != 0:
                 p20 = other.lang_freq['heard'][0]/sum(other.lang_freq['heard'])
                 p21 = 1 - p20
-                #l2 = np.random.choice([0,1], p=[p20,p21])
-                l2 = np.random.binomial(1,p21,1)[0]
+                l2 = np.random.binomial(1,p21)
             else:
                 l2 = random.choice([0, 1])
             self.lang_freq['heard'][l2] += 1
