@@ -6,11 +6,13 @@ from collections import deque
 
 class Simple_Language_Agent:
 
-    def __init__(self, model, unique_id, language, S):
+    def __init__(self, model, unique_id, language, S, age=0, num_children=0):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.S = S
+        self.age = 0
+        self.num_children = num_children
 
         self.lang_freq = dict()
         num_init_occur = 50
@@ -168,17 +170,63 @@ class Simple_Language_Agent:
                     if 1 not in self.lang_freq['maxmem_list']:
                         self.language = 0
 
+
     def update_lang_status(self):
         # update lang experience
         self.update_lang_pcts()
         # check lang switch
         self.update_lang_switch()
 
+    def reproduce(self, init_lang_instances=50):
+        if (20 <= self.age <= 40) and (self.num_children < 1) and (random.random() > 1 - 5/20):
+            id_ = self.model.set_available_ids.pop()
+            lang = self.language
+            a = Simple_Language_Agent(self.model, id_, lang, 0.5)
+            self.model.add_agent(a, self.pos)
+            num_cat_s = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_s'])
+            num_cat_h = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_h'])
+            a.lang_freq['spoken'] = [init_lang_instances-num_cat_s, num_cat_s]
+            a.lang_freq['heard'] = [init_lang_instances-num_cat_h, num_cat_h]
+            a.update_lang_pcts()
+
+            self.num_children += 1
+
+    def simulate_random_death(self):  ##
+        # define stochastic probability of agent death as function of age
+        if (self.age > 20) and (self.age <= 75):
+            if random.random() > (1 - 0.25 / 55):  # 25% pop will die through this period
+                self.remove_after_death()
+        elif (self.age > 75) and (self.age < 90):
+            if random.random() > (1 - 0.70 / 15):  # 70% will die
+                self.remove_after_death()
+        elif self.age >= 90:
+            self.remove_after_death()
+
+    def remove_after_death(self):
+        """ call this function if death conditions
+        for agent are verified """
+        for network in [self.model.family_network,
+                        self.model.known_people_network,
+                        self.model.friendship_network]:
+            try:
+                network.remove_node(self)
+            except nx.NetworkXError:
+                pass
+        # find agent coordinates
+        x, y = self.pos
+        # make id from deceased agent available
+        self.model.set_available_ids.add(self.unique_id)
+        # remove agent from grid and schedule
+        self.model.grid._remove_agent((x,y), self)
+        self.model.schedule.remove(self)
 
     def step(self):
         self.move_random()
         self.speak()
 
+        self.age += 1
+        self.reproduce()
+        self.simulate_random_death()
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)

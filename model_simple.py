@@ -60,6 +60,10 @@ class Simple_Language_Model(Model):
                                         key=lambda x:pdist([x,[0,0]])
                                        )
 
+        #define container for available ids
+        self.set_available_ids = set(range(num_people,
+                                           self.max_people_factor * self.num_people)
+                                     )
 
 
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
@@ -100,7 +104,7 @@ class Simple_Language_Model(Model):
                              "biling_evol_h": lambda m:m.get_bilingual_global_evol('heard'),
                              "biling_evol_s": lambda m: m.get_bilingual_global_evol('spoken')
                              },
-            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_freq['cat_pct_h'],
+            agent_reporters={"pct_cat_in_biling": lambda a: a.lang_freq['cat_pct_h'],
                              "pct_spa_in_biling": lambda a: 1 - a.lang_freq['cat_pct_h']}
         )
 
