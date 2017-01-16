@@ -30,6 +30,17 @@ from mesa.time import RandomActivation, SimultaneousActivation, StagedActivation
 from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
 
+
+# need to subclass because of bug in last available mesa release
+class RandomActivation_modif(RandomActivation):
+    def step(self):
+        random.shuffle(self.agents)
+        for agent in self.agents[:]:
+            agent.step()
+        self.steps += 1
+        self.time += 1
+
+
 class Simple_Language_Model(Model):
     def __init__(self, num_people, avg_max_mem=20, width=5, height=5, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, lang_ags_sorted_by_dist=True,
@@ -48,7 +59,7 @@ class Simple_Language_Model(Model):
 
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
-        self.schedule = RandomActivation(self)
+        self.schedule = RandomActivation_modif(self)
 
         ## RANDOMLY DEFINE ALL CITY-CENTERS COORDS (CITY == HOMES, JOB CENTERS and SCHOOLS)
         # first define available points as pct of squared grid length
@@ -92,11 +103,13 @@ class Simple_Language_Model(Model):
             self.create_lang_agents()
 
         # DATA COLLECTOR
+
         self.datacollector = DataCollector(
             model_reporters={"count_spa": lambda m: m.get_lang_stats(0),
                              "count_bil": lambda m: m.get_lang_stats(1),
                              "count_cat": lambda m: m.get_lang_stats(2),
                              "total_num_agents": lambda m:len(m.schedule.agents),
+                             "total_num_employed": lambda m:m.get_employed_people(),
                              "biling_evol_h": lambda m:m.get_bilingual_global_evol('heard'),
                              "biling_evol_s": lambda m: m.get_bilingual_global_evol('spoken')
                              },
@@ -225,6 +238,7 @@ class Simple_Language_Model(Model):
         lang_counts = Counter(ag_lang_list)
         return lang_counts[i]/num_ag
 
+
     def get_bilingual_global_evol(self, lang_typology):
         """Method to compute internal linguistic structure of all bilinguals,
         expressed as average amount of Catalan heard or spoken as % of total
@@ -254,6 +268,11 @@ class Simple_Language_Model(Model):
                     return 1
                 else:
                     return 0
+
+    def get_employed_people(self):
+        list_employed = [1 for ag in self.schedule.agents if ag.job]
+        return len(list_employed)
+
 
     def step(self):
         self.datacollector.collect(self)
@@ -321,7 +340,7 @@ class Simple_Language_Model(Model):
                             c=data_2D['values'],
                             vmin=0, vmax=2, s=35,
                             cmap='viridis')
-        ax4.text(0.02, 0.95, 'time = %.1f' % self.schedule.steps, transform=ax4.transAxes)
+        ax4.text(0.02, 1.05, 'time = %.1f' % self.schedule.steps, transform=ax4.transAxes)
         plt.colorbar(s)
         plt.suptitle(self.save_dir)
         plt.tight_layout()

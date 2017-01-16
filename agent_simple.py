@@ -6,11 +6,21 @@ from collections import deque
 
 class Simple_Language_Agent:
 
-    def __init__(self, model, unique_id, language, S):
+    def __init__(self, model, unique_id, language, S, lang_pride=0.5, financial_greed=0.5):
         self.model = model
         self.unique_id = unique_id
-        self.language = language # 0, 1, 2 => spa, bil, cat
+        self.language = language  # 0, 1, 2 => spa, bil, cat
         self.S = S
+        self.lang_pride = lang_pride
+        self.financial_greed = financial_greed
+
+        self.job = None
+        # model agent relative financial wealth : relative to average financial wealth
+        self.wealth = 100
+        self.relat_wealth = 1 # endowment
+        # model agent relative lang wealth : how often favorite lang can be used relative to competitor lang
+        if self.language in [0,2]:
+            self.lang_wealth = 1
 
         self.lang_freq = dict()
         num_init_occur = 50
@@ -174,10 +184,57 @@ class Simple_Language_Agent:
         # check lang switch
         self.update_lang_switch()
 
+    def look_for_job(self):
+        """ Compute probabilities based on language knowledge """
+        if self.language in [0,1]:
+            if np.random.binomial(1, (1 - self.lang_freq['cat_pct_s'])/10):
+                self.job = True
+        elif self.language == 2:
+            if np.random.binomial(1, (1 - self.lang_freq['cat_pct_s'])/100):
+                self.job = True
+
+    def work(self):
+        self.speak()
+        self.wealth += 1
+
+    def get_job_review(self):
+        if self.lang_freq['cat_pct_s'] > 0.75:
+            self.job = False
+
+    def study_lang(self, lang):
+        self.lang_freq['spoken'][lang] += 1
+        self.lang_freq['heard'][lang] += 1
+
+    def assess_wellness(self):
+        """Assess how well or bad an agent feels as a
+        result of combining the two parameters that define wellness:
+        lang pride and financial wealth. The assessment will be
+        used to define agent further action"""
+
+        # wealth will be relative to other's wealth
+        # lang pride as well
+        if not self.job:
+            self.study_lang(0)
+
+
 
     def step(self):
+        #check if agent has a job
+        if self.job:
+            self.work()
+            self.get_job_review()
+        else:
+            self.wealth -= 1
+            self.look_for_job()
+        #do usual stuff
         self.move_random()
         self.speak()
+        #assess
+        self.assess_wellness()
+        #remove agent if wealth is over
+        if self.wealth == 0:
+            self.model.grid._remove_agent(self.pos, self)
+            self.model.schedule.remove(self)
 
 
     def __repr__(self):
