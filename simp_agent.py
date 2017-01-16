@@ -12,10 +12,21 @@ class Simple_Language_Agent:
         self.S = S
 
         self.lang_freq = dict()
-        self.lang_freq['spoken'] = [0, 0] # 0, 2 => spa, cat
-        self.lang_freq['heard'] = [0, 0]
-        self.lang_freq['cat_pct_s'] = 0
-        self.lang_freq['cat_pct_h'] = 0
+        if self.language == 0:
+            self.lang_freq['spoken'] = [50, 0] # 0, 2 => spa, cat
+            self.lang_freq['heard'] = [50, 0]
+            self.lang_freq['cat_pct_s'] = 0
+            self.lang_freq['cat_pct_h'] = 0
+        elif self.language == 2:
+            self.lang_freq['spoken'] = [0, 50] # 0, 2 => spa, cat
+            self.lang_freq['heard'] = [0, 50]
+            self.lang_freq['cat_pct_s'] = 1
+            self.lang_freq['cat_pct_h'] = 1
+        else:
+            self.lang_freq['spoken'] = [25, 25] # 0, 2 => spa, cat
+            self.lang_freq['heard'] = [25, 25]
+            self.lang_freq['cat_pct_s'] = 0.5
+            self.lang_freq['cat_pct_h'] = 0.5
 
 
     def move_random(self):
@@ -131,7 +142,7 @@ class Simple_Language_Agent:
             self.lang_freq['cat_pct_h'] = 0
 
     def update_lang_switch(self):
-        if self.model.schedule.steps > 50:
+        if self.model.schedule.steps > 10:
             if self.language == 0:
                 if self.lang_freq['cat_pct_h'] >= 0.25:
                     self.language = 1

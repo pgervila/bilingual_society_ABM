@@ -46,8 +46,9 @@ class Simple_Language_Model(Model):
         #                    reverse = True)
 
         # INITIALIZE FAMILY NETWORK
-        self.family_networks = nx.DiGraph()
+        self.family_network = nx.DiGraph()
 
+        # ADD ALL AGENTS TO GRID AND SCHEDULE
         S = 0.5
         id_ = 0
         for _ in zip(range(num_people)):
@@ -59,15 +60,15 @@ class Simple_Language_Model(Model):
             self.add_agent(a, coord)
             id_ += 1
 
-        # Data Collector
+        # DATA COLLECTOR
         self.datacollector = DataCollector(
             model_reporters={"count_spa": lambda m: m.get_lang_stats(0),
                              "count_bil": lambda m: m.get_lang_stats(1),
                              "count_cat": lambda m: m.get_lang_stats(2),
+                             "total_num_agents": lambda m:len(m.schedule.agents),
                              "biling_evol_h": lambda m:m.bilingual_global_evol('heard'),
                              "biling_evol_s": lambda m: m.bilingual_global_evol('spoken')}
         )
-
 
     def add_agent(self, a, coords):
         # add agent to grid and schedule
@@ -76,7 +77,7 @@ class Simple_Language_Model(Model):
         ## add agent node to all networks
         self.known_people_network.add_node(a)
         self.friendship_network.add_node(a)
-        self.family_networks.add_node(a)
+        self.family_network.add_node(a)
 
 
     def visualize_agents_attrs(self, ag_attr):
