@@ -91,6 +91,10 @@ class Simple_Language_Model(Model):
         else:
             self.create_lang_agents()
 
+        #define container for available ids
+        self.set_available_ids = set(range(num_people,
+                                           self.max_people_factor * self.num_people)
+                                     )
         # DATA COLLECTOR
         self.datacollector = DataCollector(
             model_reporters={"count_spa": lambda m: m.get_lang_stats(0),
@@ -255,8 +259,26 @@ class Simple_Language_Model(Model):
                 else:
                     return 0
 
+    def create_immig(self):
+        id_ = self.set_available_ids.pop() ## choose available agent id
+        # define random location
+        x = random.randrange(self.grid_width)
+        y = random.randrange(self.grid_height)
+        # all immigrant agents speak lang 0
+        a = Simple_Language_Agent(self, id_, 0, 0.5)
+        self.add_agent(a, (x, y))
+
+    def create_random_immigration_waves(self, rate=2, size_as_pct_pop=0.025):
+        """exp_rate is num of expected immigr waves over 100 days
+           size_as_pct_pop defines size of migration wave as percentage of current popul"""
+        if random.random() < rate/100:
+            current_num_ag = len(self.schedule.agents)
+            for _ in range(int(size_as_pct_pop * current_num_ag)):
+                self.create_immig()
+
     def step(self):
         self.datacollector.collect(self)
+        self.create_random_immigration_waves()
         self.schedule.step()
 
     def run_model(self, steps, save_frames_freq=0, save_dir=''):
