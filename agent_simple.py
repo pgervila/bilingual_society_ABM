@@ -89,14 +89,14 @@ class Simple_Language_Agent:
 
     def get_conversation_lang(self, other):
         # spa-bilingual
-        if (self.language, other.language) in [(0,0),(0,1),(1,0)]:
+        if (self.language, other.language) in [(0, 0),(0, 1),(1, 0)]:
             for key in ['heard','spoken']:
                 self.lang_freq[key][0] += 1
                 other.lang_freq[key][0] += 1
             self.lang_freq['maxmem_list'].append(0)
             other.lang_freq['maxmem_list'].append(0)
         # bilingual-cat
-        elif (self.language, other.language) in [(2,1),(1,2),(2,2)]:
+        elif (self.language, other.language) in [(2, 1),(1, 2),(2, 2)]:
             for key in ['heard', 'spoken']:
                 self.lang_freq[key][1] += 1
                 other.lang_freq[key][1] += 1
@@ -174,10 +174,16 @@ class Simple_Language_Agent:
         # check lang switch
         self.update_lang_switch()
 
+    def consume_mass_media(self):
+        idx = np.random.binomial(1,0.2)
+        self.lang_freq['heard'][idx] += 1
+
+
 
     def step(self):
         self.move_random()
         self.speak()
+        self.consume_mass_media()
 
 
     def __repr__(self):

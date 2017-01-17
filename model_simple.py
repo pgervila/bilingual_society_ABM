@@ -255,6 +255,7 @@ class Simple_Language_Model(Model):
                 else:
                     return 0
 
+
     def step(self):
         self.datacollector.collect(self)
         self.schedule.step()
