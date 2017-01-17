@@ -63,7 +63,9 @@ class Simple_Language_Model(Model):
         self.datacollector = DataCollector(
             model_reporters={"count_spa": lambda m: m.get_lang_stats(0),
                              "count_bil": lambda m: m.get_lang_stats(1),
-                             "count_cat": lambda m: m.get_lang_stats(2)}
+                             "count_cat": lambda m: m.get_lang_stats(2),
+                             "biling_evol_h": lambda m:m.bilingual_global_evol('heard'),
+                             "biling_evol_s": lambda m: m.bilingual_global_evol('spoken')}
         )
 
 
@@ -104,6 +106,14 @@ class Simple_Language_Model(Model):
         num_ag = len(ag_lang_list)
         lang_counts = Counter(ag_lang_list)
         return lang_counts[i]/num_ag
+
+    def bilingual_global_evol(self, string):
+        list_biling = [(ag.lang_freq['cat_pct_h'], ag.lang_freq['cat_pct_s'])
+                       for ag in self.schedule.agents if ag.language == 1]
+        if string == 'heard':
+            return np.array(list(zip(*list_biling))[0]).mean()
+        else:
+            return np.array(list(zip(*list_biling))[1]).mean()
 
     def step(self):
         #self.get_lang_stats()

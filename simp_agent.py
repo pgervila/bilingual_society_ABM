@@ -88,7 +88,9 @@ class Simple_Language_Agent:
         elif (self.language, other.language) == (1, 1):
             # find out lang spoken by self
             if sum(self.lang_freq['spoken']) != 0:
-                p10 = self.lang_freq['spoken'][0]/sum(self.lang_freq['spoken'])
+                p10 = (2/3 * self.lang_freq['spoken'][0]/sum(self.lang_freq['spoken']) +
+                       1/3 * self.lang_freq['heard'][0]/sum(self.lang_freq['heard'])
+                       )
                 p11 = 1 - p10
                 l1 = np.random.binomial(1,p11)
             else:
