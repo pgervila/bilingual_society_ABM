@@ -6,11 +6,12 @@ from collections import deque
 
 class Simple_Language_Agent:
 
-    def __init__(self, model, unique_id, language, S):
+    def __init__(self, model, unique_id, language, S, age = 0):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.S = S
+        self.age = age
 
         self.lang_freq = dict()
         num_init_occur = 50
@@ -53,7 +54,7 @@ class Simple_Language_Agent:
         chosen_cell = random.choice(possible_steps)
         self.model.grid.move_agent(self, chosen_cell)
 
-    def speak(self, with_agent=None):
+    def speak(self, with_agent=None, lang = None):
         """ Pick random lang_agent from current cell and start a conversation
             with it. It updates heard words in order to shape future vocab.
             Language of the conversation is determined by given laws,
@@ -81,9 +82,14 @@ class Simple_Language_Agent:
                 self.update_lang_status()
                 other.update_lang_status()
         else:
-            self.get_conversation_lang(with_agent)
             other = with_agent
-            # update lang status
+            if lang in [0,1]:
+                for key in ['heard', 'spoken']:
+                    self.lang_freq[key][lang] += 1
+                    other.lang_freq[key][lang] += 1
+            else:
+                self.get_conversation_lang(with_agent)
+                # update lang status
             self.update_lang_status()
             other.update_lang_status()
 
@@ -174,10 +180,19 @@ class Simple_Language_Agent:
         # check lang switch
         self.update_lang_switch()
 
-
     def step(self):
         self.move_random()
         self.speak()
+        try:
+            for key in self.model.family_network[self]:
+                lang = self.model.family_network[self][key]['lang']
+                self.speak(with_agent=key, lang=lang)
+        except:
+            pass
+
+
+
+
 
 
     def __repr__(self):
