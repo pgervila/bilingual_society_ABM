@@ -23,7 +23,7 @@ from mesa.datacollection import DataCollector
 
 class Simple_Language_Model(Model):
     def __init__(self, num_people, width=5, height=5, alpha=1.1,
-                 max_people_factor=5):
+                 max_people_factor=5, init_lang_distrib=[0.25,0.65,0.1]):
         self.num_people = num_people
         self.grid_width = width
         self.grid_height = height
@@ -55,7 +55,7 @@ class Simple_Language_Model(Model):
             x = random.randrange(self.grid_width)
             y = random.randrange(self.grid_height)
             coord = (x,y)
-            lang = np.random.choice([0,1,2], p=[0.25,0.65,0.1])
+            lang = np.random.choice([0,1,2], p=init_lang_distrib)
             a = Simple_Language_Agent(self, id_, lang, S)
             self.add_agent(a, coord)
             id_ += 1
