@@ -112,9 +112,15 @@ class Simple_Language_Model(Model):
         list_biling = [(ag.lang_freq['cat_pct_h'], ag.lang_freq['cat_pct_s'])
                        for ag in self.schedule.agents if ag.language == 1]
         if string == 'heard':
-            return np.array(list(zip(*list_biling))[0]).mean()
-        else:
-            return np.array(list(zip(*list_biling))[1]).mean()
+            if list_biling:
+                return np.array(list(zip(*list_biling))[0]).mean()
+            else:
+                return 0
+        else :
+            if list_biling:
+                return np.array(list(zip(*list_biling))[1]).mean()
+            else:
+                return 0
 
     def step(self):
         #self.get_lang_stats()
