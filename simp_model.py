@@ -22,15 +22,33 @@ from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, width=5, height=5, alpha=1.1,
-                 max_people_factor=5, init_lang_distrib=[0.25,0.65,0.1]):
+    def __init__(self, num_people, width=5, height=5, alpha=1.1, max_people_factor=5,
+                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10,
+                 sort_clust_centers_by_dist=True):
         self.num_people = num_people
         self.grid_width = width
         self.grid_height = height
         self.alpha = alpha
+        self.max_people_factor = max_people_factor
+        self.num_cities = num_cities
+
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
         self.schedule = RandomActivation(self)
+
+        ## RANDOMLY DEFINE ALL CITY-CENTERS COORDS (CITY == HOMES, JOB CENTERS and SCHOOLS)
+        # first define available points as pct of squared grid length
+        grid_pct_list = np.linspace(0.15, 0.85, 20) # avoid edges
+        # now generate the cluster centers (CITIES-VILLAGES)
+        self.clust_centers = np.random.choice(grid_pct_list,
+                                              size = (self.num_cities, 2)
+                                              )
+        if sort_clust_centers_by_dist:
+            self.clust_centers = sorted(self.clust_centers,
+                                        key = lambda x:pdist([x,[0,0]])
+                                       )
+
+
 
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
         self.known_people_network = nx.DiGraph()
@@ -78,6 +96,17 @@ class Simple_Language_Model(Model):
         self.known_people_network.add_node(a)
         self.friendship_network.add_node(a)
         self.family_network.add_node(a)
+
+    def compute_cluster_sizes(self, min_size=20, small_large_pcts=[0.7, 0.3]):
+        if min_size * self.num_people >= self.num_people:
+            raise ValueError('num_people should be greater than min_size * num_cities ')
+        size_choices = [max(int(self.num_people / (10 * self.num_people)), min_size),
+                   max(int(self.num_people / self.num_people), min_size)]
+        city_sizes = np.random.choice(size_choices, p=small_large_pcts, size=self.num_people - 1)
+        last_city_size = self.num_people - city_sizes.sum()
+        city_sizes = np.append(city_sizes, last_city_size)
+        pcts = np.random.dirichlet(city_sizes)
+        return np.random.multinomial(city_sizes.sum(), pcts)
 
 
     def visualize_agents_attrs(self, ag_attr):
