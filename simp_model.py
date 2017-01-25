@@ -39,14 +39,14 @@ class Simple_Language_Model(Model):
 
         ## RANDOMLY DEFINE ALL CITY-CENTERS COORDS (CITY == HOMES, JOB CENTERS and SCHOOLS)
         # first define available points as pct of squared grid length
-        grid_pct_list = np.linspace(0.15, 0.85, 20) # avoid edges
+        grid_pct_list = np.linspace(0.1, 0.9, 40) # avoid edges
         # now generate the cluster centers (CITIES-VILLAGES)
         self.clust_centers = np.random.choice(grid_pct_list,
-                                              size = (self.num_cities, 2)
+                                              size=(self.num_cities, 2)
                                               )
         if sort_lang_types_by_dist:
             self.clust_centers = sorted(self.clust_centers,
-                                        key = lambda x:pdist([x,[0,0]])
+                                        key=lambda x:pdist([x,[0,0]])
                                        )
 
 
@@ -78,7 +78,7 @@ class Simple_Language_Model(Model):
                 ag = Simple_Language_Agent(self, id_, lang, S)
                 self.add_agent(ag, coord)
         else:
-            self.create_lang_agents(self, sort_lang_types_by_dist, sort_sub_types_within_clust)
+            self.create_lang_agents(sort_lang_types_by_dist, sort_sub_types_within_clust)
 
         # DATA COLLECTOR
         self.datacollector = DataCollector(
@@ -99,12 +99,12 @@ class Simple_Language_Model(Model):
         self.friendship_network.add_node(a)
         self.family_network.add_node(a)
 
-    def compute_cluster_sizes(self, min_size=20, small_large_pcts=[0.7, 0.3]):
-        if min_size * self.num_people >= self.num_people:
+    def compute_cluster_sizes(self, min_size=20, small_large_pcts=[0.6, 0.4]):
+        if min_size * self.num_cities >= self.num_people:
             raise ValueError('num_people should be greater than min_size * num_cities ')
-        size_choices = [max(int(self.num_people / (10 * self.num_people)), min_size),
-                   max(int(self.num_people / self.num_people), min_size)]
-        city_sizes = np.random.choice(size_choices, p=small_large_pcts, size=self.num_people - 1)
+        size_choices = [max(int(self.num_people / (10 * self.num_cities)), min_size),
+                        max(int(self.num_people / self.num_cities), min_size)]
+        city_sizes = np.random.choice(size_choices, p=small_large_pcts, size=self.num_cities - 1)
         last_city_size = self.num_people - city_sizes.sum()
         city_sizes = np.append(city_sizes, last_city_size)
         pcts = np.random.dirichlet(city_sizes)
@@ -143,24 +143,30 @@ class Simple_Language_Model(Model):
                 y_coords[idx] = self.grid_height - 1
         return x_coords, y_coords
 
-    def create_lang_agents(self, sort_lang_types_by_dist,
-                           sort_sub_types_within_clust):
+    def create_lang_agents(self, sort_lang_types_by_dist, sort_sub_types_within_clust):
         self.cluster_sizes = self.compute_cluster_sizes()
         array_langs = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
         if sort_lang_types_by_dist:
             array_langs.sort()
         idxs_to_split = self.cluster_sizes.cumsum()
         langs_per_clust = np.split(array_langs, idxs_to_split)
+        if (not sort_lang_types_by_dist) and (sort_sub_types_within_clust):
+            for subarray in langs_per_clust:
+                subarray.sort()  # invert if needed
         ids = set(range(self.num_people))
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes, self.clust_centers)):
             x_cs, y_cs = self.generate_cluster_points_coords(clust_c_coords[0], clust_c_coords[1], clust_size)
             if (not sort_lang_types_by_dist) and (sort_sub_types_within_clust):
-                for subarray in langs_per_clust:
-                    subarray.sort() # invert if needed
-            for ag_lang, ag_coords in zip(langs_per_clust[clust_idx], x_cs, y_cs):
+                clust_p_coords = sorted(list(zip(x_cs, y_cs)),
+                                        key=lambda x:pdist([x, [self.grid_width*self.clust_centers[clust_idx][0],
+                                                                self.grid_height*self.clust_centers[clust_idx][1]]
+                                                            ])
+                                        )
+                x_cs, y_cs = list(zip(*clust_p_coords))
+            for ag_lang, x, y in zip(langs_per_clust[clust_idx], x_cs, y_cs):
                 ag = Simple_Language_Agent(self, ids.pop(), ag_lang, 0.5)
-                self.add_agent(ag, ag_coords)
+                self.add_agent(ag, (x, y))
 
     def visualize_agents_attrs(self, ag_attr):
         """Plots linguistic agents attributes on a 2D grid
