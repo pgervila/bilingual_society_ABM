@@ -24,12 +24,13 @@ from mesa.datacollection import DataCollector
 class Simple_Language_Model(Model):
     def __init__(self, num_people, width=5, height=5, alpha=1.1, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10,
-                 sort_clust_centers_by_dist=True):
+                 sort_lang_types_by_dist=True, sort_sub_types_within_clust=True):
         self.num_people = num_people
         self.grid_width = width
         self.grid_height = height
         self.alpha = alpha
         self.max_people_factor = max_people_factor
+        self.init_lang_distrib = init_lang_distrib
         self.num_cities = num_cities
 
         # define grid and schedule
@@ -43,7 +44,7 @@ class Simple_Language_Model(Model):
         self.clust_centers = np.random.choice(grid_pct_list,
                                               size = (self.num_cities, 2)
                                               )
-        if sort_clust_centers_by_dist:
+        if sort_lang_types_by_dist:
             self.clust_centers = sorted(self.clust_centers,
                                         key = lambda x:pdist([x,[0,0]])
                                        )
@@ -68,15 +69,16 @@ class Simple_Language_Model(Model):
 
         # ADD ALL AGENTS TO GRID AND SCHEDULE
         S = 0.5
-        id_ = 0
-        for _ in zip(range(num_people)):
-            x = random.randrange(self.grid_width)
-            y = random.randrange(self.grid_height)
-            coord = (x,y)
-            lang = np.random.choice([0,1,2], p=init_lang_distrib)
-            a = Simple_Language_Agent(self, id_, lang, S)
-            self.add_agent(a, coord)
-            id_ += 1
+        if (not sort_lang_types_by_dist) and (not sort_sub_types_within_clust):
+            for id_ in range(self.num_people):
+                x = random.randrange(self.grid_width)
+                y = random.randrange(self.grid_height)
+                coord = (x,y)
+                lang = np.random.choice([0,1,2], p=self.init_lang_distrib)
+                ag = Simple_Language_Agent(self, id_, lang, S)
+                self.add_agent(ag, coord)
+        else:
+            self.create_lang_agents(self, sort_lang_types_by_dist, sort_sub_types_within_clust)
 
         # DATA COLLECTOR
         self.datacollector = DataCollector(
@@ -108,6 +110,57 @@ class Simple_Language_Model(Model):
         pcts = np.random.dirichlet(city_sizes)
         return np.random.multinomial(city_sizes.sum(), pcts)
 
+    def generate_cluster_points_coords(self, pct_grid_w, pct_grid_h, clust_size):
+        """ Using binomial ditribution, this method generates initial coordinates
+            for a given cluster, defined via its center and its size.
+            Cluster size as well as cluster center coords
+            (in grid percentage) must be provided
+
+        Arguments:
+            * pct_grid_w: positive float < 1 to define clust_center along grid width
+            * pct_grid_h: positive float < 1 to define clust_center along grid height
+            * clust_size: desired size of the cluster being generated
+
+        Returns:
+            * cluster_coordinates: two numpy arrays with x and y coordinates
+            respectively
+
+        """
+        ## use binomial generator to get clusters in width * height grid
+        ## n = grid_width, p = pct_grid, size = num_experim
+        x_coords = np.random.binomial(self.grid_width,
+                                      pct_grid_w,
+                                      size=clust_size)
+        for idx, elem in enumerate(x_coords):
+            if elem >= self.grid_width:
+                x_coords[idx] = self.grid_width - 1
+
+        y_coords = np.random.binomial(self.grid_height,
+                                      pct_grid_h,
+                                      size=clust_size)
+        for idx, elem in enumerate(y_coords):
+            if elem >= self.grid_width:
+                y_coords[idx] = self.grid_height - 1
+        return x_coords, y_coords
+
+    def create_lang_agents(self, sort_lang_types_by_dist,
+                           sort_sub_types_within_clust):
+        self.cluster_sizes = self.compute_cluster_sizes()
+        array_langs = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
+        if sort_lang_types_by_dist:
+            array_langs.sort()
+        idxs_to_split = self.cluster_sizes.cumsum()
+        langs_per_clust = np.split(array_langs, idxs_to_split)
+        ids = set(range(self.num_people))
+
+        for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes, self.clust_centers)):
+            x_cs, y_cs = self.generate_cluster_points_coords(clust_c_coords[0], clust_c_coords[1], clust_size)
+            if (not sort_lang_types_by_dist) and (sort_sub_types_within_clust):
+                for subarray in langs_per_clust:
+                    subarray.sort() # invert if needed
+            for ag_lang, ag_coords in zip(langs_per_clust[clust_idx], x_cs, y_cs):
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, 0.5)
+                self.add_agent(ag, ag_coords)
 
     def visualize_agents_attrs(self, ag_attr):
         """Plots linguistic agents attributes on a 2D grid
