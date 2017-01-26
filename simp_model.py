@@ -252,6 +252,31 @@ class Simple_Language_Model(Model):
         plt.colorbar(s)
         plt.show()
 
+    def plot_results_improved(self, ag_attr='language'):
+        grid_size = (3, 5)
+        ax1 = plt.subplot2grid(grid_size, (0, 3), rowspan=1, colspan=2)
+        self.datacollector.get_model_vars_dataframe()[["count_bil",
+                                                       "count_cat",
+                                                       "count_spa"]].plot(ax=ax1, title='lang_groups')
+        ax1.xaxis.tick_bottom()
+        ax1.legend(loc='best', prop={'size': 8})
+        ax2 = plt.subplot2grid(grid_size, (1, 3), rowspan=1, colspan=2)
+        self.datacollector.get_model_vars_dataframe()['total_num_agents'].plot(ax=ax2, title='num_agents')
+        ax3 = plt.subplot2grid(grid_size, (2, 3), rowspan=1, colspan=2)
+        self.datacollector.get_model_vars_dataframe()[['biling_evol_h',
+                                                       'biling_evol_s']].plot(ax=ax3, title='biling_quality')
+        self.create_agents_attrs_data(ag_attr)
+        ax3.legend(loc='best', prop={'size': 8})
+        ax4 = plt.subplot2grid(grid_size, (0, 0), rowspan=3, colspan=3)
+        s = ax4.scatter(self.df_attrs_avg.reset_index()['x'],
+                        self.df_attrs_avg.reset_index()['y'],
+                        c=self.df_attrs_avg.reset_index()['values'],
+                        vmin=0, vmax=2, s=35,
+                        cmap='viridis')
+        plt.colorbar(s)
+        plt.tight_layout()
+        plt.show()
+
 
 
 
