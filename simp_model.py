@@ -41,9 +41,7 @@ class Simple_Language_Model(Model):
         # first define available points as pct of squared grid length
         grid_pct_list = np.linspace(0.1, 0.9, 40) # avoid edges
         # now generate the cluster centers (CITIES-VILLAGES)
-        self.clust_centers = np.random.choice(grid_pct_list,
-                                              size=(self.num_cities, 2)
-                                              )
+        self.clust_centers = np.random.choice(grid_pct_list,size=(self.num_cities, 2),replace=False)
         if sort_lang_types_by_dist:
             self.clust_centers = sorted(self.clust_centers,
                                         key=lambda x:pdist([x,[0,0]])
@@ -218,6 +216,41 @@ class Simple_Language_Model(Model):
     def run_model(self, steps):
         for _ in range(steps):
             self.step()
+
+    def create_agents_attrs_data(self, ag_attr, plot=False):
+        ag_and_coords = [(getattr(ag, ag_attr), ag.pos[0], ag.pos[1])
+                         for ag in self.schedule.agents]
+        ag_and_coords = np.array(ag_and_coords)
+        df_attrs = pd.DataFrame({'x': ag_and_coords[:, 1],
+                                 'y': ag_and_coords[:, 2]})
+        df_attrs['values'] = ag_and_coords[:, 0]
+        self.df_attrs_avg = df_attrs.groupby(['x', 'y']).mean()
+
+        if plot:
+            s = plt.scatter(self.df_attrs_avg.reset_index()['x'],
+                            self.df_attrs_avg.reset_index()['y'],
+                            c=self.df_attrs_avg.reset_index()['values'],
+                            vmin=0, vmax=2, s=30,
+                            cmap='viridis')
+            plt.colorbar(s)
+            plt.show()
+
+    def plot_results(self, ag_attr='language'):
+        fig, axes = plt.subplots(2, 2)
+        self.datacollector.get_model_vars_dataframe()[["count_bil",
+                                                       "count_cat",
+                                                       "count_spa"]].plot(ax=axes[0, 0], title='lang_groups')
+        self.datacollector.get_model_vars_dataframe()['total_num_agents'].plot(ax=axes[0, 1], title='num_agents')
+        self.datacollector.get_model_vars_dataframe()[['biling_evol_h',
+                                                       'biling_evol_s']].plot(ax=axes[1, 0], title='biling_quality')
+        self.create_agents_attrs_data(ag_attr)
+        s = axes[1, 1].scatter(self.df_attrs_avg.reset_index()['x'],
+                               self.df_attrs_avg.reset_index()['y'],
+                               c=self.df_attrs_avg.reset_index()['values'],
+                               vmin=0, vmax=2, s=35,
+                               cmap='viridis')
+        plt.colorbar(s)
+        plt.show()
 
 
 
