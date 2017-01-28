@@ -7,6 +7,7 @@ from collections import defaultdict, Counter, OrderedDict
 import numpy as np
 import pandas as pd
 import matplotlib
+matplotlib.use("TKAgg")
 import matplotlib.pylab as plt
 import matplotlib.animation as animation
 from scipy.spatial.distance import pdist
@@ -275,6 +276,31 @@ class Simple_Language_Model(Model):
                         cmap='viridis')
         plt.colorbar(s)
         plt.tight_layout()
+        plt.show()
+
+    def animate_scatter(self):
+
+        fig = plt.figure()
+        ax = plt.axes(xlim=(0, 100), ylim=(0, 100))
+        time_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
+        scatter = ax.scatter([], [], c='r', vmin=0, vmax=10, s=40, cmap='viridis')
+
+        num_points = 1000
+        size_points = np.random.randint(10, 60, num_points)
+
+        def update(i):
+            coords = np.random.randint(1, 100, size=(num_points, 2))
+            x = coords[:, 0]
+            y = coords[:, 1]
+            scatter.set_offsets([x, y])
+            scatter.set_array(np.random.randint(1, 10, num_points))
+            scatter.set_sizes(size_points)
+            time_text.set_text('time = %.1f' % i)
+            return scatter, time_text
+
+        anim = animation.FuncAnimation(fig, update,
+                                       frames=20, interval=100, blit=True, repeat=False)
+
         plt.show()
 
 
