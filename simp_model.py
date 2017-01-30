@@ -13,6 +13,10 @@ import matplotlib.animation as animation
 from scipy.spatial.distance import pdist
 import networkx as nx
 
+# import progress bar
+import pyprind
+
+
 # IMPORT FROM simp_agent.py
 from simp_agent import Simple_Language_Agent
 
@@ -40,7 +44,7 @@ class Simple_Language_Model(Model):
 
         ## RANDOMLY DEFINE ALL CITY-CENTERS COORDS (CITY == HOMES, JOB CENTERS and SCHOOLS)
         # first define available points as pct of squared grid length
-        grid_pct_list = np.linspace(0.1, 0.9, 40) # avoid edges
+        grid_pct_list = np.linspace(0.1, 0.9, 100) # avoid edges
         # now generate the cluster centers (CITIES-VILLAGES)
         self.clust_centers = np.random.choice(grid_pct_list,size=(self.num_cities, 2),replace=False)
         if sort_lang_types_by_dist:
@@ -215,16 +219,18 @@ class Simple_Language_Model(Model):
         self.schedule.step()
 
     def run_model(self, steps):
+        pbar = pyprind.ProgBar(steps)
         for _ in range(steps):
             self.step()
+            pbar.update()
 
     def create_agents_attrs_data(self, ag_attr, plot=False):
         ag_and_coords = [(getattr(ag, ag_attr), ag.pos[0], ag.pos[1])
                          for ag in self.schedule.agents]
         ag_and_coords = np.array(ag_and_coords)
-        df_attrs = pd.DataFrame({'x': ag_and_coords[:, 1],
+        df_attrs = pd.DataFrame({'values': ag_and_coords[:, 0],
+                                 'x': ag_and_coords[:, 1],
                                  'y': ag_and_coords[:, 2]})
-        df_attrs['values'] = ag_and_coords[:, 0]
         self.df_attrs_avg = df_attrs.groupby(['x', 'y']).mean()
 
         if plot:
@@ -236,24 +242,8 @@ class Simple_Language_Model(Model):
             plt.colorbar(s)
             plt.show()
 
-    def plot_results(self, ag_attr='language'):
-        fig, axes = plt.subplots(2, 2)
-        self.datacollector.get_model_vars_dataframe()[["count_bil",
-                                                       "count_cat",
-                                                       "count_spa"]].plot(ax=axes[0, 0], title='lang_groups')
-        self.datacollector.get_model_vars_dataframe()['total_num_agents'].plot(ax=axes[0, 1], title='num_agents')
-        self.datacollector.get_model_vars_dataframe()[['biling_evol_h',
-                                                       'biling_evol_s']].plot(ax=axes[1, 0], title='biling_quality')
-        self.create_agents_attrs_data(ag_attr)
-        s = axes[1, 1].scatter(self.df_attrs_avg.reset_index()['x'],
-                               self.df_attrs_avg.reset_index()['y'],
-                               c=self.df_attrs_avg.reset_index()['values'],
-                               vmin=0, vmax=2, s=35,
-                               cmap='viridis')
-        plt.colorbar(s)
-        plt.show()
 
-    def plot_results_improved(self, ag_attr='language'):
+    def plot_results(self, ag_attr='language'):
         grid_size = (3, 5)
         ax1 = plt.subplot2grid(grid_size, (0, 3), rowspan=1, colspan=2)
         self.datacollector.get_model_vars_dataframe()[["count_bil",
@@ -274,34 +264,92 @@ class Simple_Language_Model(Model):
                         c=self.df_attrs_avg.reset_index()['values'],
                         vmin=0, vmax=2, s=35,
                         cmap='viridis')
+        ax4.text(0.02, 0.95, 'time = %.1f' % self.schedule.steps, transform=ax4.transAxes)
         plt.colorbar(s)
         plt.tight_layout()
         plt.show()
 
-    def animate_scatter(self):
-
+    def run_and_animate(self, steps, plot_type='imshow'):
         fig = plt.figure()
-        ax = plt.axes(xlim=(0, 100), ylim=(0, 100))
-        time_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
-        scatter = ax.scatter([], [], c='r', vmin=0, vmax=10, s=40, cmap='viridis')
+        grid_size = (3, 5)
+        ax1 = plt.subplot2grid(grid_size, (0, 3), rowspan=1, colspan=2)
+        ax1.set_xlim(0, steps)
+        ax1.set_ylim(0, 1)
+        ax1.xaxis.tick_bottom()
+        line10, = ax1.plot([], [], lw=2, label='count_spa')
+        line11, = ax1.plot([], [], lw=2, label='count_bil')
+        line12, = ax1.plot([], [], lw=2, label='count_cat')
+        ax1.legend(loc='best', prop={'size': 8})
+        ax1.set_title("lang_groups")
+        ax2 = plt.subplot2grid(grid_size, (1, 3), rowspan=1, colspan=2)
+        ax2.set_xlim(0, steps)
+        ax2.set_ylim(0, self.max_people_factor * self.num_people)
+        line2, = ax2.plot([], [], lw=2, label = "total_num_agents")
+        ax2.legend(loc='best', prop={'size': 8})
+        ax2.set_title("num_agents")
+        ax3 = plt.subplot2grid(grid_size, (2, 3), rowspan=1, colspan=2)
+        ax3.set_xlim(0, steps)
+        ax3.set_ylim(0, 1)
+        line30, = ax3.plot([], [], lw=2, label='biling_evol_h')
+        line31, = ax3.plot([], [], lw=2, label='biling_evol_s')
+        ax3.legend(loc='best', prop={'size': 8})
+        ax3.set_title("biling_quality")
+        ax4 = plt.subplot2grid(grid_size, (0, 0), rowspan=3, colspan=3)
+        ax4.set_xlim(0, self.grid_width)
+        ax4.set_ylim(0, self.grid_height)
+        if plot_type == 'imshow':
+            im_2D = ax4.imshow(np.zeros((self.grid_width, self.grid_height)),
+                               vmin=0, vmax=2, cmap='viridis',
+                               interpolation='nearest', origin='lower')
+            fig.colorbar(im_2D)
+        elif plot_type == 'scatter':
+            dots  = ax4.scatter([], [], c=[], vmin=0, vmax=2, cmap='viridis')
+            fig.colorbar(dots)
+        time_text = ax4.text(0.02, 0.95, '', transform=ax4.transAxes)
 
-        num_points = 1000
-        size_points = np.random.randint(10, 60, num_points)
+        def init_show():
+            if plot_type == 'imshow':
+                im_2D.set_array(np.random.choice([np.nan, 0], p=[1, 0], size=(self.grid_width, self.grid_height)))
+                return im_2D,
+            elif plot_type == 'scatter':
+                dots.set_offsets([0,0])
+                return dots,
 
-        def update(i):
-            coords = np.random.randint(1, 100, size=(num_points, 2))
-            x = coords[:, 0]
-            y = coords[:, 1]
-            scatter.set_offsets([x, y])
-            scatter.set_array(np.random.randint(1, 10, num_points))
-            scatter.set_sizes(size_points)
+        def run_and_update(i):
+            #run model step
+            self.step()
+
+            #create plots and data for 1D plots
+            data = self.datacollector.get_model_vars_dataframe()
+            line10.set_data(data.index, data['count_spa'])
+            line11.set_data(data.index, data['count_bil'])
+            line12.set_data(data.index, data['count_cat'])
+
+            line2.set_data(data.index, data['total_num_agents'])
+
+            line30.set_data(data.index, data['biling_evol_h'])
+            line31.set_data(data.index, data['biling_evol_s'])
+            # generate data for 2D representation
+            self.create_agents_attrs_data('language')
+            # create 2D plot
             time_text.set_text('time = %.1f' % i)
-            return scatter, time_text
+            if plot_type == 'imshow':
+                im_2D.set_array(self.df_attrs_avg.unstack('x'))
+                return line10, line11, line12, line2, line30, line31, im_2D, time_text
+            else:
+                data = np.hstack((self.df_attrs_avg.reset_index()['x'][:, np.newaxis],
+                                  self.df_attrs_avg.reset_index()['y'][:, np.newaxis]))
+                dots.set_offsets(data)
+                dots.set_array(self.df_attrs_avg.reset_index()['values'])
+                return line10, line11, line12, line2, line30, line31, dots, time_text
 
-        anim = animation.FuncAnimation(fig, update,
-                                       frames=20, interval=100, blit=True, repeat=False)
-
+        # generate persistent animation object
+        ani = animation.FuncAnimation(fig, run_and_update,init_func=init_show,
+                                      frames=steps, interval=100, blit=True, repeat=False)
+        plt.tight_layout()
         plt.show()
+
+
 
 
 
