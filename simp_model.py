@@ -89,8 +89,8 @@ class Simple_Language_Model(Model):
                              "count_bil": lambda m: m.get_lang_stats(1),
                              "count_cat": lambda m: m.get_lang_stats(2),
                              "total_num_agents": lambda m:len(m.schedule.agents),
-                             "biling_evol_h": lambda m:m.bilingual_global_evol('heard'),
-                             "biling_evol_s": lambda m: m.bilingual_global_evol('spoken')}
+                             "biling_evol_h": lambda m:m.get_bilingual_global_evol('heard'),
+                             "biling_evol_s": lambda m: m.get_bilingual_global_evol('spoken')}
         )
 
     def add_agent(self, a, coords):
@@ -235,7 +235,7 @@ class Simple_Language_Model(Model):
         lang_counts = Counter(ag_lang_list)
         return lang_counts[i]/num_ag
 
-    def bilingual_global_evol(self, lang_typology):
+    def get_bilingual_global_evol(self, lang_typology):
         """Method to compute internal linguistic structure of all bilinguals,
         expressed as average amount of Catalan heard or spoken as % of total
 
@@ -252,12 +252,18 @@ class Simple_Language_Model(Model):
             if list_biling:
                 return np.array(list(zip(*list_biling))[0]).mean()
             else:
-                return 0
-        else:
+                if self.get_lang_stats(2) > self.get_lang_stats(0):
+                    return 1
+                else:
+                    return 0
+        else :
             if list_biling:
                 return np.array(list(zip(*list_biling))[1]).mean()
             else:
-                return 0
+                if self.get_lang_stats(2) > self.get_lang_stats(0):
+                    return 1
+                else:
+                    return 0
 
     def step(self):
         #self.get_lang_stats()
