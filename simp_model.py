@@ -94,6 +94,13 @@ class Simple_Language_Model(Model):
         )
 
     def add_agent(self, a, coords):
+        """Method to add a given agent to grid, schedule and system networks
+
+        Arguments:
+            * a : agent class instance
+            * coords : agent location on grid (2-D tuple of integers)
+
+        """
         # add agent to grid and schedule
         self.schedule.add(a)
         self.grid.place_agent(a, (coords[0], coords[1]))
@@ -103,6 +110,16 @@ class Simple_Language_Model(Model):
         self.family_network.add_node(a)
 
     def compute_cluster_sizes(self, min_size=20, small_large_pcts=[0.6, 0.4]):
+        """ Method to compute sizes of each agent cluster
+
+        Arguments:
+            * min_size: minimum accepted cluster size ( integer)
+            * small_large_pcts: percentages of small and large cities over total ( list of floats  0<x<1)
+
+        Returns:
+            * list of integers representing cluster sizes
+
+        """
         if min_size * self.num_cities >= self.num_people:
             raise ValueError('num_people should be greater than min_size * num_cities ')
         size_choices = [max(int(self.num_people / (10 * self.num_cities)), min_size),
@@ -147,6 +164,16 @@ class Simple_Language_Model(Model):
         return x_coords, y_coords
 
     def create_lang_agents(self, sort_lang_types_by_dist, sort_sub_types_within_clust):
+        """ Method to instantiate all agents
+
+        Arguments:
+            * sort_lang_types_by_dist: boolean to specify
+                if agents must be sorted by distance to global origin
+            * sort_sub_types_within_clust: boolean to specify
+                if agents must be sorted by distance to center of cluster they belong to
+
+            """
+
         self.cluster_sizes = self.compute_cluster_sizes()
         array_langs = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
         if sort_lang_types_by_dist:
@@ -194,20 +221,39 @@ class Simple_Language_Model(Model):
         plt.show()
 
     def get_lang_stats(self, i):
+        """Method to get counts of each type of lang agent
+
+        Arguments:
+            * i : integer from [0,1,2] hat specifies agent lang type
+
+        Returns:
+            * lang type count as percentage of total
+
+        """
         ag_lang_list = [ag.language for ag in self.schedule.agents]
         num_ag = len(ag_lang_list)
         lang_counts = Counter(ag_lang_list)
         return lang_counts[i]/num_ag
 
-    def bilingual_global_evol(self, string):
+    def bilingual_global_evol(self, lang_typology):
+        """Method to compute internal linguistic structure of all bilinguals,
+        expressed as average amount of Catalan heard or spoken as % of total
+
+         Arguments:
+             * lang_typology: string that can take either of two values 'heard' or 'spoken'
+
+         Returns:
+             * float representing the AVERAGE percentage of Catalan in bilinguals
+
+        """
         list_biling = [(ag.lang_freq['cat_pct_h'], ag.lang_freq['cat_pct_s'])
                        for ag in self.schedule.agents if ag.language == 1]
-        if string == 'heard':
+        if lang_typology == 'heard':
             if list_biling:
                 return np.array(list(zip(*list_biling))[0]).mean()
             else:
                 return 0
-        else :
+        else:
             if list_biling:
                 return np.array(list(zip(*list_biling))[1]).mean()
             else:
