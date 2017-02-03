@@ -347,15 +347,15 @@ class Simple_Language_Model(Model):
         ax3.legend(loc='best', prop={'size': 8})
         ax3.set_title("biling_quality")
         ax4 = plt.subplot2grid(grid_size, (0, 0), rowspan=3, colspan=3)
-        ax4.set_xlim(0, self.grid_width)
-        ax4.set_ylim(0, self.grid_height)
+        ax4.set_xlim(0, self.grid_width-1)
+        ax4.set_ylim(0, self.grid_height-1)
         if plot_type == 'imshow':
             im_2D = ax4.imshow(np.zeros((self.grid_width, self.grid_height)),
                                vmin=0, vmax=2, cmap='viridis',
                                interpolation='nearest', origin='lower')
             fig.colorbar(im_2D)
         elif plot_type == 'scatter':
-            dots  = ax4.scatter([], [], c=[], vmin=0, vmax=2, cmap='viridis')
+            dots = ax4.scatter([], [], c=[], vmin=0, vmax=2, cmap='viridis')
             fig.colorbar(dots)
         time_text = ax4.text(0.02, 0.95, '', transform=ax4.transAxes)
 
