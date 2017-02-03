@@ -18,7 +18,7 @@ import pyprind
 
 
 # IMPORT FROM simp_agent.py
-from simp_agent import Simple_Language_Agent
+from agent_simple import Simple_Language_Agent
 
 # IMPORT MESA LIBRARIES
 from mesa import Model
