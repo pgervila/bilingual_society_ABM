@@ -6,11 +6,14 @@ from collections import deque
 
 class Simple_Language_Agent:
 
-    def __init__(self, model, unique_id, language, S):
+    def __init__(self, model, unique_id, language, S, age=0, home_coords=None, school_coords=None):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.S = S
+        self.age = age
+        self.home_coords = home_coords
+        self.school_coords = school_coords
 
         self.lang_freq = dict()
         num_init_occur = 50
@@ -178,7 +181,28 @@ class Simple_Language_Agent:
     def step(self):
         self.move_random()
         self.speak()
+        if self.age < 100:
+            self.model.grid.move_agent(self, self.school_coords)
+            self.speak()
+        self.model.grid.move_agent(self, self.home_coords)
+        self.age += 1
 
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)
+
+
+class Home:
+    def __init__(self, pos):
+        self.pos=pos
+
+class School:
+    def __init__(self, pos, num_places):
+        self.pos=pos
+        self.num_free=num_places
+
+class Job:
+    def __init__(self, pos, num_places, skill_level):
+        self.pos=pos
+        self.num_places=num_places
+        self.skill_level = skill_level
