@@ -198,27 +198,6 @@ class Simple_Language_Model(Model):
                 ag = Simple_Language_Agent(self, ids.pop(), ag_lang, 0.5)
                 self.add_agent(ag, (x, y))
 
-    def visualize_agents_attrs(self, ag_attr):
-        """Plots linguistic agents attributes on a 2D grid
-
-        Args:
-            * ag_attr : a quantifiable attribute of the lang agent class
-        """
-
-        ag_and_coords = [(getattr(ag, ag_attr), ag.pos[0], ag.pos[1])
-                         for ag in self.schedule.agents]
-        ag_and_coords = np.array(ag_and_coords)
-        df_exper = pd.DataFrame({'x': ag_and_coords[:, 1],
-                                 'y': ag_and_coords[:, 2]})
-        df_exper['values'] = ag_and_coords[:, 0]
-        df_avg = df_exper.groupby(['x', 'y']).mean()
-        masked_array = np.ma.array(df_avg.unstack(), mask=np.isnan(df_avg.unstack()))
-        cmap = matplotlib.cm.viridis
-        cmap.set_bad('white', 1.)
-        plt.pcolor(masked_array, cmap=cmap)
-        plt.colorbar()
-        plt.title(ag_attr)
-        plt.show()
 
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent
@@ -270,10 +249,13 @@ class Simple_Language_Model(Model):
         self.datacollector.collect(self)
         self.schedule.step()
 
-    def run_model(self, steps):
+    def run_model(self, steps, save_frames_freq=0):
         pbar = pyprind.ProgBar(steps)
         for _ in range(steps):
             self.step()
+            if save_frames_freq:
+                if not self.schedule.steps%save_frames_freq:
+                    self.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
             pbar.update()
 
     def create_agents_attrs_data(self, ag_attr, plot=False):
@@ -295,31 +277,41 @@ class Simple_Language_Model(Model):
             plt.show()
 
 
-    def plot_results(self, ag_attr='language'):
+    def show_results(self, ag_attr='language', step=None,
+                     plot_results=True, plot_type='imshow', save_fig=False):
+
         grid_size = (3, 5)
+        self.create_agents_attrs_data(ag_attr)
+
+        data_2_plot = self.datacollector.get_model_vars_dataframe()[:step]
+        data_2D = self.df_attrs_avg.reset_index()
+
         ax1 = plt.subplot2grid(grid_size, (0, 3), rowspan=1, colspan=2)
-        self.datacollector.get_model_vars_dataframe()[["count_bil",
-                                                       "count_cat",
-                                                       "count_spa"]].plot(ax=ax1, title='lang_groups')
+        data_2_plot[["count_bil", "count_cat", "count_spa"]].plot(ax=ax1, title='lang_groups')
         ax1.xaxis.tick_bottom()
         ax1.legend(loc='best', prop={'size': 8})
         ax2 = plt.subplot2grid(grid_size, (1, 3), rowspan=1, colspan=2)
-        self.datacollector.get_model_vars_dataframe()['total_num_agents'].plot(ax=ax2, title='num_agents')
+        data_2_plot['total_num_agents'].plot(ax=ax2, title='num_agents')
         ax3 = plt.subplot2grid(grid_size, (2, 3), rowspan=1, colspan=2)
-        self.datacollector.get_model_vars_dataframe()[['biling_evol_h',
-                                                       'biling_evol_s']].plot(ax=ax3, title='biling_quality')
-        self.create_agents_attrs_data(ag_attr)
+        data_2_plot[['biling_evol_h', 'biling_evol_s']].plot(ax=ax3, title='biling_quality')
         ax3.legend(loc='best', prop={'size': 8})
         ax4 = plt.subplot2grid(grid_size, (0, 0), rowspan=3, colspan=3)
-        s = ax4.scatter(self.df_attrs_avg.reset_index()['x'],
-                        self.df_attrs_avg.reset_index()['y'],
-                        c=self.df_attrs_avg.reset_index()['values'],
-                        vmin=0, vmax=2, s=35,
-                        cmap='viridis')
+        if plot_type == 'imshow':
+            s = ax4.imshow(self.df_attrs_avg.unstack('x'), vmin=0, vmax=2, cmap='viridis',
+                           interpolation='nearest', origin='lower')
+        else:
+            s = ax4.scatter(data_2D['x'],
+                            data_2D['y'],
+                            c=data_2D['values'],
+                            vmin=0, vmax=2, s=35,
+                            cmap='viridis')
         ax4.text(0.02, 0.95, 'time = %.1f' % self.schedule.steps, transform=ax4.transAxes)
         plt.colorbar(s)
         plt.tight_layout()
-        plt.show()
+        if save_fig:
+            plt.savefig('step' + str(step) + '.png')
+        if plot_results:
+            plt.show()
 
     def run_and_animate(self, steps, plot_type='imshow'):
         fig = plt.figure()
