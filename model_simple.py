@@ -13,6 +13,9 @@ import matplotlib.animation as animation
 from scipy.spatial.distance import pdist
 import networkx as nx
 
+#import library to save any python data to HDF5
+import deepdish as dd
+
 # import progress bar
 import pyprind
 
@@ -28,8 +31,8 @@ from mesa.datacollection import DataCollector
 
 class Simple_Language_Model(Model):
     def __init__(self, num_people, width=5, height=5, alpha=1.1, max_people_factor=5,
-                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10,
-                 sort_lang_types_by_dist=True, sort_sub_types_within_clust=True):
+                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, lang_ags_sorted_by_dist=True,
+                 lang_ags_sorted_in_clust=True):
         self.num_people = num_people
         self.grid_width = width
         self.grid_height = height
@@ -37,6 +40,8 @@ class Simple_Language_Model(Model):
         self.max_people_factor = max_people_factor
         self.init_lang_distrib = init_lang_distrib
         self.num_cities = num_cities
+        self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
+        self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
 
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
@@ -47,7 +52,7 @@ class Simple_Language_Model(Model):
         grid_pct_list = np.linspace(0.1, 0.9, 100) # avoid edges
         # now generate the cluster centers (CITIES-VILLAGES)
         self.clust_centers = np.random.choice(grid_pct_list,size=(self.num_cities, 2),replace=False)
-        if sort_lang_types_by_dist:
+        if lang_ags_sorted_by_dist:
             self.clust_centers = sorted(self.clust_centers,
                                         key=lambda x:pdist([x,[0,0]])
                                        )
@@ -72,7 +77,7 @@ class Simple_Language_Model(Model):
 
         # ADD ALL AGENTS TO GRID AND SCHEDULE
         S = 0.5
-        if (not sort_lang_types_by_dist) and (not sort_sub_types_within_clust):
+        if (not lang_ags_sorted_by_dist) and (not lang_ags_sorted_in_clust):
             for id_ in range(self.num_people):
                 x = random.randrange(self.grid_width)
                 y = random.randrange(self.grid_height)
@@ -81,7 +86,7 @@ class Simple_Language_Model(Model):
                 ag = Simple_Language_Agent(self, id_, lang, S)
                 self.add_agent(ag, coord)
         else:
-            self.create_lang_agents(sort_lang_types_by_dist, sort_sub_types_within_clust)
+            self.create_lang_agents()
 
         # DATA COLLECTOR
         self.datacollector = DataCollector(
@@ -163,7 +168,7 @@ class Simple_Language_Model(Model):
                 y_coords[idx] = self.grid_height - 1
         return x_coords, y_coords
 
-    def create_lang_agents(self, sort_lang_types_by_dist, sort_sub_types_within_clust):
+    def create_lang_agents(self):
         """ Method to instantiate all agents
 
         Arguments:
@@ -176,18 +181,18 @@ class Simple_Language_Model(Model):
 
         self.cluster_sizes = self.compute_cluster_sizes()
         array_langs = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
-        if sort_lang_types_by_dist:
+        if self.lang_ags_sorted_by_dist:
             array_langs.sort()
         idxs_to_split = self.cluster_sizes.cumsum()
         langs_per_clust = np.split(array_langs, idxs_to_split)
-        if (not sort_lang_types_by_dist) and (sort_sub_types_within_clust):
+        if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
             for subarray in langs_per_clust:
                 subarray.sort()  # invert if needed
         ids = set(range(self.num_people))
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes, self.clust_centers)):
             x_cs, y_cs = self.generate_cluster_points_coords(clust_c_coords[0], clust_c_coords[1], clust_size)
-            if (not sort_lang_types_by_dist) and (sort_sub_types_within_clust):
+            if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 clust_p_coords = sorted(list(zip(x_cs, y_cs)),
                                         key=lambda x:pdist([x, [self.grid_width*self.clust_centers[clust_idx][0],
                                                                 self.grid_height*self.clust_centers[clust_idx][1]]
@@ -392,6 +397,22 @@ class Simple_Language_Model(Model):
                                       frames=steps, interval=100, blit=True, repeat=False)
         plt.tight_layout()
         plt.show()
+
+    def save_model_data(self):
+        self.model_data = {'initial_conditions':{'cluster_sizes': self.cluster_sizes,
+                                                 'cluster_centers': self.clust_centers,
+                                                 'init_num_people': self.num_people,
+                                                 'grid_width': self.grid_width,
+                                                 'grid_height': self.grid_height,
+                                                 'init_lang_distrib': self.init_lang_distrib,
+                                                 'num_cities': self.num_cities,
+                                                 'sort_by_dist': self.lang_ags_sorted_by_dist,
+                                                 'sort_within_clust': self.lang_ags_sorted_in_clust},
+                           'model_results': self.datacollector.get_model_vars_dataframe()}
+        dd.io.save('model_data.h5', self.model_data)
+
+    def load_model_data(self, data_filename, key='/' ):
+        return dd.io.load(data_filename,key)
 
 
 
