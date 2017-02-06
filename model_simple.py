@@ -13,7 +13,7 @@ import matplotlib.animation as animation
 from scipy.spatial.distance import pdist
 import networkx as nx
 
-#import library to save any python data to HDF5
+#import library to save any python data type to HDF5
 import deepdish as dd
 
 # import progress bar
@@ -30,18 +30,19 @@ from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, width=5, height=5, alpha=1.1, max_people_factor=5,
+    def __init__(self, num_people, width=5, height=5, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, lang_ags_sorted_by_dist=True,
                  lang_ags_sorted_in_clust=True):
         self.num_people = num_people
         self.grid_width = width
         self.grid_height = height
-        self.alpha = alpha
         self.max_people_factor = max_people_factor
         self.init_lang_distrib = init_lang_distrib
         self.num_cities = num_cities
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
+        self.clust_centers = None
+        self.cluster_sizes = None
 
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
@@ -240,7 +241,7 @@ class Simple_Language_Model(Model):
                     return 1
                 else:
                     return 0
-        else :
+        else:
             if list_biling:
                 return np.array(list(zip(*list_biling))[1]).mean()
             else:
@@ -250,7 +251,6 @@ class Simple_Language_Model(Model):
                     return 0
 
     def step(self):
-        #self.get_lang_stats()
         self.datacollector.collect(self)
         self.schedule.step()
 
