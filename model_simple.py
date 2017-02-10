@@ -26,9 +26,18 @@ from agent_simple import Simple_Language_Agent
 
 # IMPORT MESA LIBRARIES
 from mesa import Model
-from mesa.time import RandomActivation, SimultaneousActivation, StagedActivation
+from mesa.time import RandomActivation
 from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
+
+# need to subclass because of bug in last available mesa release
+class RandomActivation_modif(RandomActivation):
+    def step(self):
+        random.shuffle(self.agents)
+        for agent in self.agents[:]:
+            agent.step()
+        self.steps += 1
+        self.time += 1
 
 class Simple_Language_Model(Model):
     def __init__(self, num_people, avg_max_mem=20, width=5, height=5, max_people_factor=5,
@@ -48,7 +57,7 @@ class Simple_Language_Model(Model):
 
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
-        self.schedule = RandomActivation(self)
+        self.schedule = RandomActivation_modif(self)
 
         ## RANDOMLY DEFINE ALL CITY-CENTERS COORDS (CITY == HOMES, JOB CENTERS and SCHOOLS)
         # first define available points as pct of squared grid length
