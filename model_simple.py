@@ -96,7 +96,10 @@ class Simple_Language_Model(Model):
                              "count_cat": lambda m: m.get_lang_stats(2),
                              "total_num_agents": lambda m:len(m.schedule.agents),
                              "biling_evol_h": lambda m:m.get_bilingual_global_evol('heard'),
-                             "biling_evol_s": lambda m: m.get_bilingual_global_evol('spoken')}
+                             "biling_evol_s": lambda m: m.get_bilingual_global_evol('spoken')
+                             },
+            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_freq['cat_pct_h'],
+                             "pct_spa_in_biling": lambda a: 1 - a.lang_freq['cat_pct_h']}
         )
 
     def add_agent(self, a, coords):
@@ -408,7 +411,8 @@ class Simple_Language_Model(Model):
                                                  'num_cities': self.num_cities,
                                                  'sort_by_dist': self.lang_ags_sorted_by_dist,
                                                  'sort_within_clust': self.lang_ags_sorted_in_clust},
-                           'model_results': self.datacollector.get_model_vars_dataframe()}
+                           'model_results': self.datacollector.get_model_vars_dataframe(),
+                           'agent_results': self.datacollector.get_agent_vars_dataframe()}
         dd.io.save('model_data.h5', self.model_data)
 
     def load_model_data(self, data_filename, key='/' ):

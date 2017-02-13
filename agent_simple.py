@@ -34,9 +34,6 @@ class Simple_Language_Agent:
             All eight surrounding cells are available as choices
             Current cell is not an output choice
 
-            Arguments:
-                * model : ABM model
-
             Returns:
                 * modifies self.pos attribute
         """
@@ -150,10 +147,13 @@ class Simple_Language_Agent:
                 if self.lang_freq['cat_pct_h'] <= 0.75:
                     self.language = 1
             else:
-                if self.lang_freq['cat_pct_h'] >= 0.9:
-                    self.language = 2
-                elif self.lang_freq['cat_pct_h'] <= 0.1:
-                    self.language = 0
+                if self.lang_freq['cat_pct_h'] >= 0.95:
+                    if np.random.binomial(1, 0.5):
+                        self.language = 2
+                elif self.lang_freq['cat_pct_h'] <= 0.05:
+                    if np.random.binomial(1, 0.5):
+                        self.language = 0
+
     def update_lang_status(self):
         # update lang experience
         self.update_lang_pcts()
