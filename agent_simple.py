@@ -2,6 +2,7 @@
 import random
 import numpy as np
 import networkx as nx
+from collections import deque
 
 class Simple_Language_Agent:
 
@@ -27,6 +28,10 @@ class Simple_Language_Agent:
             self.lang_freq['heard'] = [25, 25]
             self.lang_freq['cat_pct_s'] = 0.5
             self.lang_freq['cat_pct_h'] = 0.5
+
+        self.lang_freq['maxmem'] = np.random.randint(self.model.avg_max_mem - 5,
+                                                     self.model.avg_max_mem + 5)
+        self.lang_freq['maxmem_list'] = deque(maxlen=self.lang_freq['maxmem'])
 
 
     def move_random(self):
@@ -87,11 +92,15 @@ class Simple_Language_Agent:
             for key in ['heard','spoken']:
                 self.lang_freq[key][0] += 1
                 other.lang_freq[key][0] += 1
+            self.lang_freq['maxmem_list'].append(0)
+            other.lang_freq['maxmem_list'].append(0)
         # bilingual-cat
         elif (self.language, other.language) in [(2,1),(1,2),(2,2)]:
             for key in ['heard', 'spoken']:
                 self.lang_freq[key][1] += 1
                 other.lang_freq[key][1] += 1
+            self.lang_freq['maxmem_list'].append(1)
+            other.lang_freq['maxmem_list'].append(1)
         # bilingual-bilingual
         elif (self.language, other.language) == (1, 1):
             # find out lang spoken by self
@@ -108,6 +117,8 @@ class Simple_Language_Agent:
             # find out language spoken by other
             self.lang_freq['heard'][l1] += 1
             other.lang_freq['spoken'][l1] += 1
+            self.lang_freq['maxmem_list'].append(l1)
+            other.lang_freq['maxmem_list'].append(l1)
         # spa-cat
         else:
             if sum(self.lang_freq['spoken']) != 0:
@@ -127,6 +138,8 @@ class Simple_Language_Agent:
                 l2 = random.choice([0, 1])
             self.lang_freq['heard'][l2] += 1
             other.lang_freq['spoken'][l2] += 1
+            self.lang_freq['maxmem_list'].append(l1)
+            other.lang_freq['maxmem_list'].append(l2)
 
     def update_lang_pcts(self):
         if sum(self.lang_freq['spoken']) != 0:
@@ -139,7 +152,7 @@ class Simple_Language_Agent:
             self.lang_freq['cat_pct_h'] = 0
 
     def update_lang_switch(self):
-        if self.model.schedule.steps > 10:
+        if self.model.schedule.steps > self.lang_freq['maxmem']:
             if self.language == 0:
                 if self.lang_freq['cat_pct_h'] >= 0.25:
                     self.language = 1
@@ -147,11 +160,11 @@ class Simple_Language_Agent:
                 if self.lang_freq['cat_pct_h'] <= 0.75:
                     self.language = 1
             else:
-                if self.lang_freq['cat_pct_h'] >= 0.95:
-                    if np.random.binomial(1, 0.5):
+                if self.lang_freq['cat_pct_h'] >= 0.9:
+                    if 0 not in self.lang_freq['maxmem_list']:
                         self.language = 2
-                elif self.lang_freq['cat_pct_h'] <= 0.05:
-                    if np.random.binomial(1, 0.5):
+                elif self.lang_freq['cat_pct_h'] <= 0.1:
+                    if 1 not in self.lang_freq['maxmem_list']:
                         self.language = 0
 
     def update_lang_status(self):
@@ -164,6 +177,7 @@ class Simple_Language_Agent:
     def step(self):
         self.move_random()
         self.speak()
+
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)
