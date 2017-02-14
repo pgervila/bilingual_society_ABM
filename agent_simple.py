@@ -13,24 +13,26 @@ class Simple_Language_Agent:
         self.S = S
 
         self.lang_freq = dict()
+        num_init_occur = 50
         if self.language == 0:
-            self.lang_freq['spoken'] = [50, 0] # 0, 2 => spa, cat
-            self.lang_freq['heard'] = [50, 0]
+            self.lang_freq['spoken'] = [np.random.poisson(num_init_occur), 0] # 0, 2 => spa, cat
+            self.lang_freq['heard'] = [np.random.poisson(num_init_occur), 0]
             self.lang_freq['cat_pct_s'] = 0
             self.lang_freq['cat_pct_h'] = 0
         elif self.language == 2:
-            self.lang_freq['spoken'] = [0, 50] # 0, 2 => spa, cat
-            self.lang_freq['heard'] = [0, 50]
+            self.lang_freq['spoken'] = [0, np.random.poisson(num_init_occur)] # 0, 2 => spa, cat
+            self.lang_freq['heard'] = [0, np.random.poisson(num_init_occur)]
             self.lang_freq['cat_pct_s'] = 1
             self.lang_freq['cat_pct_h'] = 1
         else:
-            self.lang_freq['spoken'] = [25, 25] # 0, 2 => spa, cat
-            self.lang_freq['heard'] = [25, 25]
-            self.lang_freq['cat_pct_s'] = 0.5
-            self.lang_freq['cat_pct_h'] = 0.5
-
-        self.lang_freq['maxmem'] = np.random.randint(self.model.avg_max_mem - 5,
-                                                     self.model.avg_max_mem + 5)
+            v1 = np.random.poisson(num_init_occur/2)
+            v2 = np.random.poisson(num_init_occur/2)
+            self.lang_freq['spoken'] = [v1, v2] # 0, 2 => spa, cat
+            self.lang_freq['heard'] = [v1, v2]
+            self.lang_freq['cat_pct_s'] = self.lang_freq['spoken'][1]/sum(self.lang_freq['spoken'])
+            self.lang_freq['cat_pct_h'] = self.lang_freq['heard'][1]/sum(self.lang_freq['heard'])
+        # initialize maxmem deque based on language spoken last maxmem lang encounters
+        self.lang_freq['maxmem'] = np.random.poisson(self.model.avg_max_mem)
         self.lang_freq['maxmem_list'] = deque(maxlen=self.lang_freq['maxmem'])
 
 
@@ -60,7 +62,6 @@ class Simple_Language_Agent:
             phone, messaging, etc ... by specifying an agent through 'with_agent'
 
             Arguments:
-                * model : ABM model
                 * with_agent : specify a specific agent with which conversation will take place
                   By default the agent will be picked randomly from all lang agents in current cell
 
@@ -160,10 +161,10 @@ class Simple_Language_Agent:
                 if self.lang_freq['cat_pct_h'] <= 0.75:
                     self.language = 1
             else:
-                if self.lang_freq['cat_pct_h'] >= 0.9:
+                if self.lang_freq['cat_pct_h'] >= 0.8:
                     if 0 not in self.lang_freq['maxmem_list']:
                         self.language = 2
-                elif self.lang_freq['cat_pct_h'] <= 0.1:
+                elif self.lang_freq['cat_pct_h'] <= 0.2:
                     if 1 not in self.lang_freq['maxmem_list']:
                         self.language = 0
 
