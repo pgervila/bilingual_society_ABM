@@ -4,6 +4,33 @@ import numpy as np
 import networkx as nx
 from collections import deque
 
+class Base_Agent:
+
+    def __init__(self, model, unique_id):
+        self.model = model
+        self.unique_id = unique_id
+
+    def move_random(self):
+        """ Take a random step into any surrounding cell
+            All eight surrounding cells are available as choices
+            Current cell is not an output choice
+
+            Returns:
+                * modifies self.pos attribute
+        """
+        x, y = self.pos  # attr pos is defined when adding agent to schedule
+        possible_steps = self.model.grid.get_neighborhood(
+            (x, y),
+            moore=True,
+            include_center=False
+        )
+        chosen_cell = random.choice(possible_steps)
+        self.model.grid.move_agent(self, chosen_cell)
+
+class Baby(Base_Agent):
+    pass
+
+
 class Simple_Language_Agent:
 
     def __init__(self, model, unique_id, language, S):
