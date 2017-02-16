@@ -1,4 +1,5 @@
 # IMPORT RELEVANT LIBRARIES
+import os
 from importlib import reload
 from math import ceil
 import random
@@ -258,8 +259,14 @@ class Simple_Language_Model(Model):
         self.datacollector.collect(self)
         self.schedule.step()
 
-    def run_model(self, steps, save_frames_freq=0):
+    def run_model(self, steps, save_frames_freq=0, save_dir=''):
         pbar = pyprind.ProgBar(steps)
+        if save_frames_freq:
+            self.save_dir = save_dir
+            script_dir = os.path.dirname(__file__)
+            results_dir = os.path.join(script_dir, save_dir)
+            if not os.path.isdir(results_dir):
+                os.makedirs(results_dir)
         for _ in range(steps):
             self.step()
             if save_frames_freq:
@@ -316,9 +323,15 @@ class Simple_Language_Model(Model):
                             cmap='viridis')
         ax4.text(0.02, 0.95, 'time = %.1f' % self.schedule.steps, transform=ax4.transAxes)
         plt.colorbar(s)
+        plt.suptitle(self.save_dir)
         plt.tight_layout()
         if save_fig:
-            plt.savefig('step' + str(step) + '.png')
+            if self.save_dir:
+                plt.savefig(self.save_dir + '/step' + str(step) + '.png')
+                plt.close()
+            else:
+                plt.savefig('step' + str(step) + '.png')
+
         if plot_results:
             plt.show()
 
@@ -414,7 +427,10 @@ class Simple_Language_Model(Model):
                                                  'sort_within_clust': self.lang_ags_sorted_in_clust},
                            'model_results': self.datacollector.get_model_vars_dataframe(),
                            'agent_results': self.datacollector.get_agent_vars_dataframe()}
-        dd.io.save('model_data.h5', self.model_data)
+        if self.save_dir:
+            dd.io.save(self.save_dir + '/model_data.h5', self.model_data)
+        else:
+            dd.io.save('model_data.h5', self.model_data)
 
     def load_model_data(self, data_filename, key='/' ):
         return dd.io.load(data_filename,key)
