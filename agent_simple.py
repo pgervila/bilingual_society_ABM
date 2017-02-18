@@ -174,10 +174,20 @@ class Simple_Language_Agent:
         # check lang switch
         self.update_lang_switch()
 
+    def stage_1(self):
+        self.speak()
 
-    def step(self):
+    def stage_2(self):
         self.move_random()
         self.speak()
+
+    def stage_3(self):
+        self.move_random()
+        self.speak()
+
+    def stage_4(self):
+        self.speak()
+
 
 
     def __repr__(self):
