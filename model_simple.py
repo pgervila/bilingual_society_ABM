@@ -120,26 +120,19 @@ class Simple_Language_Model(Model):
         self.friendship_network.add_node(a)
         self.family_network.add_node(a)
 
-    def compute_cluster_sizes(self, min_size=20, small_large_pcts=[0.6, 0.4]):
+    def compute_cluster_sizes(self, min_size=20):
         """ Method to compute sizes of each agent cluster
 
         Arguments:
             * min_size: minimum accepted cluster size ( integer)
-            * small_large_pcts: percentages of small and large cities over total ( list of floats  0<x<1)
 
         Returns:
             * list of integers representing cluster sizes
 
         """
-        if min_size * self.num_cities >= self.num_people:
-            raise ValueError('num_people should be greater than min_size * num_cities ')
-        size_choices = [max(int(self.num_people / (10 * self.num_cities)), min_size),
-                        max(int(self.num_people / self.num_cities), min_size)]
-        city_sizes = np.random.choice(size_choices, p=small_large_pcts, size=self.num_cities - 1)
-        last_city_size = self.num_people - city_sizes.sum()
-        city_sizes = np.append(city_sizes, last_city_size)
-        pcts = np.random.dirichlet(city_sizes)
-        return np.random.multinomial(city_sizes.sum(), pcts)
+        x = np.random.pareto(1.25, size=self.num_cities)
+        city_pcts = x / x.sum()
+        return np.clip(city_pcts * self.num_people, min_size, self.num_people).astype(int)
 
     def generate_cluster_points_coords(self, pct_grid_w, pct_grid_h, clust_size):
         """ Using binomial ditribution, this method generates initial coordinates
@@ -321,7 +314,7 @@ class Simple_Language_Model(Model):
                             c=data_2D['values'],
                             vmin=0, vmax=2, s=35,
                             cmap='viridis')
-        ax4.text(0.02, 0.95, 'time = %.1f' % self.schedule.steps, transform=ax4.transAxes)
+        ax4.text(0.02, 1.04, 'time = %.1f' % self.schedule.steps, transform=ax4.transAxes)
         plt.colorbar(s)
         plt.suptitle(self.save_dir)
         plt.tight_layout()
