@@ -147,6 +147,10 @@ class Simple_Language_Agent:
             self.lang_freq['maxmem_list'].append(l1)
             other.lang_freq['maxmem_list'].append(l2)
 
+    def study_lang(self, lang):
+        self.lang_freq['spoken'][lang] += np.random.binomial(1, p=0.25)
+        self.lang_freq['heard'][lang] += 1
+
     def update_lang_pcts(self):
         if sum(self.lang_freq['spoken']) != 0:
             self.lang_freq['cat_pct_s'] = round(self.lang_freq['spoken'][1] / sum(self.lang_freq['spoken']), 2)
@@ -187,23 +191,24 @@ class Simple_Language_Agent:
         self.speak()
 
     def stage_3(self):
-        self.move_random()
-        self.speak()
         if self.age < 100:
             self.model.grid.move_agent(self, self.school_coords)
+            self.study_lang(0)
+            self.study_lang(1)
             self.speak()
         else:
             self.model.grid.move_agent(self, self.job_coords)
             self.speak()
-        self.model.grid.move_agent(self, self.home_coords)
-        self.age += 1
 
+    def stage_4(self):
+        self.move_random()
+        self.speak()
+        self.model.grid.move_agent(self, self.home_coords)
+        self.speak()
+        self.age += 1
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)
-
-    def stage_4(self):
-        self.speak()
 
 
 

@@ -73,7 +73,7 @@ class Simple_Language_Model(Model):
         ## define clusters and add jobs, schools, agents
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
-        self.create_clusters_info()
+        self.set_clusters_info()
 
 
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
@@ -181,7 +181,7 @@ class Simple_Language_Model(Model):
         return x_coords, y_coords
 
 
-    def create_clusters_info(self):
+    def set_clusters_info(self):
         """ Create dict container for all cluster info"""
 
         self.clusters_info = defaultdict(dict)
@@ -189,6 +189,7 @@ class Simple_Language_Model(Model):
             self.clusters_info[idx]['num_agents'] = clust_size
             self.clusters_info[idx]['jobs'] = []
             self.clusters_info[idx]['schools'] = []
+            self.clusters_info[idx]['agents_id'] = []
 
 
     def generate_jobs(self, job_cent_per_agent=0.1, pct_agents_with_job=5,
@@ -267,6 +268,7 @@ class Simple_Language_Model(Model):
                 ag = Simple_Language_Agent(self, ids.pop(), ag_lang, 0.5,
                                            home_coords=(x,y), school_coords=(xs,ys),
                                            job_coords=job.pos)
+                self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
 
 
