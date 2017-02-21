@@ -50,16 +50,10 @@ class Simple_Language_Model(Model):
         self.grid = MultiGrid(height, width, False)
         self.schedule = RandomActivation(self)
 
-        ## RANDOMLY DEFINE ALL CITY-CENTERS COORDS (CITY == HOMES, JOB CENTERS and SCHOOLS)
-        # first define available points as pct of squared grid length
-        grid_pct_list = np.linspace(0.1, 0.9, 100) # avoid edges
-        # now generate the cluster centers (CITIES-VILLAGES)
-        self.clust_centers = np.random.choice(grid_pct_list,size=(self.num_cities, 2),replace=False)
-        if lang_ags_sorted_by_dist:
-            self.clust_centers = sorted(self.clust_centers,
-                                        key=lambda x:pdist([x,[0,0]])
-                                       )
-
+        ## define clusters and add jobs, schools, agents
+        self.compute_cluster_centers()
+        self.compute_cluster_sizes()
+        self.create_clusters_info()
 
 
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
@@ -79,17 +73,9 @@ class Simple_Language_Model(Model):
         self.family_network = nx.DiGraph()
 
         # ADD ALL AGENTS TO GRID AND SCHEDULE
-        S = 0.5
-        if (not lang_ags_sorted_by_dist) and (not lang_ags_sorted_in_clust):
-            for id_ in range(self.num_people):
-                x = random.randrange(self.grid_width)
-                y = random.randrange(self.grid_height)
-                coord = (x,y)
-                lang = np.random.choice([0,1,2], p=self.init_lang_distrib)
-                ag = Simple_Language_Agent(self, id_, lang, S, home_coords=(x,y))
-                self.add_agent(ag, coord)
-        else:
-            self.create_lang_agents()
+        self.generate_jobs()
+        self.generate_schools()
+        self.generate_agents()
 
         # DATA COLLECTOR
         self.datacollector = DataCollector(
@@ -110,7 +96,6 @@ class Simple_Language_Model(Model):
         Arguments:
             * a : agent class instance
             * coords : agent location on grid (2-D tuple of integers)
-
         """
         # add agent to grid and schedule
         self.schedule.add(a)
@@ -120,23 +105,26 @@ class Simple_Language_Model(Model):
         self.friendship_network.add_node(a)
         self.family_network.add_node(a)
 
-    def create_clusters_info(self):
-        """ Create fd"""
-        self.clusters_info = defaultdict(dict)
-        for idx, clust_size in enumerate(self.cluster_sizes):
-            self.clusters_info[idx]['num_agents'] = clust_size
-            self.clusters_info[idx]['jobs'] = []
-            self.clusters_info[idx]['schools'] = []
+
+    def compute_cluster_centers(self):
+        """ Generate 2D coordinates for all cluster centers (in percentage of grid dimensions) """
+
+        # Define available points as pct of squared grid length
+        grid_pct_list = np.linspace(0.1, 0.9, 100) # avoid edges
+        # Generate the cluster centers
+        self.clust_centers = np.random.choice(grid_pct_list,size=(self.num_cities, 2),replace=False)
+        if self.lang_ags_sorted_by_dist:
+            self.clust_centers = sorted(self.clust_centers, key=lambda x:pdist([x,[0,0]]))
+
 
     def compute_cluster_sizes(self, min_size=20):
         """ Method to compute sizes of each agent cluster.
-        School and jobs clusters are computed based on agent clusters
 
         Arguments:
             * min_size: minimum accepted cluster size ( integer)
 
         Returns:
-            * list of integers representing cluster sizes and school cluster sizes
+            * list of integers representing cluster sizes
 
         """
         p = np.random.pareto(1.25, size=self.num_cities)
@@ -148,14 +136,11 @@ class Simple_Language_Model(Model):
             self.cluster_sizes[idx] = min_size
         self.cluster_sizes[np.argmax(self.cluster_sizes)] -= tot_sub_val
 
-        self.school_cluster_sizes = (self.cluster_sizes / min_size).astype(int)
-        self.jobs_cluster_sizes = (self.cluster_sizes * (3/5)).astype(int)
 
     def generate_cluster_points_coords(self, pct_grid_w, pct_grid_h, clust_size):
-        """ Using binomial ditribution, this method generates initial coordinates
+        """ Using binomial distribution, this method generates initial coordinates
             for a given cluster, defined via its center and its size.
-            Cluster size as well as cluster center coords
-            (in grid percentage) must be provided
+            Cluster size as well as cluster center coords (in grid percentage) must be provided
 
         Arguments:
             * pct_grid_w: positive float < 1 to define clust_center along grid width
@@ -167,24 +152,63 @@ class Simple_Language_Model(Model):
             respectively
 
         """
-        ## use binomial generator to get clusters in width * height grid
-        ## n = grid_width, p = pct_grid, size = num_experim
-        x_coords = np.random.binomial(self.grid_width,
-                                      pct_grid_w,
-                                      size=clust_size)
-        for idx, elem in enumerate(x_coords):
-            if elem >= self.grid_width:
-                x_coords[idx] = self.grid_width - 1
+        x_coords = np.random.binomial(self.grid_width,  pct_grid_w, size=clust_size)
+        x_coords = np.clip(x_coords, 1, self.grid_width - 1)
 
-        y_coords = np.random.binomial(self.grid_height,
-                                      pct_grid_h,
-                                      size=clust_size)
-        for idx, elem in enumerate(y_coords):
-            if elem >= self.grid_width:
-                y_coords[idx] = self.grid_height - 1
+        y_coords = np.random.binomial(self.grid_height, pct_grid_h, size=clust_size)
+        y_coords = np.clip(y_coords, 1, self.grid_height - 1)
+
         return x_coords, y_coords
 
-    def create_lang_agents(self):
+
+    def create_clusters_info(self):
+        """ Create dict container for all cluster info"""
+
+        self.clusters_info = defaultdict(dict)
+        for idx, clust_size in enumerate(self.cluster_sizes):
+            self.clusters_info[idx]['num_agents'] = clust_size
+            self.clusters_info[idx]['jobs'] = []
+            self.clusters_info[idx]['schools'] = []
+
+
+    def generate_jobs(self, job_cent_per_agent=0.1, pct_agents_with_job=5,
+                      min_places=2, max_places=200):
+        """ Generates job centers coordinates and num places per center"""
+        for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
+                                                                     self.clust_centers)):
+            x_j, y_j = self.generate_cluster_points_coords(clust_c_coords[0],
+                                                           clust_c_coords[1],
+                                                           int(clust_size * job_cent_per_agent))
+
+            if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
+                c_coords = self.grid_width * self.clust_centers[clust_idx]
+                job_p_coords = sorted(list(zip(x_j, y_j)), key=lambda p:pdist([p, c_coords]))
+                x_j, y_j = list(zip(*job_p_coords))
+
+            # compute places per each job in cluster using lognormal distrib
+            p = np.random.lognormal(1, 1, size=int(clust_size * job_cent_per_agent))
+            pcts = p / p.sum()
+            job_cent_places = np.random.multinomial(int(clust_size * pct_agents_with_job), pcts)
+            job_cent_places = np.clip(job_cent_places, min_places, max_places)
+
+            for x, y, num_places in zip(x_j, y_j, job_cent_places):
+                self.clusters_info[clust_idx]['jobs'].append(Job((x,y), num_places))
+
+    def generate_schools(self, schools_per_agent=0.05, school_size=100):
+        for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
+                                                                     self.clust_centers)):
+            x_s, y_s = self.generate_cluster_points_coords(clust_c_coords[0],
+                                                           clust_c_coords[1],
+                                                           int(clust_size * schools_per_agent))
+            if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
+                c_coords = self.grid_width * self.clust_centers[clust_idx]
+                school_p_coords = sorted(list(zip(x_s, y_s)), key=lambda p:pdist([p, c_coords]))
+                x_s, y_s = list(zip(*school_p_coords))
+
+            for x,y in zip(x_s,y_s):
+                self.clusters_info[clust_idx]['schools'].append(School((x,y), school_size))
+
+    def generate_agents(self):
         """ Method to instantiate all agents
 
         Arguments:
@@ -194,58 +218,37 @@ class Simple_Language_Model(Model):
                 if agents must be sorted by distance to center of cluster they belong to
 
             """
-        self.compute_cluster_sizes()
-        array_langs = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
+
+        langs_per_ag_array = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
+        idxs_to_split_by_clust = self.cluster_sizes.cumsum()[:-1]
+        langs_per_clust = np.split(langs_per_ag_array, idxs_to_split_by_clust)
         if self.lang_ags_sorted_by_dist:
-            array_langs.sort()
-        idxs_to_split = self.cluster_sizes.cumsum()[:-1]
-        langs_per_clust = np.split(array_langs, idxs_to_split)
+            langs_per_ag_array.sort()
         if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
             for subarray in langs_per_clust:
                 subarray.sort()  # invert if needed
         ids = set(range(self.num_people))
 
-        for clust_idx, (clust_size, school_clust_size, job_clust_size, clust_c_coords) in enumerate(zip(
-                                                                                        self.cluster_sizes,
-                                                                                        self.school_cluster_sizes,
-                                                                                        self.jobs_cluster_sizes,
-                                                                                        self.clust_centers)
-                                                                                        ):
-            x_cs, y_cs = self.generate_cluster_points_coords(clust_c_coords[0], clust_c_coords[1], clust_size)
-            x_s, y_s = self.generate_cluster_points_coords(clust_c_coords[0], clust_c_coords[1], school_clust_size)
-            x_j, y_j = self.generate_cluster_points_coords(clust_c_coords[0], clust_c_coords[1], school_clust_size)
-
+        for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
+                                                                     self.clust_centers)):
+            x_ags, y_ags = self.generate_cluster_points_coords(clust_c_coords[0],
+                                                               clust_c_coords[1],
+                                                               clust_size)
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 c_coords = self.grid_width * self.clust_centers[clust_idx]
-                sort_from_center = lambda x,y:sorted(list(zip(x, y)), key=lambda p:pdist([p, c_coords]))
-
-                clust_p_coords = sort_from_center(x_cs, y_cs)
-                school_p_coords = sort_from_center(x_s, y_s)
-                job_p_coords = sort_from_center(x_j, y_j)
-
-
-                x_cs, y_cs = list(zip(*clust_p_coords))
-                x_s, y_s = list(zip(*school_p_coords))
-                x_j, y_j = list(zip(*job_p_coords))
-
-            # Assign  places-per_center to school-job clusts
-
-            for ag_lang, x, y in zip(langs_per_clust[clust_idx], x_cs, y_cs):
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, 0.5, home_coords=(x,y))
+                clust_p_coords = sorted(list(zip(x_ags, y_ags)), key=lambda p:pdist([p, c_coords]))
+                x_ags, y_ags = list(zip(*clust_p_coords))
+            clust_schools_coords = [sc.pos for sc in self.clusters_info[clust_idx]['schools']]
+            for ag_lang, x, y in zip(langs_per_clust[clust_idx], x_ags, y_ags):
+                closest_school = np.argmin([pdist([(x,y), sc_coord])
+                                            for sc_coord in clust_schools_coords])
+                xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
+                job = random.choice(self.clusters_info[clust_idx]['jobs'])
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, 0.5,
+                                           home_coords=(x,y), school_coords=(xs,ys),
+                                           job_coords=job.pos)
                 self.add_agent(ag, (x, y))
 
-            for x,y in zip(x_s,y_s):
-                self.clusters_info[clust_idx]['schools'].append(School((x,y), 20))
-
-            my_len = 50
-            num_employers_per_clust = int(my_len / 10)
-            num_jobs_clust = int(my_len / 2)
-            div_array = np.random.randint(1, int(num_jobs_clust / 4), size=num_employers_per_clust)
-            div_array = div_array.cumsum()[:-1]
-            split_list = np.split(range(num_jobs_clust), div_array)
-
-            for x,y,sub_list in zip(x_j,y_j, split_list):
-                self.clusters_info[clust_idx]['jobs'].append(Job((x,y), len(sub_list)))
 
 
 
@@ -342,7 +345,9 @@ class Simple_Language_Model(Model):
         data_2D = self.df_attrs_avg.reset_index()
 
         ax1 = plt.subplot2grid(grid_size, (0, 3), rowspan=1, colspan=2)
-        data_2_plot[["count_bil", "count_cat", "count_spa"]].plot(ax=ax1, title='lang_groups')
+        data_2_plot[["count_bil", "count_cat", "count_spa"]].plot(ax=ax1,
+                                                                  title='lang_groups',
+                                                                  color=['g','y','b'])
         ax1.xaxis.tick_bottom()
         ax1.legend(loc='best', prop={'size': 8})
         ax2 = plt.subplot2grid(grid_size, (1, 3), rowspan=1, colspan=2)
@@ -381,15 +386,15 @@ class Simple_Language_Model(Model):
         ax1.set_xlim(0, steps)
         ax1.set_ylim(0, 1)
         ax1.xaxis.tick_bottom()
-        line10, = ax1.plot([], [], lw=2, label='count_spa')
-        line11, = ax1.plot([], [], lw=2, label='count_bil')
-        line12, = ax1.plot([], [], lw=2, label='count_cat')
+        line10, = ax1.plot([], [], lw=2, label='count_spa', color='b')
+        line11, = ax1.plot([], [], lw=2, label='count_bil', color='g')
+        line12, = ax1.plot([], [], lw=2, label='count_cat', color='y')
         ax1.legend(loc='best', prop={'size': 8})
         ax1.set_title("lang_groups")
         ax2 = plt.subplot2grid(grid_size, (1, 3), rowspan=1, colspan=2)
         ax2.set_xlim(0, steps)
         ax2.set_ylim(0, self.max_people_factor * self.num_people)
-        line2, = ax2.plot([], [], lw=2, label = "total_num_agents")
+        line2, = ax2.plot([], [], lw=2, label = "total_num_agents", color='k')
         ax2.legend(loc='best', prop={'size': 8})
         ax2.set_title("num_agents")
         ax3 = plt.subplot2grid(grid_size, (2, 3), rowspan=1, colspan=2)

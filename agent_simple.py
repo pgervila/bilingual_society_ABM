@@ -6,7 +6,8 @@ from collections import deque
 
 class Simple_Language_Agent:
 
-    def __init__(self, model, unique_id, language, S, age=0, home_coords=None, school_coords=None):
+    def __init__(self, model, unique_id, language, S, age=0,
+                 home_coords=None, school_coords=None, job_coords=None):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
@@ -14,6 +15,7 @@ class Simple_Language_Agent:
         self.age = age
         self.home_coords = home_coords
         self.school_coords = school_coords
+        self.job_coords = job_coords
 
         self.lang_freq = dict()
         num_init_occur = 50
@@ -184,6 +186,9 @@ class Simple_Language_Agent:
         if self.age < 100:
             self.model.grid.move_agent(self, self.school_coords)
             self.speak()
+        else:
+            self.model.grid.move_agent(self, self.job_coords)
+            self.speak()
         self.model.grid.move_agent(self, self.home_coords)
         self.age += 1
 
@@ -195,14 +200,20 @@ class Simple_Language_Agent:
 class Home:
     def __init__(self, pos):
         self.pos=pos
+    def __repr__(self):
+        return 'Home_{0.pos!r}'.format(self)
 
 class School:
     def __init__(self, pos, num_places):
         self.pos=pos
         self.num_free=num_places
+    def __repr__(self):
+        return 'School_{0.pos!r}'.format(self)
 
 class Job:
-    def __init__(self, pos, num_places, skill_level):
+    def __init__(self, pos, num_places, skill_level=0):
         self.pos=pos
         self.num_places=num_places
         self.skill_level = skill_level
+    def __repr__(self):
+        return 'Job{0.pos!r}'.format(self)
