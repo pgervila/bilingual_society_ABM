@@ -26,9 +26,25 @@ from agent_simple import Simple_Language_Agent, Home, School, Job
 
 # IMPORT MESA LIBRARIES
 from mesa import Model
-from mesa.time import RandomActivation, SimultaneousActivation, StagedActivation
+from mesa.time import RandomActivation, StagedActivation
 from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
+
+
+class StagedActivation_modif(StagedActivation):
+
+    def step(self):
+        """ Executes all the stages for all agents. """
+        if self.shuffle:
+            random.shuffle(self.agents)
+        for stage in self.stage_list:
+            for agent in self.agents[:]:
+                getattr(agent, stage)()  # Run stage
+            if self.shuffle_between_stages:
+                random.shuffle(self.agents)
+            self.time += self.stage_time
+        self.steps += 1
+
 
 class Simple_Language_Model(Model):
     def __init__(self, num_people, avg_max_mem=20, width=5, height=5, max_people_factor=5,
@@ -48,7 +64,11 @@ class Simple_Language_Model(Model):
 
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
-        self.schedule = RandomActivation(self)
+        self.schedule = StagedActivation_modif(self,
+                                               stage_list=["stage_1", "stage_2",
+                                                           "stage_3", "stage_4"],
+                                               shuffle=True,
+                                               shuffle_between_stages=True)
 
         ## define clusters and add jobs, schools, agents
         self.compute_cluster_centers()
