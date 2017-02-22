@@ -90,59 +90,70 @@ class Simple_Language_Agent:
     def listen(self):
         pass
 
+    def update_lang_counter(self, other, l1, l2):
+        self.lang_freq['spoken'][l1] += 1
+        self.lang_freq['heard'][l2] += 1
+        other.lang_freq['spoken'][l2] += 1
+        other.lang_freq['heard'][l1] += 1
+
+
     def get_conversation_lang(self, other):
         # spa-bilingual
         if (self.language, other.language) in [(0,0),(0,1),(1,0)]:
-            for key in ['heard','spoken']:
-                self.lang_freq[key][0] += 1
-                other.lang_freq[key][0] += 1
+            self.update_lang_counter(other, 0, 0)
             self.lang_freq['maxmem_list'].append(0)
             other.lang_freq['maxmem_list'].append(0)
         # bilingual-cat
         elif (self.language, other.language) in [(2,1),(1,2),(2,2)]:
-            for key in ['heard', 'spoken']:
-                self.lang_freq[key][1] += 1
-                other.lang_freq[key][1] += 1
+            self.update_lang_counter(other, 1, 1)
             self.lang_freq['maxmem_list'].append(1)
             other.lang_freq['maxmem_list'].append(1)
-        # bilingual-bilingual
-        elif (self.language, other.language) == (1, 1):
-            # find out lang spoken by self
+
+        elif (self.language, other.language) == (1, 1): # bilingual-bilingual
+            p11 = ((2 / 3) * (self.lang_freq['cat_pct_s']) +
+                   (1 / 3) * (self.lang_freq['cat_pct_h']))
+            # find out lang spoken by self ( self STARTS CONVERSATION !!)
             if sum(self.lang_freq['spoken']) != 0:
-                p10 = (2/3 * self.lang_freq['spoken'][0]/sum(self.lang_freq['spoken']) +
-                       1/3 * self.lang_freq['heard'][0]/sum(self.lang_freq['heard'])
-                       )
-                p11 = 1 - p10
-                l1 = np.random.binomial(1,p11)
-            else:
-                l1 = random.choice([0,1])
-            self.lang_freq['spoken'][l1] += 1
-            other.lang_freq['heard'][l1] += 1
-            # find out language spoken by other
-            self.lang_freq['heard'][l1] += 1
-            other.lang_freq['spoken'][l1] += 1
-            self.lang_freq['maxmem_list'].append(l1)
-            other.lang_freq['maxmem_list'].append(l1)
-        # spa-cat
-        else:
-            # find out language spoken by self
-            if sum(self.lang_freq['heard']) != 0:
-                p10 = self.lang_freq['heard'][0]/sum(self.lang_freq['heard'])
-                p11 = 1 - p10
                 l1 = np.random.binomial(1, p11)
             else:
-                l1 = random.choice([0, 1])
-            self.lang_freq['spoken'][l1] += 1
-            other.lang_freq['heard'][l1] += 1
-            # find out language spoken by other
-            if sum(other.lang_freq['heard']) != 0:
-                p20 = other.lang_freq['heard'][0]/sum(other.lang_freq['heard'])
-                p21 = 1 - p20
-                l2 = np.random.binomial(1,p21)
-            else:
-                l2 = random.choice([0, 1])
-            self.lang_freq['heard'][l2] += 1
-            other.lang_freq['spoken'][l2] += 1
+                l1 = random.choice([0,1])
+            self.update_lang_counter(other, l1, l1)
+            self.lang_freq['maxmem_list'].append(l1)
+            other.lang_freq['maxmem_list'].append(l1)
+
+        else: # spa-cat
+            p11 = ((2 / 3) * (self.lang_freq['cat_pct_s']) +
+                   (1 / 3) * (self.lang_freq['cat_pct_h']))
+            p21 = ((2 / 3) * (other.lang_freq['cat_pct_s']) +
+                   (1 / 3) * (other.lang_freq['cat_pct_h']))
+            if self.language == 0:
+                l1 = 0
+                if (1 - other.lang_freq['cat_pct_s']) or (1 - other.lang_freq['cat_pct_h']):
+                    l2 = np.random.binomial(1, p21)
+                    if l2 == 0:
+                        self.update_lang_counter(other, l1, l2)
+                    elif l2 == 1:
+                        l1 = np.random.binomial(1, p11)
+                        self.update_lang_counter(other, l1, l2)
+                else:
+                    l1 = np.random.binomial(1, p11)
+                    l2 = 1
+                    self.update_lang_counter(other, l1, l2)
+
+            elif self.language == 2:
+                l1 = 1
+                if (other.lang_freq['cat_pct_s']) or (other.lang_freq['cat_pct_h']):
+                    l2 = np.random.binomial(1, p21)
+                    if l2 == 1:
+                        self.update_lang_counter(other, l1, l2)
+                    elif l2 == 0:
+                        l1 = np.random.binomial(1, p11)
+                        self.update_lang_counter(other, l1, l2)
+                else:
+                    l1 = np.random.binomial(1, p11)
+                    l2 = 0
+                    self.update_lang_counter(other, l1, l2)
+
             self.lang_freq['maxmem_list'].append(l1)
             other.lang_freq['maxmem_list'].append(l2)
 
