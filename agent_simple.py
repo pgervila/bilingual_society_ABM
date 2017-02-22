@@ -87,6 +87,9 @@ class Simple_Language_Agent:
             self.update_lang_status()
             other.update_lang_status()
 
+    def listen(self):
+        pass
+
     def get_conversation_lang(self, other):
         # spa-bilingual
         if (self.language, other.language) in [(0,0),(0,1),(1,0)]:
@@ -122,8 +125,9 @@ class Simple_Language_Agent:
             other.lang_freq['maxmem_list'].append(l1)
         # spa-cat
         else:
-            if sum(self.lang_freq['spoken']) != 0:
-                p10 = self.lang_freq['spoken'][0]/sum(self.lang_freq['spoken'])
+            # find out language spoken by self
+            if sum(self.lang_freq['heard']) != 0:
+                p10 = self.lang_freq['heard'][0]/sum(self.lang_freq['heard'])
                 p11 = 1 - p10
                 l1 = np.random.binomial(1, p11)
             else:
@@ -131,7 +135,7 @@ class Simple_Language_Agent:
             self.lang_freq['spoken'][l1] += 1
             other.lang_freq['heard'][l1] += 1
             # find out language spoken by other
-            if sum(other.lang_freq['spoken']) != 0:
+            if sum(other.lang_freq['heard']) != 0:
                 p20 = other.lang_freq['heard'][0]/sum(other.lang_freq['heard'])
                 p21 = 1 - p20
                 l2 = np.random.binomial(1,p21)
