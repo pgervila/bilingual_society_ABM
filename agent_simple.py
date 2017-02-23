@@ -73,8 +73,9 @@ class Simple_Language_Agent:
             pos = [self.pos]
             # get all agents currently placed on chosen cell
             others = self.model.grid.get_cell_list_contents(pos)
+            others.remove(self)
             ## linguistic model of encounter with another random agent
-            if len(others) > 1:
+            if len(others) >= 1:
                 other = random.choice(others)
                 self.get_conversation_lang(self, other)
                 # update lang status
@@ -88,7 +89,21 @@ class Simple_Language_Agent:
             other.update_lang_status()
 
     def listen(self):
-        pass
+        """Listen to random agents placed on the same cell as calling agent"""
+        pos = [self.pos]
+        # get all agents currently placed on chosen cell
+        others = self.model.grid.get_cell_list_contents(pos)
+        others.remove(self)
+        ## linguistic model of encounter with another random agent
+        if len(others) >= 2:
+            ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
+            self.lang_freq['heard'][l1] += 1
+            self.lang_freq['heard'][l2] += 1
+            # update lang status
+            ag_1.update_lang_status()
+            ag_2.update_lang_status()
+
 
     def update_lang_counter(self, ag_1, ag_2, l1, l2):
         ag_1.lang_freq['spoken'][l1] += 1
@@ -97,14 +112,16 @@ class Simple_Language_Agent:
         ag_2.lang_freq['heard'][l1] += 1
 
 
-    def get_conversation_lang(self, ag_1, ag_2):
+    def get_conversation_lang(self, ag_1, ag_2, return_values=False):
 
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
+            l1 = l2 = 0
             self.update_lang_counter(ag_1, ag_2, 0, 0)
             ag_1.lang_freq['maxmem_list'].append(0)
             ag_2.lang_freq['maxmem_list'].append(0)
 
         elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
+            l1=l2=1
             self.update_lang_counter(ag_1, ag_2, 1, 1)
             ag_1.lang_freq['maxmem_list'].append(1)
             ag_2.lang_freq['maxmem_list'].append(1)
@@ -117,6 +134,7 @@ class Simple_Language_Agent:
                 l1 = np.random.binomial(1, p11)
             else:
                 l1 = random.choice([0,1])
+            l2=l1
             self.update_lang_counter(ag_1, ag_2, l1, l1)
             ag_1.lang_freq['maxmem_list'].append(l1)
             ag_2.lang_freq['maxmem_list'].append(l1)
@@ -153,9 +171,10 @@ class Simple_Language_Agent:
                     l1 = np.random.binomial(1, p11)
                     l2 = 0
                     self.update_lang_counter(ag_1, ag_2, l1, l2)
-
             ag_1.lang_freq['maxmem_list'].append(l1)
             ag_2.lang_freq['maxmem_list'].append(l2)
+        if return_values:
+            return l1, l2
 
     def update_lang_pcts(self):
         if sum(self.lang_freq['spoken']) != 0:
@@ -193,6 +212,7 @@ class Simple_Language_Agent:
     def step(self):
         self.move_random()
         self.speak()
+        self.listen()
 
 
     def __repr__(self):
