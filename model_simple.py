@@ -3,7 +3,7 @@ import os
 from importlib import reload
 from math import ceil
 import random
-import itertools
+from itertools import product
 from collections import defaultdict, Counter, OrderedDict
 import numpy as np
 import pandas as pd
@@ -126,13 +126,30 @@ class Simple_Language_Model(Model):
         self.family_network.add_node(a)
 
 
-    def compute_cluster_centers(self):
+    def compute_cluster_centers(self, min_dist=0.20):
         """ Generate 2D coordinates for all cluster centers (in percentage of grid dimensions) """
 
         # Define available points as pct of squared grid length
         grid_pct_list = np.linspace(0.1, 0.9, 100) # avoid edges
-        # Generate the cluster centers
-        self.clust_centers = np.random.choice(grid_pct_list,size=(self.num_cities, 2),replace=False)
+        # Assure min distance btwn clusters
+        s1 = set(product(grid_pct_list, grid_pct_list))
+        self.clust_centers = []
+        p = random.sample(s1, 1)[0]
+        self.clust_centers.append(p)
+        s1.remove(p)
+        for _ in range(self.num_cities - 1):
+            for point in set(s1):
+                if pdist([point, p]) < min_dist * (grid_pct_list.max() - grid_pct_list.min()):
+                    s1.remove(point)
+            try:
+                p = random.sample(s1, 1)[0]
+            except ValueError:
+                print('INPUT ERROR: Reduce either number of cities or minimum distance '
+                      'in order to meet distance constraint')
+                raise
+            self.clust_centers.append(p)
+            s1.remove(p)
+        self.clust_centers = np.array(self.clust_centers)
         if self.lang_ags_sorted_by_dist:
             self.clust_centers = sorted(self.clust_centers, key=lambda x:pdist([x,[0,0]]))
 
