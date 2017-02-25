@@ -74,7 +74,7 @@ class Simple_Language_Agent:
                 * Defines conversation and language(s) in which it takes place.
                   Updates heard/used stats
         """
-        if with_agent is None:
+        if not with_agent:
             pos = [self.pos]
             # get all agents currently placed on chosen cell
             others = self.model.grid.get_cell_list_contents(pos)
@@ -93,6 +93,38 @@ class Simple_Language_Agent:
             self.update_lang_status()
             other.update_lang_status()
 
+    def speak_in_group(self, first_speaker=True, group=None, group_max_size=5):
+        """ Determine language spoken when a group meets
+            Group is split between initiator and rest_of_group
+        """
+
+        if group:
+            group_set = set(group)
+        else:
+            ags_in_cell = self.model.grid.get_cell_list_contents([self.pos])
+            num_ags_in_cell = len(ags_in_cell)
+            if num_ags_in_cell >= 3:
+                if num_ags_in_cell >= group_max_size:
+                    group_size = np.random.randint(3, group_max_size + 1)
+                    group = list(np.random.choice(ags_in_cell, replace=False, size=group_size))
+                    if self not in group:
+                        group = [self] + group[:-1]
+                else:
+                    group_size = np.random.randint(3, num_ags_in_cell + 1)
+                    group = np.random.choice(ags_in_cell, replace=False, size=group_size)
+                group_set = set(group)
+            else:
+                group_set = None
+        if group_set:
+            if not first_speaker:
+                initiator = np.random.choice(group_set.difference({self}))
+                rest_of_group = list(group_set.difference({initiator}))
+                self.get_group_conversation_lang(initiator, rest_of_group )
+            else:
+                rest_of_group = list(group_set.difference({self}))
+                self.get_group_conversation_lang(self, rest_of_group)
+
+
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
         pos = [self.pos]
@@ -102,32 +134,33 @@ class Simple_Language_Agent:
         ## linguistic model of encounter with another random agent
         if len(others) >= 2:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
+            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_langs=True)
             self.lang_freq['heard'][l1] += 1
             self.lang_freq['heard'][l2] += 1
             # update lang status
             ag_1.update_lang_status()
             ag_2.update_lang_status()
 
+    def update_lang_counter(self, ags_list, langs_list):
+        for ag_idx, ag in enumerate(ags_list):
+            for lang_idx, lang in enumerate(langs_list):
+                if lang_idx != ag_idx:
+                    ag.lang_freq['heard'][lang] += 1
+                else:
+                    ag.lang_freq['spoken'][lang] += 1
 
-    def update_lang_counter(self, ag_1, ag_2, l1, l2):
-        ag_1.lang_freq['spoken'][l1] += 1
-        ag_1.lang_freq['heard'][l2] += 1
-        ag_2.lang_freq['spoken'][l2] += 1
-        ag_2.lang_freq['heard'][l1] += 1
 
-
-    def get_conversation_lang(self, ag_1, ag_2, return_values=False):
+    def get_conversation_lang(self, ag_1, ag_2, return_langs=False):
 
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
             l1 = l2 = 0
-            self.update_lang_counter(ag_1, ag_2, 0, 0)
+            self.update_lang_counter([ag_1, ag_2], [l1, l2])
             ag_1.lang_freq['maxmem_list'].append(0)
             ag_2.lang_freq['maxmem_list'].append(0)
 
         elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
             l1=l2=1
-            self.update_lang_counter(ag_1, ag_2, 1, 1)
+            self.update_lang_counter([ag_1, ag_2], [l1, l2])
             ag_1.lang_freq['maxmem_list'].append(1)
             ag_2.lang_freq['maxmem_list'].append(1)
 
@@ -140,7 +173,7 @@ class Simple_Language_Agent:
             else:
                 l1 = random.choice([0,1])
             l2=l1
-            self.update_lang_counter(ag_1, ag_2, l1, l1)
+            self.update_lang_counter([ag_1, ag_2], [l1, l2])
             ag_1.lang_freq['maxmem_list'].append(l1)
             ag_2.lang_freq['maxmem_list'].append(l1)
 
@@ -154,32 +187,101 @@ class Simple_Language_Agent:
                 if (1 - ag_2.lang_freq['cat_pct_s']) or (1 - ag_2.lang_freq['cat_pct_h']):
                     l2 = np.random.binomial(1, p21)
                     if l2 == 0:
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
+                        self.update_lang_counter([ag_1, ag_2], [l1, l2])
                     elif l2 == 1:
                         l1 = np.random.binomial(1, p11)
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
+                        self.update_lang_counter([ag_1, ag_2], [l1, l2])
                 else:
                     l1 = np.random.binomial(1, p11)
                     l2 = 1
-                    self.update_lang_counter(ag_1, ag_2, l1, l2)
+                    self.update_lang_counter([ag_1, ag_2], [l1, l2])
 
             elif ag_1.language == 2:
                 l1 = 1
                 if (ag_2.lang_freq['cat_pct_s']) or (ag_2.lang_freq['cat_pct_h']):
                     l2 = np.random.binomial(1, p21)
                     if l2 == 1:
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
+                        self.update_lang_counter([ag_1, ag_2], [l1, l2])
                     elif l2 == 0:
                         l1 = np.random.binomial(1, p11)
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
+                        self.update_lang_counter([ag_1, ag_2], [l1, l2])
                 else:
                     l1 = np.random.binomial(1, p11)
                     l2 = 0
-                    self.update_lang_counter(ag_1, ag_2, l1, l2)
+                    self.update_lang_counter([ag_1, ag_2], [l1, l2])
             ag_1.lang_freq['maxmem_list'].append(l1)
             ag_2.lang_freq['maxmem_list'].append(l2)
-        if return_values:
+        if return_langs:
             return l1, l2
+
+    def get_group_conversation_lang(self, initiator, rest_of_group):
+        """ Initiator does not belong to group """
+        group_profic_in_lang2 = [ag.lang_freq['cat_pct_s'] for ag in rest_of_group]
+        group_abs_lang_profic = np.array([x if x < 0.5 else (1 - x) for x in group_profic_in_lang2])
+        group_langs = np.array([ag.language for ag in rest_of_group])
+
+        worst_linguists = np.where(group_abs_lang_profic == group_abs_lang_profic.min())[0]
+        langs_worst_linguists = group_langs[worst_linguists]
+
+        idx_min, idx_max = np.argmin(group_profic_in_lang2), np.argmax(group_profic_in_lang2)
+
+        group_lang_min, group_lang_max = (group_profic_in_lang2[idx_min],
+                                          group_profic_in_lang2[idx_max])
+        # map init lang profile
+        def fun_map_init(x):
+            if (x <= 0.2):
+                return 0
+            elif (0.2<x<=0.5):
+                return 1
+            elif (0.5<x<=0.8):
+                return 2
+            elif (x > 0.8):
+                return 3
+
+        init = fun_map_init(initiator.lang_freq['cat_pct_s'])
+        group_lang_min = rest_of_group[idx_min].language
+        group_lang_max = rest_of_group[idx_max].language
+        #print('****')
+        #print(rest_of_group)
+        #print(init, group_lang_min, group_lang_max)
+        #print('****')
+        # call group decision function
+        try:
+            init_lang, common_lang = self.model.group_lang_map_dict[(init,
+                                                                     group_lang_min,
+                                                                     group_lang_max)]
+        except:
+            print(rest_of_group[idx_min], rest_of_group[idx_max])
+        if common_lang:
+            langs_list = [init_lang] + [init_lang for ag in rest_of_group]
+            self.update_lang_counter([initiator] + rest_of_group, langs_list)
+        else:
+            langs_list = []
+            if (init, group_lang_min, group_lang_max) in [(0, 0, 2), (1, 0, 2)] :
+                for ag in [initiator] + rest_of_group:
+                    if ag.language == 2:
+                        p_ag = ((2 / 3) * (ag.lang_freq['cat_pct_s']) +
+                                (1 / 3) * (ag.lang_freq['cat_pct_h']))
+                        langs_list.append(np.random.binomial(1, p_ag))
+                    else:
+                        langs_list.append(0)
+            elif (init, group_lang_min, group_lang_max) == (3, 0, 0):
+                langs_list.append(1)
+                for ag in rest_of_group:
+                        p_ag = ((2 / 3) * (ag.lang_freq['cat_pct_s']) +
+                                (1 / 3) * (ag.lang_freq['cat_pct_h']))
+                        langs_list.append(np.random.binomial(1, p_ag))
+            elif (init, group_lang_min, group_lang_max) in [(2, 0, 2), (3, 0, 1), (3, 0, 2)]:
+                for ag in [initiator] + rest_of_group:
+                    if ag.language == 0:
+                        p_ag = ((2 / 3) * (ag.lang_freq['cat_pct_s']) +
+                                (1 / 3) * (ag.lang_freq['cat_pct_h']))
+                        langs_list.append(np.random.binomial(1, p_ag))
+                    else:
+                        langs_list.append(1)
+
+            self.update_lang_counter([initiator] + rest_of_group, langs_list)
+
 
     def study_lang(self, lang):
         self.lang_freq['spoken'][lang] += np.random.binomial(1, p=0.25)
@@ -196,14 +298,16 @@ class Simple_Language_Agent:
             self.lang_freq['cat_pct_h'] = 0
 
     def update_lang_switch(self):
+        """ Switch is driven and allowed by heard language """
+        # TODO : add condition on cat_pct_s as well, redefine short-term impact. More consistence
         if self.model.schedule.steps > self.lang_freq['maxmem']:
             if self.language == 0:
-                if self.lang_freq['cat_pct_h'] >= 0.25:
+                if self.lang_freq['cat_pct_h'] >= 0.2:
                     self.language = 1
             elif self.language == 2:
-                if self.lang_freq['cat_pct_h'] <= 0.75:
+                if self.lang_freq['cat_pct_h'] <= 0.8:
                     self.language = 1
-            else:
+            elif self.language == 1:
                 if self.lang_freq['cat_pct_h'] >= 0.8:
                     if 0 not in self.lang_freq['maxmem_list']:
                         self.language = 2
@@ -234,6 +338,8 @@ class Simple_Language_Agent:
         else:
             self.model.grid.move_agent(self, self.job_coords)
             self.speak()
+
+        self.speak_in_group()
 
     def stage_4(self):
         self.move_random()
