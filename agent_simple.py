@@ -6,11 +6,16 @@ from collections import deque
 
 class Simple_Language_Agent:
 
-    def __init__(self, model, unique_id, language, S):
+    def __init__(self, model, unique_id, language, S, age=0,
+                 home_coords=None, school_coords=None, job_coords=None):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.S = S
+        self.age = age
+        self.home_coords = home_coords
+        self.school_coords = school_coords
+        self.job_coords = job_coords
 
         self.lang_freq = dict()
         num_init_occur = 50
@@ -176,6 +181,10 @@ class Simple_Language_Agent:
         if return_values:
             return l1, l2
 
+    def study_lang(self, lang):
+        self.lang_freq['spoken'][lang] += np.random.binomial(1, p=0.25)
+        self.lang_freq['heard'][lang] += 1
+
     def update_lang_pcts(self):
         if sum(self.lang_freq['spoken']) != 0:
             self.lang_freq['cat_pct_s'] = round(self.lang_freq['spoken'][1] / sum(self.lang_freq['spoken']), 2)
@@ -208,12 +217,53 @@ class Simple_Language_Agent:
         # check lang switch
         self.update_lang_switch()
 
+    def stage_1(self):
+        self.speak()
 
-    def step(self):
+    def stage_2(self):
         self.move_random()
         self.speak()
         self.listen()
 
+    def stage_3(self):
+        if self.age < 100:
+            self.model.grid.move_agent(self, self.school_coords)
+            self.study_lang(0)
+            self.study_lang(1)
+            self.speak()
+        else:
+            self.model.grid.move_agent(self, self.job_coords)
+            self.speak()
+
+    def stage_4(self):
+        self.move_random()
+        self.speak()
+        self.model.grid.move_agent(self, self.home_coords)
+        self.speak()
+        self.age += 1
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)
+
+
+
+class Home:
+    def __init__(self, pos):
+        self.pos=pos
+    def __repr__(self):
+        return 'Home_{0.pos!r}'.format(self)
+
+class School:
+    def __init__(self, pos, num_places):
+        self.pos=pos
+        self.num_free=num_places
+    def __repr__(self):
+        return 'School_{0.pos!r}'.format(self)
+
+class Job:
+    def __init__(self, pos, num_places, skill_level=0):
+        self.pos=pos
+        self.num_places=num_places
+        self.skill_level = skill_level
+    def __repr__(self):
+        return 'Job{0.pos!r}'.format(self)
