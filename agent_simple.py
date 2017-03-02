@@ -76,7 +76,7 @@ class Simple_Language_Agent:
         """
         if not with_agent:
             pos = [self.pos]
-            # get all agents currently placed on chosen cell
+            # get all other agents currently placed on chosen cell
             others = self.model.grid.get_cell_list_contents(pos)
             others.remove(self)
             ## linguistic model of encounter with another random agent
@@ -165,8 +165,9 @@ class Simple_Language_Agent:
             ag_2.lang_freq['maxmem_list'].append(1)
 
         elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
-            p11 = ((2 / 3) * (ag_1.lang_freq['cat_pct_s']) +
-                   (1 / 3) * (ag_1.lang_freq['cat_pct_h']))
+            # TODO : NEED TO IMPROVE THIS CASE !! ( Avoid two bad speakers both choose weak lang)
+            p11 = (0.5 * (ag_1.lang_freq['cat_pct_s']) +
+                   0.5 * (ag_1.lang_freq['cat_pct_h']))
             # find out lang spoken by self ( self STARTS CONVERSATION !!)
             if sum(ag_1.lang_freq['spoken']) != 0:
                 l1 = np.random.binomial(1, p11)
@@ -178,10 +179,10 @@ class Simple_Language_Agent:
             ag_2.lang_freq['maxmem_list'].append(l1)
 
         else: # spa-cat
-            p11 = ((2 / 3) * (ag_1.lang_freq['cat_pct_s']) +
-                   (1 / 3) * (ag_1.lang_freq['cat_pct_h']))
-            p21 = ((2 / 3) * (ag_2.lang_freq['cat_pct_s']) +
-                   (1 / 3) * (ag_2.lang_freq['cat_pct_h']))
+            p11 = (0.5 * (ag_1.lang_freq['cat_pct_s']) +
+                   0.5 * (ag_1.lang_freq['cat_pct_h']))
+            p21 = (0.5 * (ag_2.lang_freq['cat_pct_s']) +
+                   0.5 * (ag_2.lang_freq['cat_pct_h']))
             if ag_1.language == 0:
                 l1 = 0
                 if (1 - ag_2.lang_freq['cat_pct_s']) or (1 - ag_2.lang_freq['cat_pct_h']):
@@ -216,17 +217,22 @@ class Simple_Language_Agent:
 
     def get_group_conversation_lang(self, initiator, rest_of_group):
         """ Initiator does not belong to group """
-        group_profic_in_lang2 = [ag.lang_freq['cat_pct_s'] for ag in rest_of_group]
-        group_abs_lang_profic = np.array([x if x < 0.5 else (1 - x) for x in group_profic_in_lang2])
-        group_langs = np.array([ag.language for ag in rest_of_group])
+        ags_lang_profile = [(ag.language, ag.lang_freq['cat_pct_s'], ag) for ag in rest_of_group]
 
-        worst_linguists = np.where(group_abs_lang_profic == group_abs_lang_profic.min())[0]
-        langs_worst_linguists = group_langs[worst_linguists]
+        #group_abs_lang_profic = np.array([x if x < 0.5 else (1 - x) for x in ags_lang_profile])
+        #group_langs = np.array([ag.language for ag in rest_of_group])
 
-        idx_min, idx_max = np.argmin(group_profic_in_lang2), np.argmax(group_profic_in_lang2)
+        #worst_linguists = np.where(group_abs_lang_profic == group_abs_lang_profic.min())[0]
+        #langs_worst_linguists = group_langs[worst_linguists]
 
-        group_lang_min, group_lang_max = (group_profic_in_lang2[idx_min],
-                                          group_profic_in_lang2[idx_max])
+        #idx_min, idx_max = np.argmin(ags_lang_profile), np.argmax(ags_lang_profile)
+
+        #group_lang_min, group_lang_max = (ags_lang_profile[idx_min],
+         #                                 ags_lang_profile[idx_max])
+
+        ags_lang_profile = sorted(ags_lang_profile, key=lambda elem: (elem[0], elem[1]))
+        rest_of_group = [tup[2] for tup in ags_lang_profile]
+
         # map init lang profile
         def fun_map_init(x):
             if (x <= 0.2):
@@ -239,8 +245,8 @@ class Simple_Language_Agent:
                 return 3
 
         init = fun_map_init(initiator.lang_freq['cat_pct_s'])
-        group_lang_min = rest_of_group[idx_min].language
-        group_lang_max = rest_of_group[idx_max].language
+        group_lang_min = rest_of_group[0].language
+        group_lang_max = rest_of_group[-1].language
         #print('****')
         #print(rest_of_group)
         #print(init, group_lang_min, group_lang_max)
@@ -251,7 +257,7 @@ class Simple_Language_Agent:
                                                                      group_lang_min,
                                                                      group_lang_max)]
         except:
-            print(rest_of_group[idx_min], rest_of_group[idx_max])
+            print(rest_of_group[0].language, rest_of_group[-1].language)
         if common_lang:
             langs_list = [init_lang] + [init_lang for ag in rest_of_group]
             self.update_lang_counter([initiator] + rest_of_group, langs_list)
@@ -260,22 +266,22 @@ class Simple_Language_Agent:
             if (init, group_lang_min, group_lang_max) in [(0, 0, 2), (1, 0, 2)] :
                 for ag in [initiator] + rest_of_group:
                     if ag.language == 2:
-                        p_ag = ((2 / 3) * (ag.lang_freq['cat_pct_s']) +
-                                (1 / 3) * (ag.lang_freq['cat_pct_h']))
+                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
+                                0.5 * (ag.lang_freq['cat_pct_h']))
                         langs_list.append(np.random.binomial(1, p_ag))
                     else:
                         langs_list.append(0)
             elif (init, group_lang_min, group_lang_max) == (3, 0, 0):
                 langs_list.append(1)
                 for ag in rest_of_group:
-                        p_ag = ((2 / 3) * (ag.lang_freq['cat_pct_s']) +
-                                (1 / 3) * (ag.lang_freq['cat_pct_h']))
+                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
+                                0.5 * (ag.lang_freq['cat_pct_h']))
                         langs_list.append(np.random.binomial(1, p_ag))
             elif (init, group_lang_min, group_lang_max) in [(2, 0, 2), (3, 0, 1), (3, 0, 2)]:
                 for ag in [initiator] + rest_of_group:
                     if ag.language == 0:
-                        p_ag = ((2 / 3) * (ag.lang_freq['cat_pct_s']) +
-                                (1 / 3) * (ag.lang_freq['cat_pct_h']))
+                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
+                                0.5 * (ag.lang_freq['cat_pct_h']))
                         langs_list.append(np.random.binomial(1, p_ag))
                     else:
                         langs_list.append(1)
@@ -334,11 +340,9 @@ class Simple_Language_Agent:
             self.model.grid.move_agent(self, self.school_coords)
             self.study_lang(0)
             self.study_lang(1)
-            self.speak()
         else:
             self.model.grid.move_agent(self, self.job_coords)
-            self.speak()
-
+        self.speak()
         self.speak_in_group()
 
     def stage_4(self):

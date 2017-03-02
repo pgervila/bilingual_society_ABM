@@ -176,7 +176,7 @@ class Simple_Language_Model(Model):
         self.cluster_sizes[np.argmax(self.cluster_sizes)] -= tot_sub_val
 
 
-    def generate_cluster_points_coords(self, pct_grid_w, pct_grid_h, clust_size):
+    def generate_clust_pts_coords(self, pct_grid_w, pct_grid_h, clust_size, exclude_coords=None):
         """ Using binomial distribution, this method generates initial coordinates
             for a given cluster, defined via its center and its size.
             Cluster size as well as cluster center coords (in grid percentage) must be provided
@@ -185,10 +185,12 @@ class Simple_Language_Model(Model):
             * pct_grid_w: positive float < 1 to define clust_center along grid width
             * pct_grid_h: positive float < 1 to define clust_center along grid height
             * clust_size: desired size of the cluster being generated
+            * exclude_coords: list of tuples with coords that are excluded from choice
 
         Returns:
             * cluster_coordinates: two numpy arrays with x and y coordinates
             respectively
+
 
         """
         x_coords = np.random.binomial(self.grid_width,  pct_grid_w, size=clust_size)
@@ -196,6 +198,19 @@ class Simple_Language_Model(Model):
 
         y_coords = np.random.binomial(self.grid_height, pct_grid_h, size=clust_size)
         y_coords = np.clip(y_coords, 1, self.grid_height - 1)
+
+        if exclude_coords:
+            for forbidden_pair in exclude_coords:
+                for idx, pair in enumerate(zip(x_coords, y_coords)):
+                    if pair == forbidden_pair:
+                        x_new, y_new = forbidden_pair
+                        while (x_new, y_new) in exclude_coords and (x_new, y_new) in list(zip(x_coords, y_coords)):
+                            x_new = np.random.binomial(self.grid_width,  pct_grid_w, size=1)
+                            y_new = np.random.binomial(self.grid_height, pct_grid_h, size=1)
+
+                        x_coords[idx] = x_new
+                        y_coords[idx] = y_new
+
 
         return x_coords, y_coords
 
@@ -216,9 +231,8 @@ class Simple_Language_Model(Model):
         """ Generates job centers coordinates and num places per center"""
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
-            x_j, y_j = self.generate_cluster_points_coords(clust_c_coords[0],
-                                                           clust_c_coords[1],
-                                                           int(clust_size * job_cent_per_agent))
+            x_j, y_j = self.generate_clust_pts_coords(clust_c_coords[0], clust_c_coords[1],
+                                                      int(clust_size * job_cent_per_agent))
 
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 c_coords = self.grid_width * self.clust_centers[clust_idx]
@@ -237,9 +251,11 @@ class Simple_Language_Model(Model):
     def generate_schools(self, schools_per_agent=0.05, school_size=100):
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
-            x_s, y_s = self.generate_cluster_points_coords(clust_c_coords[0],
-                                                           clust_c_coords[1],
-                                                           int(clust_size * schools_per_agent))
+            forbidden_coords = [job.pos for job in self.clusters_info[clust_idx]['jobs']]
+            x_s, y_s = self.generate_clust_pts_coords(clust_c_coords[0],
+                                                      clust_c_coords[1],
+                                                      int(clust_size * schools_per_agent),
+                                                      exclude_coords=forbidden_coords)
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 c_coords = self.grid_width * self.clust_centers[clust_idx]
                 school_p_coords = sorted(list(zip(x_s, y_s)), key=lambda p:pdist([p, c_coords]))
@@ -271,9 +287,11 @@ class Simple_Language_Model(Model):
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
-            x_ags, y_ags = self.generate_cluster_points_coords(clust_c_coords[0],
-                                                               clust_c_coords[1],
-                                                               clust_size)
+            forbidden_coords = ([job.pos for job in self.clusters_info[clust_idx]['jobs']] +
+                                [school.pos for school in self.clusters_info[clust_idx]['schools']])
+            x_ags, y_ags = self.generate_clust_pts_coords(clust_c_coords[0],
+                                                          clust_c_coords[1],
+                                                          clust_size, exclude_coords=forbidden_coords)
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 c_coords = self.grid_width * self.clust_centers[clust_idx]
                 clust_p_coords = sorted(list(zip(x_ags, y_ags)), key=lambda p:pdist([p, c_coords]))
