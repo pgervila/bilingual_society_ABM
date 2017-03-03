@@ -216,19 +216,10 @@ class Simple_Language_Agent:
             return l1, l2
 
     def get_group_conversation_lang(self, initiator, rest_of_group):
-        """ Initiator does not belong to group """
+        """ Method that allows to
+        Initiator of conversation is seprated from rest_of_group
+        """
         ags_lang_profile = [(ag.language, ag.lang_freq['cat_pct_s'], ag) for ag in rest_of_group]
-
-        #group_abs_lang_profic = np.array([x if x < 0.5 else (1 - x) for x in ags_lang_profile])
-        #group_langs = np.array([ag.language for ag in rest_of_group])
-
-        #worst_linguists = np.where(group_abs_lang_profic == group_abs_lang_profic.min())[0]
-        #langs_worst_linguists = group_langs[worst_linguists]
-
-        #idx_min, idx_max = np.argmin(ags_lang_profile), np.argmax(ags_lang_profile)
-
-        #group_lang_min, group_lang_max = (ags_lang_profile[idx_min],
-         #                                 ags_lang_profile[idx_max])
 
         ags_lang_profile = sorted(ags_lang_profile, key=lambda elem: (elem[0], elem[1]))
         rest_of_group = [tup[2] for tup in ags_lang_profile]
@@ -244,24 +235,18 @@ class Simple_Language_Agent:
             elif (x > 0.8):
                 return 3
 
+        # define inputs to group_lang_map_dict
         init = fun_map_init(initiator.lang_freq['cat_pct_s'])
         group_lang_min = rest_of_group[0].language
         group_lang_max = rest_of_group[-1].language
-        #print('****')
-        #print(rest_of_group)
-        #print(init, group_lang_min, group_lang_max)
-        #print('****')
-        # call group decision function
-        try:
-            init_lang, common_lang = self.model.group_lang_map_dict[(init,
-                                                                     group_lang_min,
-                                                                     group_lang_max)]
-        except:
-            print(rest_of_group[0].language, rest_of_group[-1].language)
-        if common_lang:
+        # call group_lang_map_dict model method to get conversat layout
+        init_lang, common_lang = self.model.group_lang_map_dict[(init,
+                                                                 group_lang_min,
+                                                                 group_lang_max)]
+        if common_lang: # only one group conversation lang
             langs_list = [init_lang] + [init_lang for ag in rest_of_group]
             self.update_lang_counter([initiator] + rest_of_group, langs_list)
-        else:
+        else: # cases wherein group conversat lang is not unique
             langs_list = []
             if (init, group_lang_min, group_lang_max) in [(0, 0, 2), (1, 0, 2)] :
                 for ag in [initiator] + rest_of_group:
