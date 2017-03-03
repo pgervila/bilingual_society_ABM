@@ -340,18 +340,24 @@ class Simple_Language_Model(Model):
         self.datacollector.collect(self)
         self.schedule.step()
 
-    def run_model(self, steps, save_frames_freq=0, save_dir=''):
+    def run_model(self, steps, recording_steps_period=None, save_dir=''):
+        """ Run model and save frames if required
+            Args
+                * steps: integer. Total steps to run
+                * recording_steps_period : integer. Save frames every specified number of steps
+                * save_dir : string. It specifies directory where frames will be saved
+        """
         pbar = pyprind.ProgBar(steps)
-        if save_frames_freq:
-            self.save_dir = save_dir
+        self.save_dir = save_dir
+        if recording_steps_period:
             script_dir = os.path.dirname(__file__)
             results_dir = os.path.join(script_dir, save_dir)
             if not os.path.isdir(results_dir):
                 os.makedirs(results_dir)
         for _ in range(steps):
             self.step()
-            if save_frames_freq:
-                if not self.schedule.steps%save_frames_freq:
+            if recording_steps_period:
+                if not self.schedule.steps%recording_steps_period:
                     self.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
             pbar.update()
 
@@ -386,7 +392,7 @@ class Simple_Language_Model(Model):
         ax1 = plt.subplot2grid(grid_size, (0, 3), rowspan=1, colspan=2)
         data_2_plot[["count_bil", "count_cat", "count_spa"]].plot(ax=ax1,
                                                                   title='lang_groups',
-                                                                  color=['g','y','b'])
+                                                                  color=['darkgreen','y','darkblue'])
         ax1.xaxis.tick_bottom()
         ax1.tick_params('x', labelsize='small')
         ax1.tick_params('y', labelsize='small')
@@ -420,6 +426,7 @@ class Simple_Language_Model(Model):
                 plt.close()
             else:
                 plt.savefig('step' + str(step) + '.png')
+                plt.close()
 
         if plot_results:
             plt.show()
@@ -431,7 +438,7 @@ class Simple_Language_Model(Model):
         ax1.set_xlim(0, steps)
         ax1.set_ylim(0, 1)
         ax1.xaxis.tick_bottom()
-        line10, = ax1.plot([], [], lw=2, label='count_spa', color='b')
+        line10, = ax1.plot([], [], lw=2, label='count_spa', color='darkblue')
         line11, = ax1.plot([], [], lw=2, label='count_bil', color='g')
         line12, = ax1.plot([], [], lw=2, label='count_cat', color='y')
         ax1.tick_params('x', labelsize='small')
