@@ -2,44 +2,56 @@
 import random
 import numpy as np
 import networkx as nx
-from collections import deque
+from collections import deque, Counter, defaultdict
 
 class Simple_Language_Agent:
 
-    def __init__(self, model, unique_id, language, S, age=0,
+    def __init__(self, model, unique_id, language, age=0, avg_learning_hours=1000,
                  home_coords=None, school_coords=None, job_coords=None):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
-        self.S = S
         self.age = age
         self.home_coords = home_coords
         self.school_coords = school_coords
         self.job_coords = job_coords
 
-        self.lang_freq = dict()
-        num_init_occur = 50
-        if self.language == 0:
-            self.lang_freq['spoken'] = [np.random.poisson(num_init_occur), 0] # 0, 2 => spa, cat
-            self.lang_freq['heard'] = [np.random.poisson(num_init_occur), 0]
-            self.lang_freq['cat_pct_s'] = 0
-            self.lang_freq['cat_pct_h'] = 0
-        elif self.language == 2:
-            self.lang_freq['spoken'] = [0, np.random.poisson(num_init_occur)] # 0, 2 => spa, cat
-            self.lang_freq['heard'] = [0, np.random.poisson(num_init_occur)]
-            self.lang_freq['cat_pct_s'] = 1
-            self.lang_freq['cat_pct_h'] = 1
-        else:
-            v1 = np.random.poisson(num_init_occur/2)
-            v2 = np.random.poisson(num_init_occur/2)
-            self.lang_freq['spoken'] = [v1, v2] # 0, 2 => spa, cat
-            self.lang_freq['heard'] = [v1, v2]
-            self.lang_freq['cat_pct_s'] = self.lang_freq['spoken'][1]/sum(self.lang_freq['spoken'])
-            self.lang_freq['cat_pct_h'] = self.lang_freq['heard'][1]/sum(self.lang_freq['heard'])
-        # initialize maxmem deque based on language spoken last maxmem lang encounters
-        self.lang_freq['maxmem'] = np.random.poisson(self.model.avg_max_mem)
-        self.lang_freq['maxmem_list'] = deque(maxlen=self.lang_freq['maxmem'])
 
+        # define container for languages' tracking and statistics
+        self.lang_stats = defaultdict(lambda:defaultdict(dict))
+        num_init_occur = 100
+        # Add randomness to number of hours needed to learn second language
+        self.lang_stats['maxmem'] = np.random.poisson(self.model.avg_max_mem)
+        # define hours needed for agent to be able to converse in other language
+        self.lang_stats['learning_hours'] = np.random.normal(avg_learning_hours, 100)
+        # define container to track last activation steps for each language
+        self.lang_stats['last_activ_step'] = [None, None]
+        if self.language == 0:
+            for action in ['s', 'l']:
+                self.lang_stats[action]['LT']['freqs'] = [np.random.poisson(num_init_occur), 0]
+                self.lang_stats[action]['LT']['L2_pct'] = 0.
+                self.lang_stats[action]['ST']['freqs'] = [deque([], maxlen=self.lang_stats['maxmem']),
+                                                          deque([], maxlen=self.lang_stats['maxmem'])]
+                self.lang_stats[action]['ST']['L2_pct'] = 0.
+                self.lang_stats[action]['ST']['step_counts'] = [0, 0]
+        elif self.language == 2:
+            for action in ['s', 'l']:
+                self.lang_stats[action]['LT']['freqs'] = [0, np.random.poisson(num_init_occur)]
+                self.lang_stats[action]['LT']['L2_pct'] = 1.
+                self.lang_stats[action]['ST']['freqs'] = [deque([], maxlen=self.lang_stats['maxmem']),
+                                                          deque([], maxlen=self.lang_stats['maxmem'])]
+                self.lang_stats[action]['ST']['L2_pct'] = 1.
+                self.lang_stats[action]['ST']['step_counts'] = [0, 0]
+        else:
+            for action in ['s', 'l']:
+                f1 = np.random.poisson(num_init_occur/2)
+                f2 = np.random.poisson(num_init_occur/2)
+                self.lang_stats[action]['LT']['freqs'] = [f1, f2]
+                self.lang_stats[action]['LT']['L2_pct'] = f2 / (f1 + f2)
+                self.lang_stats[action]['ST']['freqs'] = [deque([], maxlen=self.lang_stats['maxmem']),
+                                                          deque([], maxlen=self.lang_stats['maxmem'])]
+                self.lang_stats[action]['ST']['L2_pct'] = f2 / (f1 + f2)
+                self.lang_stats[action]['ST']['step_counts'] = [0, 0]
 
     def move_random(self):
         """ Take a random step into any surrounding cell
@@ -61,8 +73,7 @@ class Simple_Language_Agent:
     def speak(self, with_agent=None):
         """ Pick random lang_agent from current cell and start a conversation
             with it. It updates heard words in order to shape future vocab.
-            Language of the conversation is determined by given laws,
-            including probabilistic ones based on parameter self.S
+            Language of the conversation is determined by given laws
             This method can also simulate distance contact e.g.
             phone, messaging, etc ... by specifying an agent through 'with_agent'
 
@@ -103,18 +114,26 @@ class Simple_Language_Agent:
         if len(others) >= 2:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
             l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
-            self.lang_freq['heard'][l1] += 1
-            self.lang_freq['heard'][l2] += 1
+            self.lang_stats['l']['LT']['freqs'][l1] += 1
+            self.lang_stats['l']['ST']['freqs'].append(l1)
+            self.lang_stats['l']['LT']['freqs'][l2] += 1
+            self.lang_stats['l']['ST']['freqs'].append(l2)
             # update lang status
             ag_1.update_lang_status()
             ag_2.update_lang_status()
 
 
     def update_lang_counter(self, ag_1, ag_2, l1, l2):
-        ag_1.lang_freq['spoken'][l1] += 1
-        ag_1.lang_freq['heard'][l2] += 1
-        ag_2.lang_freq['spoken'][l2] += 1
-        ag_2.lang_freq['heard'][l1] += 1
+
+        ag_1.lang_stats['s']['LT']['freqs'][l1] += 1
+        ag_1.lang_stats['s']['ST']['step_counts'][l1] += 1
+        ag_1.lang_stats['l']['LT']['freqs'][l2] += 1
+        ag_1.lang_stats['l']['ST']['step_counts'][l2] += 1
+
+        ag_2.lang_stats['s']['LT']['freqs'][l2] += 1
+        ag_2.lang_stats['s']['ST']['step_counts'][l2] += 1
+        ag_2.lang_stats['l']['LT']['freqs'][l1] += 1
+        ag_2.lang_stats['l']['ST']['step_counts'][l1] += 1
 
 
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
@@ -122,36 +141,30 @@ class Simple_Language_Agent:
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
             l1 = l2 = 0
             self.update_lang_counter(ag_1, ag_2, 0, 0)
-            ag_1.lang_freq['maxmem_list'].append(0)
-            ag_2.lang_freq['maxmem_list'].append(0)
 
         elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
             l1=l2=1
             self.update_lang_counter(ag_1, ag_2, 1, 1)
-            ag_1.lang_freq['maxmem_list'].append(1)
-            ag_2.lang_freq['maxmem_list'].append(1)
 
         elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
-            p11 = ((2 / 3) * (ag_1.lang_freq['cat_pct_s']) +
-                   (1 / 3) * (ag_1.lang_freq['cat_pct_h']))
+            p11 = ((2 / 3) * (ag_1.lang_stats['s']['LT']['L2_pct']) +
+                   (1 / 3) * (ag_1.lang_stats['l']['LT']['L2_pct']))
             # find out lang spoken by self ( self STARTS CONVERSATION !!)
-            if sum(ag_1.lang_freq['spoken']) != 0:
+            if sum(ag_1.lang_stats['s']['LT']['freqs']) != 0:
                 l1 = np.random.binomial(1, p11)
             else:
                 l1 = random.choice([0,1])
             l2=l1
-            self.update_lang_counter(ag_1, ag_2, l1, l1)
-            ag_1.lang_freq['maxmem_list'].append(l1)
-            ag_2.lang_freq['maxmem_list'].append(l1)
+            self.update_lang_counter(ag_1, ag_2, l1, l2)
 
-        else: # spa-cat
-            p11 = ((2 / 3) * (ag_1.lang_freq['cat_pct_s']) +
-                   (1 / 3) * (ag_1.lang_freq['cat_pct_h']))
-            p21 = ((2 / 3) * (ag_2.lang_freq['cat_pct_s']) +
-                   (1 / 3) * (ag_2.lang_freq['cat_pct_h']))
+        else: # mono L1 vs mono L2
+            p11 = ((2 / 3) * (ag_1.lang_stats['s']['LT']['L2_pct']) +
+                   (1 / 3) * (ag_1.lang_stats['l']['LT']['L2_pct']))
+            p21 = ((2 / 3) * (ag_2.lang_stats['s']['LT']['L2_pct']) +
+                   (1 / 3) * (ag_2.lang_stats['l']['LT']['L2_pct']))
             if ag_1.language == 0:
                 l1 = 0
-                if (1 - ag_2.lang_freq['cat_pct_s']) or (1 - ag_2.lang_freq['cat_pct_h']):
+                if (1 - ag_2.lang_stats['s']['LT']['L2_pct']) or (1 - ag_2.lang_stats['l']['LT']['L2_pct']):
                     l2 = np.random.binomial(1, p21)
                     if l2 == 0:
                         self.update_lang_counter(ag_1, ag_2, l1, l2)
@@ -165,7 +178,7 @@ class Simple_Language_Agent:
 
             elif ag_1.language == 2:
                 l1 = 1
-                if (ag_2.lang_freq['cat_pct_s']) or (ag_2.lang_freq['cat_pct_h']):
+                if (ag_2.lang_stats['s']['LT']['L2_pct']) or (ag_2.lang_stats['l']['LT']['L2_pct']):
                     l2 = np.random.binomial(1, p21)
                     if l2 == 1:
                         self.update_lang_counter(ag_1, ag_2, l1, l2)
@@ -176,39 +189,65 @@ class Simple_Language_Agent:
                     l1 = np.random.binomial(1, p11)
                     l2 = 0
                     self.update_lang_counter(ag_1, ag_2, l1, l2)
-            ag_1.lang_freq['maxmem_list'].append(l1)
-            ag_2.lang_freq['maxmem_list'].append(l2)
+
         if return_values:
             return l1, l2
 
     def study_lang(self, lang):
-        self.lang_freq['spoken'][lang] += np.random.binomial(1, p=0.25)
-        self.lang_freq['heard'][lang] += 1
+        if np.random.binomial(1, p=0.25):
+            self.lang_stats['s']['LT']['freqs'][lang] += 1
+            self.lang_stats['s']['ST']['freqs'].append(lang)
+        self.lang_stats['l']['LT']['freqs'][lang] += 1
+        self.lang_stats['l']['ST']['freqs'].append(lang)
 
     def update_lang_pcts(self):
-        if sum(self.lang_freq['spoken']) != 0:
-            self.lang_freq['cat_pct_s'] = round(self.lang_freq['spoken'][1] / sum(self.lang_freq['spoken']), 2)
+        if sum(self.lang_stats['s']['LT']['freqs']) != 0:
+            self.lang_stats['s']['LT']['L2_pct'] = round(self.lang_stats['s']['LT']['freqs'][1] /
+                                                         sum(self.lang_stats['s']['LT']['freqs']),
+                                                         2)
         else:
-            self.lang_freq['cat_pct_s'] = 0
-        if sum(self.lang_freq['heard']) != 0:
-            self.lang_freq['cat_pct_h'] = round(self.lang_freq['heard'][1] / sum(self.lang_freq['heard']), 2)
+            self.lang_stats['s']['LT']['L2_pct'] = 0
+        if sum(self.lang_stats['l']['LT']['freqs']) != 0:
+            self.lang_stats['l']['LT']['L2_pct'] = round(self.lang_stats['l']['LT']['freqs'][1] /
+                                                         sum(self.lang_stats['l']['LT']['freqs']),
+                                                         2)
         else:
-            self.lang_freq['cat_pct_h'] = 0
+            self.lang_stats['cat_pct_h'] = 0
 
-    def update_lang_switch(self):
-        if self.model.schedule.steps > self.lang_freq['maxmem']:
+    def update_lang_switch(self): #TODO : use ST info and model correct threshold
+        """Between 600 and 1500 hours to learn a second similar language at decent level"""
+        days_per_year = 365
+        max_lang_h_day = 16
+        max_words_per_day = 50
+        lang_hours_per_day = (max_lang_h_day *
+                             (sum(self.lang_stats['l']['LT']['freqs']) + sum(self.lang_stats['s']['LT']['freqs'])) /
+                             (self.model.schedule.steps + max_words_per_day))
+        steps_per_year = 36.5
+        pct = (self.lang_stats['l']['LT']['L2_pct'] + self.lang_stats['s']['LT']['L2_pct'])
+        if self.model.schedule.steps > self.lang_stats['maxmem']:
             if self.language == 0:
-                if self.lang_freq['cat_pct_h'] >= 0.25:
+                num_hours_L2 = (pct * days_per_year *
+                                lang_hours_per_day * self.model.schedule.steps) / steps_per_year
+                if num_hours_L2 >= self.lang_stats['learning_hours']:
                     self.language = 1
             elif self.language == 2:
-                if self.lang_freq['cat_pct_h'] <= 0.75:
+                pct = 1 - pct
+                num_hours_L1 = (pct * days_per_year *
+                                lang_hours_per_day * self.model.schedule.steps) / steps_per_year
+                if num_hours_L1 >= self.lang_stats['learning_hours']:
                     self.language = 1
-            else:
-                if self.lang_freq['cat_pct_h'] >= 0.8:
-                    if 0 not in self.lang_freq['maxmem_list']:
+            else: # LANGUAGE ATTRITION
+
+                if pct:
+                    pass
+
+
+
+                if self.lang_stats['l']['LT']['L2_pct'] >= 0.8:
+                    if 0 not in self.lang_stats['s']['ST']['freqs']:
                         self.language = 2
-                elif self.lang_freq['cat_pct_h'] <= 0.2:
-                    if 1 not in self.lang_freq['maxmem_list']:
+                elif self.lang_stats['l']['LT']['L2_pct'] <= 0.2:
+                    if 1 not in self.lang_stats['s']['ST']['freqs']:
                         self.language = 0
 
     def update_lang_status(self):

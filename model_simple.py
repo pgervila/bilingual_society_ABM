@@ -47,7 +47,7 @@ class StagedActivation_modif(StagedActivation):
 
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, avg_max_mem=20, width=5, height=5, max_people_factor=5,
+    def __init__(self, num_people, avg_max_mem=180, width=5, height=5, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, lang_ags_sorted_by_dist=True,
                  lang_ags_sorted_in_clust=True):
         self.num_people = num_people
@@ -106,8 +106,8 @@ class Simple_Language_Model(Model):
                              "biling_evol_h": lambda m:m.get_bilingual_global_evol('heard'),
                              "biling_evol_s": lambda m: m.get_bilingual_global_evol('spoken')
                              },
-            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_freq['cat_pct_h'],
-                             "pct_spa_in_biling": lambda a: 1 - a.lang_freq['cat_pct_h']}
+            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_stats['l']['LT']['L2_pct'],
+                             "pct_spa_in_biling": lambda a: 1 - a.lang_stats['l']['LT']['L2_pct']}
         )
 
     def add_agent(self, a, coords):
@@ -282,8 +282,7 @@ class Simple_Language_Model(Model):
                                             for sc_coord in clust_schools_coords])
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, 0.5,
-                                           home_coords=(x,y), school_coords=(xs,ys),
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, home_coords=(x, y), school_coords=(xs, ys),
                                            job_coords=job.pos)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
@@ -317,7 +316,7 @@ class Simple_Language_Model(Model):
              * float representing the AVERAGE percentage of Catalan in bilinguals
 
         """
-        list_biling = [(ag.lang_freq['cat_pct_h'], ag.lang_freq['cat_pct_s'])
+        list_biling = [(ag.lang_stats['l']['LT']['L2_pct'], ag.lang_stats['s']['LT']['L2_pct'])
                        for ag in self.schedule.agents if ag.language == 1]
         if lang_typology == 'heard':
             if list_biling:
