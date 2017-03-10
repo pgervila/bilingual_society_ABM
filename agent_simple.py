@@ -28,8 +28,8 @@ class Simple_Language_Agent:
         self.lang_stats['last_activ_step'] = [None, None]
         if self.language == 0:
             for action in ['s', 'l']:
-                self.lang_stats[action]['LT']['freqs'] = [np.random.poisson(num_init_occur), 0]
-                self.lang_stats[action]['LT']['L2_pct'] = 0.
+                self.lang_stats[action]['freqs'] = [np.random.poisson(num_init_occur), 0]
+                self.lang_stats[action]['L2_pct'] = 0.
                 self.lang_stats[action]['ST']['freqs'] = [deque([], maxlen=self.lang_stats['maxmem']),
                                                           deque([], maxlen=self.lang_stats['maxmem'])]
                 self.lang_stats[action]['ST']['L2_pct'] = 0.
@@ -94,15 +94,9 @@ class Simple_Language_Agent:
             if len(others) >= 1:
                 other = random.choice(others)
                 self.get_conversation_lang(self, other)
-                # update lang status
-                self.update_lang_status()
-                other.update_lang_status()
         else:
             self.get_conversation_lang(self, with_agent)
             other = with_agent
-            # update lang status
-            self.update_lang_status()
-            other.update_lang_status()
 
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
@@ -110,72 +104,50 @@ class Simple_Language_Agent:
         # get all agents currently placed on chosen cell
         others = self.model.grid.get_cell_list_contents(pos)
         others.remove(self)
-        ## linguistic model of encounter with another random agent
+        ## if two or more agents in cell, conversation is possible
         if len(others) >= 2:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True, listened_conv=True)
+            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
             self.lang_stats['l']['LT']['freqs'][l1] += 1
-            self.lang_stats['l']['ST']['step_counts'][l1] += 1
+            self.lang_stats['l']['ST']['freqs'][l1][-1] += 1
             self.lang_stats['l']['LT']['freqs'][l2] += 1
-            self.lang_stats['l']['ST']['step_counts'][l2] += 1
-            # update lang status
-            ag_1.update_lang_status()
-            ag_2.update_lang_status()
+            self.lang_stats['l']['ST']['freqs'][l2][-1] += 1
 
 
-    def update_lang_counter(self, ag_1, ag_2, l1, l2, listened_conv=False):
+    def update_lang_counter(self, ag_1, ag_2, l1, l2):
+        """ Update counts of LT and ST lang arrays for two agents
+            Args:
+                * ag_1, ag_2 : agents objects
+                * l1, l2 : integers in [0,1]. Languages spoken by ag_1 and ag_2
 
-        if not listened_conv:
-            ag_1.lang_stats['s']['LT']['freqs'][l1] += 1
-            ag_1.lang_stats['s']['ST']['step_counts'][l1] += 1
-            ag_1.lang_stats['l']['LT']['freqs'][l2] += 1
-            ag_1.lang_stats['l']['ST']['step_counts'][l2] += 1
+        """
+        ag_1.lang_stats['s']['LT']['freqs'][l1] += 1
+        ag_1.lang_stats['s']['ST']['freqs'][l1][-1] += 1
+        ag_1.lang_stats['l']['LT']['freqs'][l2] += 1
+        ag_1.lang_stats['l']['ST']['freqs'][l2][-1] += 1
 
-            ag_2.lang_stats['s']['LT']['freqs'][l2] += 1
-            ag_2.lang_stats['s']['ST']['step_counts'][l2] += 1
-            ag_2.lang_stats['l']['LT']['freqs'][l1] += 1
-            ag_2.lang_stats['l']['ST']['step_counts'][l1] += 1
-        else:
-            ag_1.lang_stats['s']['LT']['freqs'][l1] += 1
-            try:
-                ag_1.lang_stats['s']['ST']['freqs'][l1][-1] += 1
-            except:
-                ag_1.lang_stats['s']['ST']['freqs'][l1].append(1)
-            ag_1.lang_stats['l']['LT']['freqs'][l2] += 1
-            try:
-                ag_1.lang_stats['l']['ST']['freqs'][l2] += 1
-            except:
-                ag_1.lang_stats['l']['ST']['freqs'][l2].append(1)
+        ag_2.lang_stats['s']['LT']['freqs'][l2] += 1
+        ag_2.lang_stats['s']['ST']['freqs'][l2][-1] += 1
+        ag_2.lang_stats['l']['LT']['freqs'][l1] += 1
+        ag_2.lang_stats['l']['ST']['freqs'][l1][-1] += 1
 
 
-
-            ag_2.lang_stats['s']['LT']['freqs'][l2] += 1
-            ag_2.lang_stats['s']['ST']['step_counts'][l2] += 1
-            ag_2.lang_stats['l']['LT']['freqs'][l1] += 1
-            ag_2.lang_stats['l']['ST']['step_counts'][l1] += 1
-
-            if ag_1.lang_stats['s']['ST']['freqs']
-
-
-    def get_conversation_lang(self, ag_1, ag_2, return_values=False, listened_conv=False):
+    def get_conversation_lang(self, ag_1, ag_2, return_values=False):
 
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
             l1 = l2 = 0
             self.update_lang_counter(ag_1, ag_2, 0, 0)
 
         elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
-            l1=l2=1
+            l1 = l2 = 1
             self.update_lang_counter(ag_1, ag_2, 1, 1)
 
         elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
             p11 = ((2 / 3) * (ag_1.lang_stats['s']['LT']['L2_pct']) +
                    (1 / 3) * (ag_1.lang_stats['l']['LT']['L2_pct']))
             # find out lang spoken by self ( self STARTS CONVERSATION !!)
-            if sum(ag_1.lang_stats['s']['LT']['freqs']) != 0:
-                l1 = np.random.binomial(1, p11)
-            else:
-                l1 = random.choice([0,1])
-            l2=l1
+            l1 = np.random.binomial(1, p11)
+            l2 = l1
             self.update_lang_counter(ag_1, ag_2, l1, l2)
 
         else: # mono L1 vs mono L2
@@ -217,29 +189,26 @@ class Simple_Language_Agent:
     def study_lang(self, lang):
         if np.random.binomial(1, p=0.25):
             self.lang_stats['s']['LT']['freqs'][lang] += 1
-            self.lang_stats['s']['ST']['freqs'].append(lang)
+            self.lang_stats['s']['ST']['freqs'][lang] += 1
         self.lang_stats['l']['LT']['freqs'][lang] += 1
-        self.lang_stats['l']['ST']['freqs'].append(lang)
+        self.lang_stats['l']['ST']['freqs'][lang] += 1
 
     def update_lang_pcts(self):
-        if sum(self.lang_stats['s']['LT']['freqs']) != 0:
-            self.lang_stats['s']['LT']['L2_pct'] = round(self.lang_stats['s']['LT']['freqs'][1] /
-                                                         sum(self.lang_stats['s']['LT']['freqs']),
-                                                         2)
-        else:
-            self.lang_stats['s']['LT']['L2_pct'] = 0
-        if sum(self.lang_stats['l']['LT']['freqs']) != 0:
-            self.lang_stats['l']['LT']['L2_pct'] = round(self.lang_stats['l']['LT']['freqs'][1] /
-                                                         sum(self.lang_stats['l']['LT']['freqs']),
-                                                         2)
-        else:
-            self.lang_stats['cat_pct_h'] = 0
+
+        freqs_s = self.lang_stats['s']['LT']['freqs']
+        freqs_l = self.lang_stats['l']['LT']['freqs']
+
+        self.lang_stats['s']['LT']['L2_pct'] = round(freqs_s[1] / sum(freqs_s), 2)
+        self.lang_stats['l']['LT']['L2_pct'] = round(freqs_l[1] / sum(freqs_l), 2)
+
+        a = np.array(self.lang_stats['s']['ST']['freqs'])
+        np.average(np.around(a[0] / (a[0] + a[1]), 2), weights=a[0] + a[1])
 
     def update_lang_switch(self): #TODO : use ST info and model correct threshold
         """Between 600 and 1500 hours to learn a second similar language at decent level"""
         days_per_year = 365
         max_lang_h_day = 16
-        max_words_per_day = 50
+        max_words_per_day = 50 # saturation value
         lang_hours_per_day = (max_lang_h_day *
                              (sum(self.lang_stats['l']['LT']['freqs']) + sum(self.lang_stats['s']['LT']['freqs'])) /
                              (self.model.schedule.steps + max_words_per_day))
@@ -278,6 +247,10 @@ class Simple_Language_Agent:
         self.update_lang_switch()
 
     def stage_1(self):
+        # add new step to ST deques
+        for action in ['s', 'l']:
+            self.lang_stats[action]['ST']['freqs'][0].append(0)
+            self.lang_stats[action]['ST']['freqs'][1].append(0)
         self.speak()
 
     def stage_2(self):
@@ -301,6 +274,8 @@ class Simple_Language_Agent:
         self.speak()
         self.model.grid.move_agent(self, self.home_coords)
         self.speak()
+        # update at the end of each step
+        self.update_lang_status()
         self.age += 1
 
     def __repr__(self):

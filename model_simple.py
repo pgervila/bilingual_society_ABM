@@ -48,8 +48,8 @@ class StagedActivation_modif(StagedActivation):
 
 class Simple_Language_Model(Model):
     def __init__(self, num_people, avg_max_mem=180, width=5, height=5, max_people_factor=5,
-                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, lang_ags_sorted_by_dist=True,
-                 lang_ags_sorted_in_clust=True):
+                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000,
+                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
         self.num_people = num_people
         self.avg_max_mem = avg_max_mem
         self.grid_width = width
@@ -57,6 +57,7 @@ class Simple_Language_Model(Model):
         self.max_people_factor = max_people_factor
         self.init_lang_distrib = init_lang_distrib
         self.num_cities = num_cities
+        self.max_run_steps = max_run_steps
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.clust_centers = None
