@@ -237,6 +237,42 @@ class Simple_Language_Agent:
 
             activated, activ_counts = np.unique(zipf_samples, return_counts=True)
 
+            np.add.at(word_counter, activated, activ_counts)
+            availab_for_activ = np.where(word_counter > 3)[0]
+            activated = np.intersect1d(availab_for_activ, activated, assume_unique=True)
+
+            if activated.any():
+                delta_S = a * (S[activated] ** (-b)) * np.exp(c * 100 * R[activated]) + d
+                np.add.at(S, activated, delta_S)
+
+                int_bool = np.nonzero(np.in1d(activated, availab_for_activ, assume_unique=True))
+
+                activated = activated[int_bool]  # call it act
+
+                activ_counts = activ_counts[int_bool]  # call it act_c
+
+                mask = np.zeros(n_red, dtype=np.bool)
+                mask[activated] = True
+                t[~mask] += 1  # add ones to last activation time counter if word not activated
+                t[mask] = 0  # set last activation time counter to one if word activated
+
+                activ_counts -= 1
+                delta_S = activ_counts * (a * (S[activated] ** (-b)) * np.exp(c * 100 * R[activated]) + d)
+                np.add.at(S, activated, delta_S)
+
+            else:
+                mask = np.zeros(n_red, dtype=np.bool)
+                mask[activated] = True
+                t[~mask] += 1  # add ones to last activation time counter if word not activated
+                t[mask] = 0  # set last activation time counter to one if word activated
+
+            if age > 60 * 36:
+                S = np.where(S >= 0.01, S - 0.01, 0.000001)
+
+            lang_knowledge[age] = np.where(R > 0.9)[0].shape[0] / n_red
+
+        return t, S, lang_knowledge
+
 
 
     def update_lang_pcts(self):
