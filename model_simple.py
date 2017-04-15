@@ -17,6 +17,10 @@ import networkx as nx
 #import library to save any python data type to HDF5
 import deepdish as dd
 
+#import private library to model lang zipf CDF
+from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
+
+
 # import progress bar
 import pyprind
 
@@ -288,7 +292,26 @@ class Simple_Language_Model(Model):
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
 
+    def get_zipf_cdfs(self, compute=False):
+        if compute:
+            x = np.linspace(0, 3600, 3601, dtype=np.int64)
+            self.alpha_dict = {'speech': 1.32 + np.exp(-0.005 * x - 0.2),
+                               'written': 1.19 + np.exp(-0.006 * x - 0.05)}
 
+            speech_Mand_cdfs = np.array(
+                [Zipf_Mand_CDF_compressed(20000, exp, beta=4.46, n_red=500)
+                 for exp in self.alpha_dict['speech']])
+            written_Mand_cdfs = np.array(
+                [Zipf_Mand_CDF_compressed(40000, exp, beta=3.33, n_red=1000)
+                 for exp in self.alpha_dict['written']])
+            cdf_Mand_vs_step_dict = {'speech': speech_Mand_cdfs,
+                                     'written': written_Mand_cdfs}
+
+            dd.io.save('cdf_Mand_vs_step_dict.h5', cdf_Mand_vs_step_dict)
+
+        self.cdf_data_zpf_mand = {}
+        self.cdf_data_zpf_mand['speech'] = dd.io.load('cdf_Mand_vs_step_dict.h5', '/speech')
+        self.cdf_data_zpf_mand['written'] = dd.io.load('cdf_Mand_vs_step_dict.h5', '/written')
 
 
     def get_lang_stats(self, i):

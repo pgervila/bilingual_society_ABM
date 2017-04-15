@@ -4,6 +4,8 @@ import numpy as np
 import networkx as nx
 from collections import deque, Counter, defaultdict
 
+
+
 class Simple_Language_Agent:
 
     def __init__(self, model, unique_id, language, age=0, avg_learning_hours=1000,
@@ -197,6 +199,45 @@ class Simple_Language_Agent:
             self.lang_stats['s']['ST']['freqs'][lang] += 1
         self.lang_stats['l']['LT']['freqs'][lang] += 1
         self.lang_stats['l']['ST']['freqs'][lang] += 1
+
+
+
+
+    def words_day_factor(self):
+        """ Define coeff that determines num hours spoken per day
+            as pct of vocabulary size, assuming 16000 tokens per adult per day
+            as average """
+        if self.age < 36 * 14:
+            return 2 + 100 * np.exp(-0.014 * self.age)
+        elif 36 * 14 <= self.age <= 36 * 65:
+            return 2
+        elif self.age > 36 * 65:
+            return 2 + np.exp(0.002 * (self.age - 36 * 65))
+
+
+
+    def get_lang_knowledge(self, t, S, cdf_data, word_counter, num_steps1, num_steps2,
+                           pct_hours, lang_knowledge,
+                           vocab_size=40000, a=7.6, b=0.023, c=-0.031, d=-0.2, n_red=1000):
+
+        for age in range(num_steps1, num_steps2):
+
+            if not self.age:
+                self.R = np.zeros(n_red)
+            else:
+                self.R = np.exp(- k * t / S)
+
+            days = n_red / self.words_day_factor()
+            if self.age > 7 * 36 and random.random() > 0.1:
+                zipf_samples = randZipf(cdf_data['speech'][age], int(0.9 * pct_hours * days * 10))
+                zipf_samples_written = randZipf(cdf_data['written'][age], int(0.1 * pct_hours * days * 10))
+                zipf_samples = np.concatenate((zipf_samples, zipf_samples_written))
+            else:
+                zipf_samples = randZipf(cdf_data['speech'][age], int(pct_hours * days * 10))
+
+            activated, activ_counts = np.unique(zipf_samples, return_counts=True)
+
+
 
     def update_lang_pcts(self):
 
