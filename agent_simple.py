@@ -21,9 +21,14 @@ class Simple_Language_Agent:
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
+
+        # MEMORY MODEL
+        # keep container, 's' and 'l' keys
+        # subkeys retrievability, stability, last activat time: 'R', 'S', 't'
+
+
         num_init_occur = 100
-        # dict to track freqs updates per step
-        self.freqs_per_step = {'s': [0, 0], 'l': [0, 0]}
+
         # Add randomness to number of hours needed to learn second language
         self.lang_stats['maxmem'] = np.random.poisson(self.model.avg_max_mem)
         # define hours needed for agent to be able to converse in other language
