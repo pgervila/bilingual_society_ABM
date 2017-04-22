@@ -51,11 +51,11 @@ class StagedActivation_modif(StagedActivation):
 
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, avg_max_mem=180, width=5, height=5, max_people_factor=5,
+    def __init__(self, num_people, vocab_red=1000, width=5, height=5, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
         self.num_people = num_people
-        self.avg_max_mem = avg_max_mem
+        self.vocab_red = vocab_red
         self.grid_width = width
         self.grid_height = height
         self.max_people_factor = max_people_factor
@@ -66,6 +66,9 @@ class Simple_Language_Model(Model):
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.clust_centers = None
         self.cluster_sizes = None
+
+        # import lang ICs
+        self.lang_ICs = dd.io.load('IC_lang_1500_steps.h5')
 
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
