@@ -15,6 +15,44 @@ def Zipf_Mandelbrot_CDF(n, alpha, beta=2.7):
     return zeta / zeta[-1]
 
 
+def Zipf_Mand_3S_CDF(n, alpha_1=1.16, alpha_2=1.48, alpha_3=1.866,
+                     beta=6.9, c1=2041507.88, c2=9105.72, c3=126.287,
+                     N1=100, N2=2000):
+    """Computes Zipf-Mandelbrot cumulative distribution function in three stages"""
+
+    x = np.arange(1, n + 1) + beta
+    v1 = c1 * np.power(x[:N1], -alpha_1)
+    v2 = N1 ** alpha_2 * c2 * np.power(x[N1:N2], -alpha_2)
+    v3 = N2 ** alpha_3 * c3 * np.power(x[N2:], -alpha_3)
+
+    mandelbrot_law_3S = np.concatenate((v1, v2, v3))
+    zeta = np.cumsum(mandelbrot_law_3S)
+    return zeta / zeta[-1]
+
+
+# IDEA : to model vocab_size vs age dependency, play both with n and n_red in following function
+# Use factor for n, n_red ???
+def Zipf_Mand_3S_CDF_comp(n, alpha_1=1.16, alpha_2=1.48, alpha_3=1.866,
+                          beta=6.9, c1=2041507.88, c2=9105.72, c3=126.287,
+                          N1=100, N2=2000, n_red=1000):
+    """Computes Zipf-Mandelbrot cumulative distribution function in three stages
+       It compresses real long interval n into a smaller n_red
+       by conserving relative percentages by intervals"""
+
+    x = np.arange(1, n + 1) + beta
+    v1 = c1 * np.power(x[:N1], -alpha_1)
+    v2 = N1 ** alpha_2 * c2 * np.power(x[N1:N2], -alpha_2)
+    v3 = N2 ** alpha_3 * c3 * np.power(x[N2:], -alpha_3)
+
+    mandelbrot_law_3S = np.concatenate((v1, v2, v3))
+    zeta = np.cumsum(mandelbrot_law_3S)
+    zeta = zeta / zeta[-1]
+
+    interv_div = np.linspace(1, n, n_red + 1).astype(np.int64)
+    zeta = zeta[interv_div[1:] - 1]
+    return zeta
+
+
 def Zipf_CDF_compressed(n, alpha, n_red=1000):
     """Computes Zipf cumulative distribution function.
     It compresses real long interval n into a smaller n_red

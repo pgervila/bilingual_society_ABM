@@ -28,51 +28,63 @@ class Simple_Language_Agent:
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
 
         # MEMORY MODEL
-        # keep container, 's' and 'l' keys
+        # keep container, 's' and 'l' keys (BETTER 'a' ACTIVE and 'p' PASSIVE KEYS ??)
         # subkeys retrievability, stability, last activat time: 'L1','L2', 'R', 'S', 't', 'pct', 'wc'
         # random params ? Leave them for later model optimization. First basics
         #  1. min occurrences to start memorizing a given word. -> No big influence on LT
         #  2. How to correctly determine vocabulary wealth ? By alpha in zipf CDF ?? Then 3 diff curves
         # Keep initial model as simple as possible
 
-        self.lang_stats['l']['L1']['R']
-        self.lang_stats['s']['L2']['pct']
+        self.lang_stats['p']['L1']['t']
+        self.lang_stats['a']['L2']['S']
+        self.lang_stats['a']['L2']['wc']
 
 
         # Add randomness to number of hours needed to learn second language
         #-> See min_mem_times arg in get_lang_stats method
         # define hours needed for agent to be able to converse in other language
-        # -> 10 % of vocabulary
+        # -> 10 % of vocabulary ??? ENOUGH??
         # define container to track last activation steps for each language
         self.lang_stats['l']['L1']['t']
         if self.language == 0:
-            for action in ['s', 'l']:
-                self.lang_stats[action]['L1']['t'] = self.lang_ICs['100_pct']['t']
-                self.lang_stats[action]['L1']['S'] = self.lang_ICs['100_pct']['S']
-                self.lang_stats[action]['L1']['R'] = np.exp( - self.k * self.lang_stats[action]['L1']['t'] / self.lang_stats[action][lang]['S']).astype(np.float32)
+            for action in ['a', 'p']:
+                self.lang_stats[action]['L1']['t'] = self.model.lang_ICs['100_pct']['t']
+                self.lang_stats[action]['L1']['S'] = self.model.lang_ICs['100_pct']['S']
+                self.lang_stats[action]['L1']['R'] = np.exp( - self.k *
+                                                             self.lang_stats[action]['L1']['t'] /
+                                                             self.lang_stats[action]['L1']['S']
+                                                            ).astype(np.float32)
                 self.lang_stats[action]['L1']['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
                 self.lang_stats[action]['L1']['pct'] = np.zeros(3600, dtype = np.float32)
 
 
 
         elif self.language == 2:
-            for action in ['s', 'l']:
-                self.lang_stats[action]['LT']['freqs'] = [0, np.random.poisson(num_init_occur)]
-                self.lang_stats[action]['LT']['L2_pct'] = 1.
-                self.lang_stats[action]['ST']['freqs'] = [deque([], maxlen=self.lang_stats['maxmem']),
-                                                          deque([], maxlen=self.lang_stats['maxmem'])]
-                self.lang_stats[action]['ST']['L2_pct'] = 1.
-                self.lang_stats[action]['ST']['step_counts'] = [0, 0]
-        else:
-            for action in ['s', 'l']:
-                f1 = np.random.poisson(num_init_occur/2)
-                f2 = np.random.poisson(num_init_occur/2)
-                self.lang_stats[action]['LT']['freqs'] = [f1, f2]
-                self.lang_stats[action]['LT']['L2_pct'] = f2 / (f1 + f2)
-                self.lang_stats[action]['ST']['freqs'] = [deque([], maxlen=self.lang_stats['maxmem']),
-                                                          deque([], maxlen=self.lang_stats['maxmem'])]
-                self.lang_stats[action]['ST']['L2_pct'] = f2 / (f1 + f2)
-                self.lang_stats[action]['ST']['step_counts'] = [0, 0]
+            for action in ['a', 'p']:
+                self.lang_stats[action]['L2']['t'] = self.model.lang_ICs['100_pct']['t']
+                self.lang_stats[action]['L2']['S'] = self.model.lang_ICs['100_pct']['S']
+                self.lang_stats[action]['L2']['R'] = np.exp( - self.k *
+                                                               self.lang_stats[action]['L1']['t'] /
+                                                               self.lang_stats[action]['L1']['S']
+                                                            ).astype(np.float32)
+                self.lang_stats[action]['L2']['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
+                self.lang_stats[action]['L2']['pct'] = np.zeros(3600, dtype = np.float32)
+
+        else: # BILINGUAL
+            biling_key = np.random.choice([25,50,100])
+            L1_key = str(biling_key) + '_pct'
+            L2_key = str(100 - biling_key) + '_pct'
+            for action in ['a', 'p']:
+                for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
+                    self.lang_stats[action][lang]['t'] = self.model.lang_ICs[key]['t']
+                    self.lang_stats[action][lang]['S'] = self.model.lang_ICs[key]['S']
+                    self.lang_stats[action][lang]['R'] = np.exp(- self.k *
+                                                                  self.lang_stats[action][lang]['t'] /
+                                                                  self.lang_stats[action][lang]['S']
+                                                                ).astype(np.float32)
+                    self.lang_stats[action][lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
+                    self.lang_stats[action][lang]['pct'] = np.zeros(3600, dtype=np.float32)
+
 
     def move_random(self):
         """ Take a random step into any surrounding cell
@@ -222,16 +234,16 @@ class Simple_Language_Agent:
             as pct of vocabulary size, assuming 16000 tokens per adult per day
             as average """
         if self.age < 36 * 14:
-            return 2 + 100 * np.exp(-0.014 * self.age)
+            return 2.5 + 100 * np.exp(-0.014 * self.age)
         elif 36 * 14 <= self.age <= 36 * 65:
-            return 2
+            return 2.5
         elif self.age > 36 * 65:
-            return 2 + np.exp(0.002 * (self.age - 36 * 65))
-
+            return 1.5 + np.exp(0.002 * (self.age - 36 * 65))
 
 
     def get_lang_stats(self, t, S, cdf_data, word_counter, pct_hours, lang_knowledge,
-                       a=7.6, b=0.023, c=-0.031, d=-0.2, min_mem_times=3, max_age=60):
+                       a=7.6, b=0.023, c=-0.031, d=-0.2, min_mem_times=3, max_age=60,
+                       pct_threshold=0.9):
 
 
         if not self.age:
@@ -249,7 +261,7 @@ class Simple_Language_Agent:
 
         activated, activ_counts = np.unique(zipf_samples, return_counts=True)
 
-        np.add.at(word_counter, activated, activ_counts)
+        np.add.at(word_counter, activated, activ_counts) # word_counter[activated] += activ_counts
         availab_for_activ = np.where(word_counter > min_mem_times)[0]
         activated = np.intersect1d(availab_for_activ, activated, assume_unique=True)
 
@@ -281,7 +293,7 @@ class Simple_Language_Agent:
         if self.age > max_age * 36:
             S = np.where(S >= 0.01, S - 0.01, 0.000001)
 
-        self.lang_stats['l']['L1']['pct'][self.age] = np.where(self.R > 0.9)[0].shape[0] / self.model.vocab_red
+        self.lang_stats['l']['L1']['pct'][self.age] = np.where(self.R > pct_threshold)[0].shape[0] / self.model.vocab_red
 
 
 
