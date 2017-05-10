@@ -51,11 +51,12 @@ class StagedActivation_modif(StagedActivation):
 
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, vocab_red=1000, width=5, height=5, max_people_factor=5,
+    def __init__(self, num_people, vocab_red=1000, num_words_conv=25, width=5, height=5, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
         self.num_people = num_people
         self.vocab_red = vocab_red
+        self.num_words_conv = num_words_conv
         self.grid_width = width
         self.grid_height = height
         self.max_people_factor = max_people_factor
@@ -67,8 +68,9 @@ class Simple_Language_Model(Model):
         self.clust_centers = None
         self.cluster_sizes = None
 
-        # import lang ICs
+        # import lang ICs and lang CDFs data as step function
         self.lang_ICs = dd.io.load('IC_lang_1500_steps.h5')
+        self.cdf_data = dd.io.load('cdfs_3R_vs_step.h5')
 
         # define grid and schedule
         self.grid = MultiGrid(height, width, False)
@@ -294,27 +296,6 @@ class Simple_Language_Model(Model):
                                            job_coords=job.pos)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
-
-    def get_zipf_cdfs(self, compute=False):
-        if compute:
-            x = np.linspace(0, 3600, 3601, dtype=np.int64)
-            self.alpha_dict = {'speech': 1.32 + np.exp(-0.005 * x - 0.2),
-                               'written': 1.19 + np.exp(-0.006 * x - 0.05)}
-
-            speech_Mand_cdfs = np.array(
-                [Zipf_Mand_CDF_compressed(20000, exp, beta=4.46, n_red=500)
-                 for exp in self.alpha_dict['speech']])
-            written_Mand_cdfs = np.array(
-                [Zipf_Mand_CDF_compressed(40000, exp, beta=3.33, n_red=1000)
-                 for exp in self.alpha_dict['written']])
-            cdf_Mand_vs_step_dict = {'speech': speech_Mand_cdfs,
-                                     'written': written_Mand_cdfs}
-
-            dd.io.save('cdf_Mand_vs_step_dict.h5', cdf_Mand_vs_step_dict)
-
-        self.cdf_data_zpf_mand = {}
-        self.cdf_data_zpf_mand['speech'] = dd.io.load('cdf_Mand_vs_step_dict.h5', '/speech')
-        self.cdf_data_zpf_mand['written'] = dd.io.load('cdf_Mand_vs_step_dict.h5', '/written')
 
 
     def get_lang_stats(self, i):

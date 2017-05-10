@@ -146,6 +146,9 @@ class Simple_Language_Agent:
             self.lang_stats['l']['LT']['freqs'][l2] += 1
             self.lang_stats['l']['ST']['freqs'][l2][-1] += 1
 
+    def read(self):
+        pass
+
 
     def update_lang_counter(self, ag_1, ag_2, l1, l2):
         """ Update counts of LT and ST lang arrays for two agents
@@ -169,7 +172,12 @@ class Simple_Language_Agent:
 
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
             l1 = l2 = 0
-            self.update_lang_counter(ag_1, ag_2, 0, 0)
+
+            self.get_lang_stats()
+
+
+
+            #OLD self.update_lang_counter(ag_1, ag_2, 0, 0)
 
         elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
             l1 = l2 = 1
@@ -241,23 +249,94 @@ class Simple_Language_Agent:
             return 1.5 + np.exp(0.002 * (self.age - 36 * 65))
 
 
-    def get_lang_stats(self, t, S, cdf_data, word_counter, pct_hours, lang_knowledge,
-                       a=7.6, b=0.023, c=-0.031, d=-0.2, min_mem_times=3, max_age=60,
+    def get_lang_stats(self, lang, t, S, word_counter, pct_hours,
+                       a=7.6, b=0.023, c=-0.031, d=-0.2, min_mem_times=5, max_age=60,
                        pct_threshold=0.9):
+        """ Function to compute and update main arrays that define agent linguistic knowledge
+            Args:
+                * t: numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
+                * S: numpy array(shape=vocab_size) that measures memory stability for each word
+                * cdf_data: dict with keys 's','w'. It gives a CDF for each step
+                * num_steps1, num_steps2: scalars. Initial and final steps for calculation
+                * pct_hours: percentage of daily hours devoted to chosen language
+                * lang_knowledge: array with shape = steps. For each step ,
+                  it gives percentage knowledge of language as measured
+                  by a given threshold of retrievability(pct_threshold)
+                * a, b, c, d: parameters to definE memory functioN from SUPERMEMO by Piotr A. Wozniak
+
+            MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
+
+            Assumptions ( see "HOW MANY WORDS DO WE KNOW ???" By Marc Brysbaert*,
+            Michaël Stevens, Paweł Mandera and Emmanuel Keuleers):
+                * ~16000 spoken tokens per day + 16000 heard tokens per day + TV, RADIO
+                * 1min reading -> 220-300 tokens with large individual differences, thus
+                  in 1 h we get ~ 16000 words"""
 
 
         if not self.age:
             self.R = np.zeros(self.model.vocab_red, dtype=np.float32)
         else:
-            self.R = np.exp(- self.k * t / S)
+            self.R = np.exp(- self.k * self.lang_stats['a'][lang]['t'] / self.lang_stats['a'][lang]['S'])
 
-        w_factor = self.model.vocab_red / self.words_day_factor()
-        if self.age > 7 * 36 and random.random() > 0.1:
-            zipf_samples = randZipf(cdf_data['speech'][self.age], int(0.9 * pct_hours * w_factor * 10))
-            zipf_samples_written = randZipf(cdf_data['written'][self.age], int(0.1 * pct_hours * w_factor * 10))
-            zipf_samples = np.concatenate((zipf_samples, zipf_samples_written))
+        w_factor = self.model.num_words_conv / self.words_day_factor()
+        # get conv samples
+        zipf_samples = randZipf(self.model.cdf_data['s'][self.age], int(pct_hours * w_factor * 10))
+
+        # assess which words and how many of each were encountered in current step
+        act, act_c = np.unique(zipf_samples, return_counts=True)
+        # update word counter according to previous line
+        word_counter[act] += act_c
+        # check which words are available for memorization ( need minimum number of times)
+        mem_availab_words = np.where(word_counter > min_mem_times)[0]
+
+        # compute indices of active words that are available for memory
+        idxs_act = np.nonzero(np.in1d(act, mem_availab_words, assume_unique=True))
+        # get really activated words
+        act = act[idxs_act]
+        # Apply indices to counts ( retrieve only counts of really active words)
+        act_c = act_c[idxs_act]
+
+        if act.any():  # check that there are any real active words
+            # compute increase in memory stability S due to (re)activation
+            delta_S = a * (S[act] ** (-b)) * np.exp(c * 100 * R[act]) + d
+            # update memory stability value
+            # np.add.at(S, act, delta_S) #
+            S[act] += delta_S
+
+            # define mask to update elapsed-steps array t
+            mask = np.zeros(self.model.vocab_red, dtype=np.bool)
+            mask[act] = True
+            t[~mask] += 1  # add ones to last activation time counter if word not act
+            t[mask] = 0  # set last activation time counter to one if word act
+
+            # discount one to counts
+            act_c -= 1
+            # Simplification with good approx : we apply delta_S without iteration !!
+            delta_S = act_c * (a * (S[act] ** (-b)) * np.exp(c * 100 * R[act]) + d)
+            # np.add.at(S, act, delta_S) #
+            S[act] += delta_S
+
         else:
-            zipf_samples = randZipf(cdf_data['speech'][self.age], int(pct_hours * w_factor * 10))
+            # define mask to update elapsed-steps array t
+            mask = np.zeros(n_red, dtype=np.bool)
+            mask[act] = True
+            t[~mask] += 1  # add ones to last activation time counter if word not act
+            t[mask] = 0  # set last activation time counter to one if word act
+
+        # memory becomes ever shakier after turning 65...
+        if age > 65 * 36:
+            S = np.where(S >= 0.01, S - 0.01, 0.000001)
+        # compute memory retrievability R from t, S
+        R = np.exp(-k * t / S)
+        lang_knowledge[age] = np.where(R > pct_threshold)[0].shape[0] / n_red
+
+
+
+
+
+
+
+        ### OLD ####
 
         activated, activ_counts = np.unique(zipf_samples, return_counts=True)
 
@@ -372,10 +451,6 @@ class Simple_Language_Agent:
         self.update_lang_switch()
 
     def stage_1(self):
-        # add new step to ST deques
-        for action in ['s', 'l']:
-            self.lang_stats[action]['ST']['freqs'][0].append(0)
-            self.lang_stats[action]['ST']['freqs'][1].append(0)
         self.speak()
 
     def stage_2(self):
