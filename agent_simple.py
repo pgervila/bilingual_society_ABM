@@ -29,7 +29,7 @@ class Simple_Language_Agent:
 
 
         # Add randomness to number of hours needed to learn second language
-        #-> See min_mem_times arg in get_lang_stats method
+        #-> See min_mem_times arg in update_lang_stats method
         # define hours needed for agent to be able to converse in other language
         # -> 10 % of vocabulary ??? ENOUGH??
 
@@ -143,15 +143,8 @@ class Simple_Language_Agent:
                 * l1, l2 : integers in [0,1]. Languages spoken by ag_1 and ag_2
 
         """
-        ag_1.lang_stats[l1]
-
-
-
-        ag_1.lang_stats['s']['LT']['freqs'][l1] += 1
-        ag_1.lang_stats['l']['LT']['freqs'][l2] += 1
-
-        ag_2.lang_stats['s']['LT']['freqs'][l2] += 1
-        ag_2.lang_stats['l']['LT']['freqs'][l1] += 1
+        ag_1.speak_model(l1, ag_2)
+        ag_2.speak_model(l2, ag_1)
 
 
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
@@ -159,7 +152,7 @@ class Simple_Language_Agent:
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
             l1 = l2 = 0
 
-            self.get_lang_stats()
+            self.update_lang_stats()
 
 
 
@@ -239,9 +232,8 @@ class Simple_Language_Agent:
 
 
 
-    def get_lang_stats(self, lang, pct_hours,
-                       a=7.6, b=0.023, c=-0.031, d=-0.2,
-                       min_mem_times=5, max_age=60, pct_threshold=0.9):
+    def update_lang_stats(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
+                          min_mem_times=5, max_age=65, pct_threshold=0.9):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * t: numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
@@ -252,7 +244,7 @@ class Simple_Language_Agent:
                 * lang_knowledge: array with shape = steps. For each step ,
                   it gives percentage knowledge of language as measured
                   by a given threshold of retrievability(pct_threshold)
-                * a, b, c, d: parameters to definE memory functioN from SUPERMEMO by Piotr A. Wozniak
+                * a, b, c, d: parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
 
             MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
 
@@ -263,35 +255,32 @@ class Simple_Language_Agent:
                   in 1 h we get ~ 16000 words"""
 
 
-        # if not self.age:
-        #     self.lang_stats[lang]['R'] = np.zeros(self.model.vocab_red, dtype=np.float32)
+        # if not active_words:
+        #     # get real number of words per conversation for a given age
+        #     num_words = self.get_words_per_conv()
+        #     # get conv samples
+        #     zipf_samples = randZipf(self.model.cdf_data['s'][self.age], int(num_words * 10))
+        #     # assess which words and how many of each were encountered in current step
+        #     act, act_c = np.unique(zipf_samples, return_counts=True)
         # else:
-        #     self.lang_stats[lang]['R'] = np.exp(- self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
+        #     act, act_c = active_words
 
-        # get real number of words per conversation for a given age
-        num_words = self.get_words_per_conv()
-        # get conv samples
-        zipf_samples = randZipf(self.model.cdf_data['s'][self.age], int(pct_hours * num_words * 10))
-
-        # assess which words and how many of each were encountered in current step
-        act, act_c = np.unique(zipf_samples, return_counts=True)
-        # update word counter according to previous line
+        act, act_c = sample_words
+        # update word counter with newly active words
         self.lang_stats[lang]['wc'][act] += act_c
-        # check which words are available for memorization ( need minimum number of times)
-        mem_availab_words = np.where(self.lang_stats[lang]['wc'] > min_mem_times)[0]
-
-        # compute indices of active words that are available for memory
-        idxs_act = np.nonzero(np.in1d(act, mem_availab_words, assume_unique=True))
-        # get really activated words
-        act = act[idxs_act]
-        # Apply indices to counts ( retrieve only counts of really active words)
-        act_c = act_c[idxs_act]
+        # if words are from listening, they might be new to agent
+        if not speak:
+            # check which words are available for memorization (need minimum number of times)
+            mem_availab_words = np.where(self.lang_stats[lang]['wc'] > min_mem_times)[0]
+            # compute indices of active words that are available for memory
+            idxs_act = np.nonzero(np.in1d(act, mem_availab_words, assume_unique=True))
+            # get really activated words and apply indices to counts ( retrieve only counts of really active words)
+            act, act_c = act[idxs_act], act_c[idxs_act]
 
         if act.any():  # check that there are any real active words
             # compute increase in memory stability S due to (re)activation
             delta_S = a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d
             # update memory stability value
-            # np.add.at(S, act, delta_S) #
             self.lang_stats[lang]['S'][act] += delta_S
 
             # define mask to update elapsed-steps array t
@@ -304,7 +293,7 @@ class Simple_Language_Agent:
             act_c -= 1
             # Simplification with good approx : we apply delta_S without iteration !!
             delta_S = act_c * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
-            # np.add.at(S, act, delta_S) #
+            # update
             self.lang_stats[lang]['S'][act] += delta_S
 
         else:
@@ -315,7 +304,7 @@ class Simple_Language_Agent:
             self.lang_stats[lang]['t'][mask] = 0  # set last activation time counter to one if word act
 
         # memory becomes ever shakier after turning 65...
-        if self.age > 65 * 36:
+        if self.age > max_age * 36:
             self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] >= 0.01,
                                                   self.lang_stats[lang]['S'] - 0.01,
                                                   0.000001)
@@ -324,26 +313,23 @@ class Simple_Language_Agent:
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                   self.model.vocab_red)
 
-
-
-    def speak_model(self, lang):
-
-        # sample must come from AVAILABLE words in R!!!! This can be done in two steps
-
+    def speak_model(self, lang, ag2):
+        # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in TWO STEPS
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
         word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_words_per_conv() * 10))
         act, act_c = np.unique(word_samples, return_counts=True)
-        # 2. Then assess which words can be succesfully retrieved from memory
+        # 2. Then assess which sampled words can be succesfully retrieved from memory
         # get mask for words successfully retrieved from memory
         mask_R = np.random.rand(self.lang_stats[lang]['R'][act].shape[0]) <= self.lang_stats[lang]['R'][act]
 
-        spoken_words = act[mask_R]
+        spoken_words = act[mask_R], act_c[mask_R]
+        # call own update
+        self.update_lang_stats(lang, active_words=spoken_words)
+        # call listener's update
+        ag2.update_lang_stats(lang, active_words=spoken_words,speak=False)
 
-        return spoken_words
 
         # TODO: NOW NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???
-
-
 
 
     def update_lang_pcts(self):
