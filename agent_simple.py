@@ -46,10 +46,16 @@ class Simple_Language_Agent:
                                                          self.lang_stats['L1']['t'] /
                                                          self.lang_stats['L1']['S']
                                                         ).astype(np.float32)
-            self.lang_stats['L1']['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
-            self.lang_stats['L1']['pct'] = np.zeros(3600, dtype = np.float64)
+            for lang in ['L1', 'L2']:
+                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
+                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
 
-
+            self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, 0.01)
+            self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, 1000, dtype=np.uint32)
+            self.lang_stats['L2']['R'] = np.exp( - self.k *
+                                                         self.lang_stats['L2']['t'] /
+                                                         self.lang_stats['L2']['S']
+                                                        ).astype(np.float32)
 
         elif self.language == 2:
             self.lang_stats['L2']['t'] = self.model.lang_ICs['100_pct']['t']
@@ -58,9 +64,16 @@ class Simple_Language_Agent:
                                                            self.lang_stats['L2']['t'] /
                                                            self.lang_stats['L2']['S']
                                                         ).astype(np.float32)
-            self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
-            self.lang_stats['L2']['pct'] = np.zeros(3600, dtype = np.float64)
+            for lang in ['L1', 'L2']:
+                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
+                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
 
+            self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, 0.01)
+            self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, 1000, dtype=np.uint32)
+            self.lang_stats['L1']['R'] = np.exp( - self.k *
+                                                         self.lang_stats['L1']['t'] /
+                                                         self.lang_stats['L1']['S']
+                                                        ).astype(np.float32)
         else: # BILINGUAL
             biling_key = np.random.choice([25,50,75])
             L1_key = str(biling_key) + '_pct'
@@ -131,14 +144,20 @@ class Simple_Language_Agent:
         if len(others) >= 2:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
             l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
-            self.lang_stats['l']['LT']['freqs'][l1] += 1
+            k1, k2 = 'L' + str(l1), 'L' + str(l2)
+
+            self.update_lang_arrays(l1, spoken_words, speak=False)
+            self.update_lang_arrays(l2, spoken_words, speak=False)
+
+
+            #OLD
+            self.lang_stats[k1]['LT']['freqs'][l1] += 1
             self.lang_stats['l']['ST']['freqs'][l1][-1] += 1
             self.lang_stats['l']['LT']['freqs'][l2] += 1
             self.lang_stats['l']['ST']['freqs'][l2][-1] += 1
 
     def read(self):
         pass
-
 
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
@@ -176,8 +195,8 @@ class Simple_Language_Agent:
                 ag2_pcts[0] < ag_2.lang_thresholds['understand']):
                     l1, l2 = 1, 1
                 else:
-                    pass # NO CONVERSATION POSSIBLE
-            elif ag_1.language == 1:
+                    l1, l2 = None, None # NO CONVERSATION POSSIBLE
+            elif ag_1.language == 2:
                 if (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
                 ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
                     l1, l2 = 1, 0
@@ -188,19 +207,15 @@ class Simple_Language_Agent:
                 ag2_pcts[1] < ag_2.lang_thresholds['understand']):
                     l1, l2 = 0, 0
                 else:
-                    pass # NO CONVERSATION POSSIBLE
-            if l1 and l2: # call update only if conversation takes place
+                    l1, l2 = None, None # NO CONVERSATION POSSIBLE
+            if l1 or l2: # call update only if conversation takes place
                 ag_1.speak_choice_model(l1, ag_2, long=False)
                 ag_2.speak_choice_model(l2, ag_1, long=False)
         if return_values:
             return l1, l2
 
     def study_lang(self, lang):
-        if np.random.binomial(1, p=0.25):
-            self.lang_stats['s']['LT']['freqs'][lang] += 1
-            self.lang_stats['s']['ST']['freqs'][lang] += 1
-        self.lang_stats['l']['LT']['freqs'][lang] += 1
-        self.lang_stats['l']['ST']['freqs'][lang] += 1
+        pass
 
 
     def get_words_per_conv(self, long=True):
@@ -300,7 +315,7 @@ class Simple_Language_Agent:
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                   self.model.vocab_red)
 
-    def speak_choice_model(self, lang, ag2, long=True):
+    def speak_choice_model(self, lang, ag2, long=True, return_values=False):
         """ Method that models word choice by self agent in a conversation
             Word choice is governed by vocabulary knowledge constraints
             Both self and ag2 lang arrays are updated according to the sampled words
@@ -316,6 +331,10 @@ class Simple_Language_Agent:
         act, act_c = np.unique(word_samples, return_counts=True)
         # 2. Then assess which sampled words can be succesfully retrieved from memory
         # get mask for words successfully retrieved from memory
+        if lang == 0:
+            lang = 'L1'
+        else:
+            lang = 'L2'
         mask_R = np.random.rand(self.lang_stats[lang]['R'][act].shape[0]) <= self.lang_stats[lang]['R'][act]
 
         spoken_words = act[mask_R], act_c[mask_R]
@@ -326,7 +345,8 @@ class Simple_Language_Agent:
 
 
         # TODO: NOW NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???
-
+        if return_values:
+            return spoken_words
 
     def update_lang_pcts(self):
 
@@ -388,7 +408,7 @@ class Simple_Language_Agent:
         self.move_random()
         self.speak()
         self.move_random()
-        self.listen()
+        #self.listen()
 
     def stage_3(self):
         if self.age < 100:
@@ -406,7 +426,7 @@ class Simple_Language_Agent:
         self.model.grid.move_agent(self, self.home_coords)
         self.speak()
         # update at the end of each step
-        self.update_lang_status()
+        #self.update_lang_status()
         self.age += 1
 
     def __repr__(self):

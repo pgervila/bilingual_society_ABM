@@ -7,8 +7,8 @@ from itertools import product
 from collections import defaultdict, Counter, OrderedDict
 import numpy as np
 import pandas as pd
-import matplotlib
-matplotlib.use("TKAgg")
+#import matplotlib
+#matplotlib.use("TKAgg")
 import matplotlib.pylab as plt
 import matplotlib.animation as animation
 from scipy.spatial.distance import pdist
@@ -113,11 +113,10 @@ class Simple_Language_Model(Model):
                              "count_bil": lambda m: m.get_lang_stats(1),
                              "count_cat": lambda m: m.get_lang_stats(2),
                              "total_num_agents": lambda m:len(m.schedule.agents),
-                             "biling_evol_h": lambda m:m.get_bilingual_global_evol('heard'),
-                             "biling_evol_s": lambda m: m.get_bilingual_global_evol('spoken')
+                             "biling_evol": lambda m:m.get_bilingual_global_evol()
                              },
-            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_stats['l']['LT']['L2_pct'],
-                             "pct_spa_in_biling": lambda a: 1 - a.lang_stats['l']['LT']['L2_pct']}
+            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_stats['L2']['pct'][a.age],
+                             "pct_spa_in_biling": lambda a:a.lang_stats['L1']['pct'][a.age]}
         )
 
     def add_agent(self, a, coords):
@@ -313,35 +312,24 @@ class Simple_Language_Model(Model):
         lang_counts = Counter(ag_lang_list)
         return lang_counts[i]/num_ag
 
-    def get_bilingual_global_evol(self, lang_typology):
+    def get_bilingual_global_evol(self):
         """Method to compute internal linguistic structure of all bilinguals,
         expressed as average amount of Catalan heard or spoken as % of total
-
-         Arguments:
-             * lang_typology: string that can take either of two values 'heard' or 'spoken'
 
          Returns:
              * float representing the AVERAGE percentage of Catalan in bilinguals
 
         """
-        list_biling = [(ag.lang_stats['l']['LT']['L2_pct'], ag.lang_stats['s']['LT']['L2_pct'])
-                       for ag in self.schedule.agents if ag.language == 1]
-        if lang_typology == 'heard':
-            if list_biling:
-                return np.array(list(zip(*list_biling))[0]).mean()
-            else:
-                if self.get_lang_stats(2) > self.get_lang_stats(0):
-                    return 1
-                else:
-                    return 0
+        list_biling = [ag.lang_stats['L2']['pct'] for ag in self.schedule.agents
+                       if ag.language == 1]
+        if list_biling:
+            return np.array(list_biling).mean()
         else:
-            if list_biling:
-                return np.array(list(zip(*list_biling))[1]).mean()
+            if self.get_lang_stats(2) > self.get_lang_stats(0):
+                return 1
             else:
-                if self.get_lang_stats(2) > self.get_lang_stats(0):
-                    return 1
-                else:
-                    return 0
+                return 0
+
 
     def step(self):
         self.datacollector.collect(self)
@@ -409,7 +397,7 @@ class Simple_Language_Model(Model):
         ax2.tick_params('x', labelsize='small')
         ax2.tick_params('y', labelsize='small')
         ax3 = plt.subplot2grid(grid_size, (2, 3), rowspan=1, colspan=2)
-        data_2_plot[['biling_evol_h', 'biling_evol_s']].plot(ax=ax3, title='biling_quality')
+        data_2_plot['biling_evol'].plot(ax=ax3, title='biling_quality')
         ax3.tick_params('x', labelsize='small')
         ax3.tick_params('y', labelsize='small')
         ax3.legend(loc='best', prop={'size': 8})
@@ -465,8 +453,7 @@ class Simple_Language_Model(Model):
         ax3.set_ylim(0, 1)
         ax3.tick_params('x', labelsize='small')
         ax3.tick_params('y', labelsize='small')
-        line30, = ax3.plot([], [], lw=2, label='biling_evol_h')
-        line31, = ax3.plot([], [], lw=2, label='biling_evol_s')
+        line3, = ax3.plot([], [], lw=2, label='biling_evol')
         ax3.legend(loc='best', prop={'size': 8})
         ax3.set_title("biling_quality")
         ax4 = plt.subplot2grid(grid_size, (0, 0), rowspan=3, colspan=3)
@@ -502,21 +489,20 @@ class Simple_Language_Model(Model):
 
             line2.set_data(data.index, data['total_num_agents'])
 
-            line30.set_data(data.index, data['biling_evol_h'])
-            line31.set_data(data.index, data['biling_evol_s'])
+            line3.set_data(data.index, data['biling_evol'])
             # generate data for 2D representation
             self.create_agents_attrs_data('language')
             # create 2D plot
             time_text.set_text('time = %.1f' % i)
             if plot_type == 'imshow':
                 im_2D.set_array(self.df_attrs_avg.unstack('x'))
-                return line10, line11, line12, line2, line30, line31, im_2D, time_text
+                return line10, line11, line12, line2, line3, im_2D, time_text
             else:
                 data = np.hstack((self.df_attrs_avg.reset_index()['x'][:, np.newaxis],
                                   self.df_attrs_avg.reset_index()['y'][:, np.newaxis]))
                 dots.set_offsets(data)
                 dots.set_array(self.df_attrs_avg.reset_index()['values'])
-                return line10, line11, line12, line2, line30, line31, dots, time_text
+                return line10, line11, line12, line2, line3, dots, time_text
 
         # generate persistent animation object
         ani = animation.FuncAnimation(fig, run_and_update,init_func=init_show,
