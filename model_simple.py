@@ -51,7 +51,7 @@ class StagedActivation_modif(StagedActivation):
 
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, vocab_red=1000, num_words_conv=25, width=5, height=5, max_people_factor=5,
+    def __init__(self, num_people, vocab_red=1000, num_words_conv=(3, 25), width=5, height=5, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
         self.num_people = num_people
@@ -293,7 +293,7 @@ class Simple_Language_Model(Model):
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
                 ag = Simple_Language_Agent(self, ids.pop(), ag_lang, home_coords=(x, y), school_coords=(xs, ys),
-                                           job_coords=job.pos)
+                                           home_coords=(x, y), school_coords=(xs, ys), job_coords=job.pos)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
 

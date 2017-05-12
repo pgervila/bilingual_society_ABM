@@ -12,11 +12,12 @@ class Simple_Language_Agent:
     #define memory retrievability constant
     k = np.log(10 / 9)
 
-    def __init__(self, model, unique_id, language, age=0,
-                 home_coords=None, school_coords=None, job_coords=None):
+    def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025,
+                 age=0, home_coords=None, school_coords=None, job_coords=None):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
+        self.lang_thresholds = {'speak':lang_act_thresh, 'understand':lang_passive_thresh}
         self.age = age
         self.home_coords = home_coords
         self.school_coords = school_coords
@@ -136,73 +137,68 @@ class Simple_Language_Agent:
         pass
 
 
-    def update_lang_counter(self, ag_1, ag_2, l1, l2):
+    def update_lang_counter(self, ag_1, ag_2, l1, l2, long=True):
         """ Update status of lang arrays for two agents involved in conversation
             Args:
                 * ag_1, ag_2 : agents objects
                 * l1, l2 : integers in [0,1]. Languages spoken by ag_1 and ag_2
 
         """
-        ag_1.speak_model(l1, ag_2)
-        ag_2.speak_model(l2, ag_1)
+        ag_1.speak_model(l1, ag_2, long)
+        ag_2.speak_model(l2, ag_1, long)
 
 
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
 
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
             l1 = l2 = 0
-
-            self.update_lang_stats()
-
-
-
-            #OLD self.update_lang_counter(ag_1, ag_2, 0, 0)
+            self.update_lang_counter(ag_1, ag_2, l1, l2)
 
         elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
             l1 = l2 = 1
-            self.update_lang_counter(ag_1, ag_2, 1, 1)
+            self.update_lang_counter(ag_1, ag_2, l1, l2)
 
         elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
-            p11 = ((2 / 3) * (ag_1.lang_stats['s']['LT']['L2_pct']) +
-                   (1 / 3) * (ag_1.lang_stats['l']['LT']['L2_pct']))
-            # find out lang spoken by self ( self STARTS CONVERSATION !!)
-            l1 = np.random.binomial(1, p11)
+
+            # simplified PRELIMINARY assumption: ag_1 will start speaking the language they speak best
+            # (at this stage no modeling of place, inertia, known-person influence)
+            l1 = np.argmax([ag_1.lang_stats['L1']['pct'][self.age], ag_1.lang_stats['L2']['pct'][self.age]])
             l2 = l1
             self.update_lang_counter(ag_1, ag_2, l1, l2)
 
-        else: # mono L1 vs mono L2
-            p11 = ((2 / 3) * (ag_1.lang_stats['s']['LT']['L2_pct']) +
-                   (1 / 3) * (ag_1.lang_stats['l']['LT']['L2_pct']))
-            p21 = ((2 / 3) * (ag_2.lang_stats['s']['LT']['L2_pct']) +
-                   (1 / 3) * (ag_2.lang_stats['l']['LT']['L2_pct']))
+        else: # mono L1 vs mono L2 with relatively close languages -> SOME understanding is possible (LOW THRESHOLD)
+            ag1_pcts = (ag_1.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
+            ag2_pcts = (ag_2.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
+            # if ag_2 can understand some of ag_1 lang
             if ag_1.language == 0:
-                l1 = 0
-                if (1 - ag_2.lang_stats['s']['LT']['L2_pct']) or (1 - ag_2.lang_stats['l']['LT']['L2_pct']):
-                    l2 = np.random.binomial(1, p21)
-                    if l2 == 0:
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
-                    elif l2 == 1:
-                        l1 = np.random.binomial(1, p11)
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
+                # if each agent can understand some of other agent's language
+                if (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
+                ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 0, 1
+                # otherwise
+                elif (ag1_pcts[1] < ag_1.lang_thresholds['understand'] and
+                ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 0, 0
+                elif (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
+                ag2_pcts[0] < ag_2.lang_thresholds['understand']):
+                    l1, l2 = 1, 1
                 else:
-                    l1 = np.random.binomial(1, p11)
-                    l2 = 1
-                    self.update_lang_counter(ag_1, ag_2, l1, l2)
-
-            elif ag_1.language == 2:
-                l1 = 1
-                if (ag_2.lang_stats['s']['LT']['L2_pct']) or (ag_2.lang_stats['l']['LT']['L2_pct']):
-                    l2 = np.random.binomial(1, p21)
-                    if l2 == 1:
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
-                    elif l2 == 0:
-                        l1 = np.random.binomial(1, p11)
-                        self.update_lang_counter(ag_1, ag_2, l1, l2)
+                    pass # NO CONVERSATION POSSIBLE
+            elif ag_1.language == 1:
+                if (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
+                ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 1, 0
+                elif (ag1_pcts[0] < ag_1.lang_thresholds['understand'] and
+                ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 1, 1
+                    self.update_lang_counter(ag_1, ag_2, l1, l2, long=False)
+                elif (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
+                ag2_pcts[1] < ag_2.lang_thresholds['understand']):
+                    l1, l2 = 0, 0
                 else:
-                    l1 = np.random.binomial(1, p11)
-                    l2 = 0
-                    self.update_lang_counter(ag_1, ag_2, l1, l2)
-
+                    pass # NO CONVERSATION POSSIBLE
+            if l1 and l2: # call update only if conversation takes place
+                self.update_lang_counter(ag_1, ag_2, l1, l2, long=False)
         if return_values:
             return l1, l2
 
@@ -214,7 +210,7 @@ class Simple_Language_Agent:
         self.lang_stats['l']['ST']['freqs'][lang] += 1
 
 
-    def get_words_per_conv(self, conversation=True):
+    def get_words_per_conv(self, long=True):
         """ Computes number of words spoken per conversation for a given age
             If conversation=False, computes average number of words per day,
             assuming 16000 tokens per adult per day as average """
@@ -225,10 +221,10 @@ class Simple_Language_Agent:
         else:
             factor = 1.5 + np.exp(0.002 * (self.age - 36 * 65))
 
-        if conversation:
-            return self.model.num_words_conv / factor
+        if long:
+            return self.model.num_words_conv[1] / factor
         else:
-            return self.model.vocab_red / factor
+            return self.model.num_words_conv[0] / factor
 
 
 
@@ -279,6 +275,7 @@ class Simple_Language_Agent:
 
         if act.any():  # check that there are any real active words
             # compute increase in memory stability S due to (re)activation
+            # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
             delta_S = a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d
             # update memory stability value
             self.lang_stats[lang]['S'][act] += delta_S
@@ -313,10 +310,10 @@ class Simple_Language_Agent:
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                   self.model.vocab_red)
 
-    def speak_model(self, lang, ag2):
+    def speak_model(self, lang, ag2, long=True):
         # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in TWO STEPS
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
-        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_words_per_conv() * 10))
+        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_words_per_conv(long) * 10))
         act, act_c = np.unique(word_samples, return_counts=True)
         # 2. Then assess which sampled words can be succesfully retrieved from memory
         # get mask for words successfully retrieved from memory
