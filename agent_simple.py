@@ -62,7 +62,7 @@ class Simple_Language_Agent:
             self.lang_stats['L2']['pct'] = np.zeros(3600, dtype = np.float64)
 
         else: # BILINGUAL
-            biling_key = np.random.choice([25,50,100])
+            biling_key = np.random.choice([25,50,75])
             L1_key = str(biling_key) + '_pct'
             L2_key = str(100 - biling_key) + '_pct'
             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
@@ -240,7 +240,6 @@ class Simple_Language_Agent:
                 * ~16000 spoken tokens per day + 16000 heard tokens per day + TV, RADIO
                 * 1min reading -> 220-300 tokens with large individual differences, thus
                   in 1 h we get ~ 16000 words"""
-
 
         # if not active_words:
         #     # get real number of words per conversation for a given age
