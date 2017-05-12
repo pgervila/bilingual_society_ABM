@@ -30,15 +30,18 @@ class Simple_Language_Agent:
 
 
         # Add randomness to number of hours needed to learn second language
-        #-> See min_mem_times arg in update_lang_stats method
+        #-> See min_mem_times arg in update_lang_arrays method
         # define hours needed for agent to be able to converse in other language
         # -> 10 % of vocabulary ??? ENOUGH??
 
 
 
         if self.language == 0:
+            # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
             self.lang_stats['L1']['t'] = self.model.lang_ICs['100_pct']['t']
+            # S: numpy array(shape=vocab_size) that measures memory stability for each word
             self.lang_stats['L1']['S'] = self.model.lang_ICs['100_pct']['S']
+            #
             self.lang_stats['L1']['R'] = np.exp( - self.k *
                                                          self.lang_stats['L1']['t'] /
                                                          self.lang_stats['L1']['S']
@@ -137,34 +140,24 @@ class Simple_Language_Agent:
         pass
 
 
-    def update_lang_counter(self, ag_1, ag_2, l1, l2, long=True):
-        """ Update status of lang arrays for two agents involved in conversation
-            Args:
-                * ag_1, ag_2 : agents objects
-                * l1, l2 : integers in [0,1]. Languages spoken by ag_1 and ag_2
-
-        """
-        ag_1.speak_model(l1, ag_2, long)
-        ag_2.speak_model(l2, ag_1, long)
-
-
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
-
         if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
             l1 = l2 = 0
-            self.update_lang_counter(ag_1, ag_2, l1, l2)
+            ag_1.speak_choice_model(l1, ag_2)
+            ag_2.speak_choice_model(l2, ag_1)
 
         elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
             l1 = l2 = 1
-            self.update_lang_counter(ag_1, ag_2, l1, l2)
+            ag_1.speak_choice_model(l1, ag_2)
+            ag_2.speak_choice_model(l2, ag_1)
 
         elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
-
             # simplified PRELIMINARY assumption: ag_1 will start speaking the language they speak best
             # (at this stage no modeling of place, inertia, known-person influence)
             l1 = np.argmax([ag_1.lang_stats['L1']['pct'][self.age], ag_1.lang_stats['L2']['pct'][self.age]])
             l2 = l1
-            self.update_lang_counter(ag_1, ag_2, l1, l2)
+            ag_1.speak_choice_model(l1, ag_2)
+            ag_2.speak_choice_model(l2, ag_1)
 
         else: # mono L1 vs mono L2 with relatively close languages -> SOME understanding is possible (LOW THRESHOLD)
             ag1_pcts = (ag_1.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
@@ -191,14 +184,14 @@ class Simple_Language_Agent:
                 elif (ag1_pcts[0] < ag_1.lang_thresholds['understand'] and
                 ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
                     l1, l2 = 1, 1
-                    self.update_lang_counter(ag_1, ag_2, l1, l2, long=False)
                 elif (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
                 ag2_pcts[1] < ag_2.lang_thresholds['understand']):
                     l1, l2 = 0, 0
                 else:
                     pass # NO CONVERSATION POSSIBLE
             if l1 and l2: # call update only if conversation takes place
-                self.update_lang_counter(ag_1, ag_2, l1, l2, long=False)
+                ag_1.speak_choice_model(l1, ag_2, long=False)
+                ag_2.speak_choice_model(l2, ag_1, long=False)
         if return_values:
             return l1, l2
 
@@ -228,19 +221,17 @@ class Simple_Language_Agent:
 
 
 
-    def update_lang_stats(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
-                          min_mem_times=5, max_age=65, pct_threshold=0.9):
+    def update_lang_arrays(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
+                           min_mem_times=5, max_age=65, pct_threshold=0.9):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
-                * t: numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
-                * S: numpy array(shape=vocab_size) that measures memory stability for each word
-                * cdf_data: dict with keys 's','w'. It gives a CDF for each step
-                * num_steps1, num_steps2: scalars. Initial and final steps for calculation
-                * pct_hours: percentage of daily hours devoted to chosen language
-                * lang_knowledge: array with shape = steps. For each step ,
-                  it gives percentage knowledge of language as measured
-                  by a given threshold of retrievability(pct_threshold)
+                * lang :
+                * sample_words:
+                * speak
                 * a, b, c, d: parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
+                * min_mem_times
+                * max_age
+                * pct_threshold
 
             MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
 
@@ -310,7 +301,16 @@ class Simple_Language_Agent:
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                   self.model.vocab_red)
 
-    def speak_model(self, lang, ag2, long=True):
+    def speak_choice_model(self, lang, ag2, long=True):
+        """ Method that models word choice by self agent in a conversation
+            Word choice is governed by vocabulary knowledge constraints
+            Both self and ag2 lang arrays are updated according to the sampled words
+
+            Args:
+                * lang: integer in [0, 1]
+                * ag2: agent instance with which self is talking to
+                * long: boolean that defines conversation length"""
+
         # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in TWO STEPS
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
         word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_words_per_conv(long) * 10))
@@ -321,9 +321,9 @@ class Simple_Language_Agent:
 
         spoken_words = act[mask_R], act_c[mask_R]
         # call own update
-        self.update_lang_stats(lang, active_words=spoken_words)
+        self.update_lang_arrays(lang, spoken_words)
         # call listener's update
-        ag2.update_lang_stats(lang, active_words=spoken_words,speak=False)
+        ag2.update_lang_arrays(lang, spoken_words, speak=False)
 
 
         # TODO: NOW NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???

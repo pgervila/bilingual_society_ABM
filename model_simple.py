@@ -293,7 +293,7 @@ class Simple_Language_Model(Model):
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
                 ag = Simple_Language_Agent(self, ids.pop(), ag_lang, home_coords=(x, y), school_coords=(xs, ys),
-                                           home_coords=(x, y), school_coords=(xs, ys), job_coords=job.pos)
+                                           job_coords=job.pos)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
 
