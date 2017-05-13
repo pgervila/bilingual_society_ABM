@@ -41,21 +41,23 @@ class Simple_Language_Agent:
             self.lang_stats['L1']['t'] = self.model.lang_ICs['100_pct']['t']
             # S: numpy array(shape=vocab_size) that measures memory stability for each word
             self.lang_stats['L1']['S'] = self.model.lang_ICs['100_pct']['S']
-            #
+            # compute R from t, S
             self.lang_stats['L1']['R'] = np.exp( - self.k *
                                                          self.lang_stats['L1']['t'] /
                                                          self.lang_stats['L1']['S']
-                                                        ).astype(np.float32)
+                                                        ).astype(np.float64)
+            # word counter
+            self.lang_stats['L1']['wc'] = self.model.lang_ICs['100_pct']['wc']
             for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
                 self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
 
             self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, 0.01)
-            self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, 1000, dtype=np.uint32)
+            self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, 1000)
             self.lang_stats['L2']['R'] = np.exp( - self.k *
                                                          self.lang_stats['L2']['t'] /
                                                          self.lang_stats['L2']['S']
                                                         ).astype(np.float32)
+            self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red)
 
         elif self.language == 2:
             self.lang_stats['L2']['t'] = self.model.lang_ICs['100_pct']['t']
@@ -63,17 +65,18 @@ class Simple_Language_Agent:
             self.lang_stats['L2']['R'] = np.exp( - self.k *
                                                            self.lang_stats['L2']['t'] /
                                                            self.lang_stats['L2']['S']
-                                                        ).astype(np.float32)
+                                                        ).astype(np.float64)
+            self.lang_stats['L2']['wc'] = self.model.lang_ICs['100_pct']['wc']
             for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
                 self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
 
             self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, 0.01)
-            self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, 1000, dtype=np.uint32)
+            self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, 1000)
             self.lang_stats['L1']['R'] = np.exp( - self.k *
                                                          self.lang_stats['L1']['t'] /
                                                          self.lang_stats['L1']['S']
-                                                        ).astype(np.float32)
+                                                        ).astype(np.float64)
+            self.lang_stats['L1']['wc'] = np.zeros(self.model.vocab_red)
         else: # BILINGUAL
             biling_key = np.random.choice([25,50,75])
             L1_key = str(biling_key) + '_pct'
@@ -84,8 +87,8 @@ class Simple_Language_Agent:
                 self.lang_stats[lang]['R'] = np.exp(- self.k *
                                                               self.lang_stats[lang]['t'] /
                                                               self.lang_stats[lang]['S']
-                                                            ).astype(np.float32)
-                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int32)
+                                                            ).astype(np.float64)
+                self.lang_stats[lang]['wc'] = self.model.lang_ICs[key]['wc']
                 self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
 
 
@@ -237,7 +240,7 @@ class Simple_Language_Agent:
 
 
     def update_lang_arrays(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
-                           min_mem_times=5, max_age=65, pct_threshold=0.9):
+                           min_mem_times=5, pct_threshold=0.9):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * lang :
@@ -305,11 +308,7 @@ class Simple_Language_Agent:
             self.lang_stats[lang]['t'][~mask] += 1  # add ones to last activation time counter if word not act
             self.lang_stats[lang]['t'][mask] = 0  # set last activation time counter to one if word act
 
-        # memory becomes ever shakier after turning 65...
-        if self.age > max_age * 36:
-            self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] >= 0.01,
-                                                  self.lang_stats[lang]['S'] - 0.01,
-                                                  0.000001)
+
         # compute memory retrievability R from t, S
         self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
@@ -402,6 +401,7 @@ class Simple_Language_Agent:
         self.update_lang_switch()
 
     def stage_1(self):
+        self.day_mask = np.zeros(self.model.vocab_red, dtype=np.bool)
         self.speak()
 
     def stage_2(self):
@@ -427,6 +427,12 @@ class Simple_Language_Agent:
         self.speak()
         # update at the end of each step
         #self.update_lang_status()
+        # memory becomes ever shakier after turning 65...
+        if self.age > 65 * 36:
+            for lang in ['L1', 'L2']:
+                self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] >= 0.01,
+                                                      self.lang_stats[lang]['S'] - 0.01,
+                                                      0.000001)
         self.age += 1
 
     def __repr__(self):

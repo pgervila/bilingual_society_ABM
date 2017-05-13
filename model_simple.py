@@ -291,7 +291,7 @@ class Simple_Language_Model(Model):
                                             for sc_coord in clust_schools_coords])
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, home_coords=(x, y), school_coords=(xs, ys),
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1500, home_coords=(x, y), school_coords=(xs, ys),
                                            job_coords=job.pos)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
@@ -320,7 +320,7 @@ class Simple_Language_Model(Model):
              * float representing the AVERAGE percentage of Catalan in bilinguals
 
         """
-        list_biling = [ag.lang_stats['L2']['pct'] for ag in self.schedule.agents
+        list_biling = [ag.lang_stats['L2']['pct'][ag.age] for ag in self.schedule.agents
                        if ag.language == 1]
         if list_biling:
             return np.array(list_biling).mean()
