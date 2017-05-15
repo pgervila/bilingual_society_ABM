@@ -50,9 +50,7 @@ class Simple_Language_Agent:
                                                         ).astype(np.float64)
             # word counter
             self.lang_stats['L1']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'])
-            for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
-
+            #L2
             self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, 0.01)
             self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, 1000)
             self.lang_stats['L2']['R'] = np.exp( - self.k *
@@ -60,6 +58,13 @@ class Simple_Language_Agent:
                                                          self.lang_stats['L2']['S']
                                                         ).astype(np.float32)
             self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red)
+
+            for lang in ['L1', 'L2']:
+                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                          self.model.vocab_red)
+
+
 
         elif self.language == 2:
             self.lang_stats['L2']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'])
@@ -69,9 +74,8 @@ class Simple_Language_Agent:
                                                            self.lang_stats['L2']['S']
                                                         ).astype(np.float64)
             self.lang_stats['L2']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'])
-            for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
 
+            #L2
             self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, 0.01)
             self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, 1000)
             self.lang_stats['L1']['R'] = np.exp( - self.k *
@@ -79,6 +83,13 @@ class Simple_Language_Agent:
                                                          self.lang_stats['L1']['S']
                                                         ).astype(np.float64)
             self.lang_stats['L1']['wc'] = np.zeros(self.model.vocab_red)
+
+            for lang in ['L1', 'L2']:
+                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
+                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                          self.model.vocab_red)
+
+
         else: # BILINGUAL
             biling_key = np.random.choice([25,50,75])
             L1_key = str(biling_key) + '_pct'
@@ -87,13 +98,13 @@ class Simple_Language_Agent:
                 self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[key]['t'])
                 self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[key]['S'])
                 self.lang_stats[lang]['R'] = np.exp(- self.k *
-                                                              self.lang_stats[lang]['t'] /
-                                                              self.lang_stats[lang]['S']
-                                                            ).astype(np.float64)
+                                                    self.lang_stats[lang]['t'] /
+                                                    self.lang_stats[lang]['S']
+                                                    ).astype(np.float64)
                 self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[key]['wc'])
                 self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-
-        self.t_view = self.lang_stats['L2']['t'][-10:]
+                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                          self.model.vocab_red)
 
 
     def move_random(self):
@@ -139,7 +150,6 @@ class Simple_Language_Agent:
                 self.get_conversation_lang(self, other)
         else:
             self.get_conversation_lang(self, with_agent)
-            other = with_agent
 
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
@@ -362,41 +372,60 @@ class Simple_Language_Agent:
         a = np.array(self.lang_stats['s']['ST']['freqs'])
         np.average(np.around(a[0] / (a[0] + a[1]), 2), weights=a[0] + a[1])
 
-    def update_lang_switch(self): #TODO : use ST info and model correct threshold
+    def update_lang_switch(self, switch_threshold=0.1):
         """Between 600 and 1500 hours to learn a second similar language at decent level"""
-        days_per_year = 365
-        max_lang_h_day = 16
-        max_words_per_day = 50 # saturation value
-        lang_hours_per_day = (max_lang_h_day *
-                             (sum(self.lang_stats['l']['LT']['freqs']) + sum(self.lang_stats['s']['LT']['freqs'])) /
-                             (self.model.schedule.steps + max_words_per_day))
-        steps_per_year = 36.5
-        pct = (self.lang_stats['l']['LT']['L2_pct'] + self.lang_stats['s']['LT']['L2_pct'])
-        if self.model.schedule.steps > self.lang_stats['maxmem']:
-            if self.language == 0:
-                num_hours_L2 = (pct * days_per_year *
-                                lang_hours_per_day * self.model.schedule.steps) / steps_per_year
-                if num_hours_L2 >= self.lang_stats['learning_hours']:
-                    self.language = 1
-            elif self.language == 2:
-                pct = 1 - pct
-                num_hours_L1 = (pct * days_per_year *
-                                lang_hours_per_day * self.model.schedule.steps) / steps_per_year
-                if num_hours_L1 >= self.lang_stats['learning_hours']:
-                    self.language = 1
-            else: # LANGUAGE ATTRITION
+        # days_per_year = 365
+        # max_lang_h_day = 16
+        # max_words_per_day = 50 # saturation value
+        # lang_hours_per_day = (max_lang_h_day *
+        #                      (sum(self.lang_stats['l']['LT']['freqs']) + sum(self.lang_stats['s']['LT']['freqs'])) /
+        #                      (self.model.schedule.steps + max_words_per_day))
+        # steps_per_year = 36.5
+        # pct = (self.lang_stats['l']['LT']['L2_pct'] + self.lang_stats['s']['LT']['L2_pct'])
+        # if self.model.schedule.steps > self.lang_stats['maxmem']:
+        #     if self.language == 0:
+        #         num_hours_L2 = (pct * days_per_year *
+        #                         lang_hours_per_day * self.model.schedule.steps) / steps_per_year
+        #         if num_hours_L2 >= self.lang_stats['learning_hours']:
+        #             self.language = 1
+        #     elif self.language == 2:
+        #         pct = 1 - pct
+        #         num_hours_L1 = (pct * days_per_year *
+        #                         lang_hours_per_day * self.model.schedule.steps) / steps_per_year
+        #         if num_hours_L1 >= self.lang_stats['learning_hours']:
+        #             self.language = 1
+        #     else: # LANGUAGE ATTRITION
+        #
+        #         if pct:
+        #             pass
+        #
+        #
+        #
+        #         if self.lang_stats['l']['LT']['L2_pct'] >= 0.8:
+        #             if 0 not in self.lang_stats['s']['ST']['freqs']:
+        #                 self.language = 2
+        #         elif self.lang_stats['l']['LT']['L2_pct'] <= 0.2:
+        #             if 1 not in self.lang_stats['s']['ST']['freqs']:
+        #                 self.language = 0
+        if self.language == 0:
+            if self.lang_stats['L2']['pct'] >= switch_threshold:
+                self.language = 1
+        elif self.language == 2:
+            if self.lang_stats['L1']['pct'] >= switch_threshold:
+                self.language = 1
+        elif self.language == 1:
+            if self.lang_stats['L1']['pct'] < switch_threshold:
+                self.language == 2
+            elif self.lang_stats['L2']['pct'] < switch_threshold:
+                self.language == 1
 
-                if pct:
-                    pass
 
 
 
-                if self.lang_stats['l']['LT']['L2_pct'] >= 0.8:
-                    if 0 not in self.lang_stats['s']['ST']['freqs']:
-                        self.language = 2
-                elif self.lang_stats['l']['LT']['L2_pct'] <= 0.2:
-                    if 1 not in self.lang_stats['s']['ST']['freqs']:
-                        self.language = 0
+
+
+
+
 
     def update_lang_status(self):
         # update lang experience
@@ -408,24 +437,17 @@ class Simple_Language_Agent:
         for lang in ['L1', 'L2']:
             # update last-time word use vector
             self.lang_stats[lang]['t'][~self.day_mask[lang]] += 1
+            # set current lang knowledge
+            self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                      self.model.vocab_red)
             self.day_mask[lang] = np.zeros(self.model.vocab_red, dtype=np.bool)
         self.speak()
-        # if self.unique_id == 1:
-        #     print('stage1')
-        #     print('t array is:', self.lang_stats['L2']['t'])
-        #     print('S array is:', self.lang_stats['L2']['S'])
-        #     print('pct array is:', self.lang_stats['L2']['pct'][1500:1510])
 
     def stage_2(self):
         self.move_random()
         self.speak()
         self.move_random()
         #self.listen()
-        # if self.unique_id == 1:
-        #     print('stage2')
-        #     print('t array is:', self.lang_stats['L2']['t'])
-        #     print('S array is:', self.lang_stats['L2']['S'])
-        #     print('pct array is:', self.lang_stats['L2']['pct'][1500:1510])
 
     def stage_3(self):
         if self.age < 100:
@@ -436,11 +458,6 @@ class Simple_Language_Agent:
         else:
             self.model.grid.move_agent(self, self.job_coords)
             self.speak()
-        # if self.unique_id == 1:
-        #     print('stage3')
-        #     print('t array is:', self.lang_stats['L2']['t'])
-        #     print('S array is:', self.lang_stats['L2']['S'])
-        #     print('pct array is:', self.lang_stats['L2']['pct'][1500:1510])
 
     def stage_4(self):
         self.move_random()
@@ -457,12 +474,6 @@ class Simple_Language_Agent:
         for lang in ['L1', 'L2']:
             self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                       self.model.vocab_red)
-        # if self.unique_id == 1:
-        #     print('stage4')
-        #     print('t array is:', self.lang_stats['L2']['t'] )
-        #     print('S array is:', self.lang_stats['L2']['S'])
-        #     print('pct array is:', self.lang_stats['L2']['pct'][1500:1510])
-        self.age += 1
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)

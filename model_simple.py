@@ -39,6 +39,8 @@ class StagedActivation_modif(StagedActivation):
 
     def step(self):
         """ Executes all the stages for all agents. """
+        for agent in self.agents:
+            agent.age += 1
         if self.shuffle:
             random.shuffle(self.agents)
         for stage in self.stage_list:
