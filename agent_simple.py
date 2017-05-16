@@ -411,15 +411,15 @@ class Simple_Language_Agent:
         #             if 1 not in self.lang_stats['s']['ST']['freqs']:
         #                 self.language = 0
         if self.language == 0:
-            if self.lang_stats['L2']['pct'] >= switch_threshold:
+            if self.lang_stats['L2']['pct'][self.age] >= switch_threshold:
                 self.language = 1
         elif self.language == 2:
-            if self.lang_stats['L1']['pct'] >= switch_threshold:
+            if self.lang_stats['L1']['pct'][self.age] >= switch_threshold:
                 self.language = 1
         elif self.language == 1:
-            if self.lang_stats['L1']['pct'] < switch_threshold:
+            if self.lang_stats['L1']['pct'][self.age] < switch_threshold:
                 self.language == 2
-            elif self.lang_stats['L2']['pct'] < switch_threshold:
+            elif self.lang_stats['L2']['pct'][self.age] < switch_threshold:
                 self.language == 1
 
 
