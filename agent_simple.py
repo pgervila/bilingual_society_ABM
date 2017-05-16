@@ -420,7 +420,7 @@ class Simple_Language_Agent:
             if self.lang_stats['L1']['pct'][self.age] < switch_threshold:
                 self.language == 2
             elif self.lang_stats['L2']['pct'][self.age] < switch_threshold:
-                self.language == 1
+                self.language == 0
 
 
 
