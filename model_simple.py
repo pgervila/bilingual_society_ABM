@@ -39,8 +39,16 @@ class StagedActivation_modif(StagedActivation):
 
     def step(self):
         """ Executes all the stages for all agents. """
-        for agent in self.agents:
+        for agent in self.agents[:]:
             agent.age += 1
+            for lang in ['L1', 'L2']:
+                # update last-time word use vector
+                agent.lang_stats[lang]['t'][~agent.day_mask[lang]] += 1
+                # set current lang knowledge
+                agent.lang_stats[lang]['pct'][agent.age] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                            agent.model.vocab_red)
+                agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
+            agent.update_lang_switch()
         if self.shuffle:
             random.shuffle(self.agents)
         for stage in self.stage_list:

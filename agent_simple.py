@@ -373,7 +373,10 @@ class Simple_Language_Agent:
         np.average(np.around(a[0] / (a[0] + a[1]), 2), weights=a[0] + a[1])
 
     def update_lang_switch(self, switch_threshold=0.1):
-        """Between 600 and 1500 hours to learn a second similar language at decent level"""
+        """Switch to a new linguistic regime whn threshold is reached
+           If language knowledge falls below switch_threshold value, agent
+           becomes monolingual"""
+
         # days_per_year = 365
         # max_lang_h_day = 16
         # max_words_per_day = 50 # saturation value
@@ -434,13 +437,6 @@ class Simple_Language_Agent:
         self.update_lang_switch()
 
     def stage_1(self):
-        for lang in ['L1', 'L2']:
-            # update last-time word use vector
-            self.lang_stats[lang]['t'][~self.day_mask[lang]] += 1
-            # set current lang knowledge
-            self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                      self.model.vocab_red)
-            self.day_mask[lang] = np.zeros(self.model.vocab_red, dtype=np.bool)
         self.speak()
 
     def stage_2(self):
