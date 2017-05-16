@@ -234,24 +234,21 @@ class Simple_Language_Agent:
     def study_lang(self, lang):
         pass
 
-
-    def get_words_per_conv(self, long=True):
+    def get_words_per_conv(self, long=True, age_1=14, age_2=65):
         """ Computes number of words spoken per conversation for a given age
             If conversation=False, computes average number of words per day,
             assuming 16000 tokens per adult per day as average """
-        if self.age < 36 * 14:
+        if self.age < 36 * age_1:
             factor = 2.5 + 100 * np.exp(-0.014 * self.age)
-        elif 36 * 14 <= self.age <= 36 * 65:
+        elif 36 * age_1 <= self.age <= 36 * age_2:
             factor = 2.5
         else:
-            factor = 1.5 + np.exp(0.002 * (self.age - 36 * 65))
+            factor = 1.5 + np.exp(0.002 * (self.age - 36 * age_2))
 
         if long:
             return self.model.num_words_conv[1] / factor
         else:
             return self.model.num_words_conv[0] / factor
-
-
 
     def update_lang_arrays(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
                            min_mem_times=5, pct_threshold=0.9):
