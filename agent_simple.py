@@ -13,17 +13,16 @@ class Simple_Language_Agent:
     k = np.log(10 / 9)
 
     def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025,
-                 age=0, home_coords=None, school_coords=None, job_coords=None):
+                 age=0, num_children=0, home_coords=None, school_coords=None, job_coords=None):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.lang_thresholds = {'speak':lang_act_thresh, 'understand':lang_passive_thresh}
         self.age = age
+        self.num_children = num_children
         self.home_coords = home_coords
         self.school_coords = school_coords
         self.job_coords = job_coords
-
-
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
@@ -124,11 +123,11 @@ class Simple_Language_Agent:
         chosen_cell = random.choice(possible_steps)
         self.model.grid.move_agent(self, chosen_cell)
 
-    def reproduce(self, init_lang_instances=50):
-        if (20 <= self.age <= 40) and (self.num_children < 1) and (random.random() > 1 - 5/20):
+    def reproduce(self, age_1=20, age_2=40, init_lang_instances=50):
+        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() > 1 - 5/20):
             id_ = self.model.set_available_ids.pop()
             lang = self.language
-            a = Simple_Language_Agent(self.model, id_, lang, 0.5)
+            a = Simple_Language_Agent(self.model, id_, lang, home_coords=None, school_coords=None, job_coords=None)
             self.model.add_agent(a, self.pos)
             num_cat_s = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_s'])
             num_cat_h = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_h'])

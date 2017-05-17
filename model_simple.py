@@ -100,7 +100,6 @@ class Simple_Language_Model(Model):
                                            self.max_people_factor * self.num_people)
                                      )
 
-
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
         self.known_people_network = nx.DiGraph()
         #        self.known_people_network.add_edge('A','B', lang_spoken = 'cat')
@@ -306,8 +305,8 @@ class Simple_Language_Model(Model):
                                             for sc_coord in clust_schools_coords])
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1500, home_coords=(x, y), school_coords=(xs, ys),
-                                           job_coords=job.pos)
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1500, home_coords=(x, y),
+                                           school_coords=(xs, ys), job_coords=job.pos)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
 
