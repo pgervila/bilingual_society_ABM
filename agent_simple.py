@@ -124,6 +124,49 @@ class Simple_Language_Agent:
         chosen_cell = random.choice(possible_steps)
         self.model.grid.move_agent(self, chosen_cell)
 
+    def reproduce(self, init_lang_instances=50):
+        if (20 <= self.age <= 40) and (self.num_children < 1) and (random.random() > 1 - 5/20):
+            id_ = self.model.set_available_ids.pop()
+            lang = self.language
+            a = Simple_Language_Agent(self.model, id_, lang, 0.5)
+            self.model.add_agent(a, self.pos)
+            num_cat_s = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_s'])
+            num_cat_h = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_h'])
+            a.lang_freq['spoken'] = [init_lang_instances-num_cat_s, num_cat_s]
+            a.lang_freq['heard'] = [init_lang_instances-num_cat_h, num_cat_h]
+            a.update_lang_pcts()
+
+            self.num_children += 1
+
+    def simulate_random_death(self):  ##
+        # define stochastic probability of agent death as function of age
+        if (self.age > 20) and (self.age <= 75):
+            if random.random() > (1 - 0.25 / 55):  # 25% pop will die through this period
+                self.remove_after_death()
+        elif (self.age > 75) and (self.age < 90):
+            if random.random() > (1 - 0.70 / 15):  # 70% will die
+                self.remove_after_death()
+        elif self.age >= 90:
+            self.remove_after_death()
+
+    def remove_after_death(self):
+        """ call this function if death conditions
+        for agent are verified """
+        for network in [self.model.family_network,
+                        self.model.known_people_network,
+                        self.model.friendship_network]:
+            try:
+                network.remove_node(self)
+            except nx.NetworkXError:
+                pass
+        # find agent coordinates
+        x, y = self.pos
+        # make id from deceased agent available
+        self.model.set_available_ids.add(self.unique_id)
+        # remove agent from grid and schedule
+        self.model.grid._remove_agent((x,y), self)
+        self.model.schedule.remove(self)
+
     def speak(self, with_agent=None):
         """ Pick random lang_agent from current cell and start a conversation
             with it. It updates heard words in order to shape future vocab.
