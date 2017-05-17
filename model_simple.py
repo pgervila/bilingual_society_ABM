@@ -95,6 +95,11 @@ class Simple_Language_Model(Model):
         self.compute_cluster_sizes()
         self.set_clusters_info()
 
+        #define container for available ids
+        self.set_available_ids = set(range(num_people,
+                                           self.max_people_factor * self.num_people)
+                                     )
+
 
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
         self.known_people_network = nx.DiGraph()
