@@ -231,7 +231,6 @@ class Simple_Language_Model(Model):
             self.clusters_info[idx]['schools'] = []
             self.clusters_info[idx]['agents_id'] = []
 
-
     def generate_jobs(self, job_cent_per_agent=0.1, pct_agents_with_job=5,
                       min_places=2, max_places=200):
         """ Generates job centers coordinates and num places per center"""
@@ -305,8 +304,9 @@ class Simple_Language_Model(Model):
                                             for sc_coord in clust_schools_coords])
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1500, home_coords=(x, y),
-                                           school_coords=(xs, ys), job_coords=job.pos)
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1500,
+                                           home_coords=(x, y), school_coords=(xs, ys),
+                                           job_coords=job.pos, city_idx=clust_idx)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
 

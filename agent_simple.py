@@ -12,8 +12,8 @@ class Simple_Language_Agent:
     #define memory retrievability constant
     k = np.log(10 / 9)
 
-    def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025,
-                 age=0, num_children=0, home_coords=None, school_coords=None, job_coords=None):
+    def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025, age=0,
+                 num_children=0, home_coords=None, school_coords=None, job_coords=None, city_idx=None):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
@@ -23,6 +23,7 @@ class Simple_Language_Agent:
         self.home_coords = home_coords
         self.school_coords = school_coords
         self.job_coords = job_coords
+        self.city_idx = city_idx
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
@@ -127,7 +128,10 @@ class Simple_Language_Agent:
         if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() > 1 - 5/20):
             id_ = self.model.set_available_ids.pop()
             lang = self.language
-            a = Simple_Language_Agent(self.model, id_, lang, home_coords=None, school_coords=None, job_coords=None)
+            # find closest school
+
+            a = Simple_Language_Agent(self.model, id_, lang, home_coords=self.home_coords, school_coords=None,
+                                      job_coords=None, city_idx=self.city_idx)
             self.model.add_agent(a, self.pos)
             num_cat_s = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_s'])
             num_cat_h = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_h'])
