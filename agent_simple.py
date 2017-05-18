@@ -2,6 +2,7 @@
 import random
 import numpy as np
 import networkx as nx
+from scipy.spatial.distance import pdist
 from collections import deque, Counter, defaultdict
 
 #import private library to model lang zipf CDF
@@ -124,20 +125,20 @@ class Simple_Language_Agent:
         chosen_cell = random.choice(possible_steps)
         self.model.grid.move_agent(self, chosen_cell)
 
-    def reproduce(self, age_1=20, age_2=40, init_lang_instances=50):
+    def reproduce(self, age_1=20, age_2=40):
         if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() > 1 - 5/20):
             id_ = self.model.set_available_ids.pop()
             lang = self.language
-            # find closest school
-
-            a = Simple_Language_Agent(self.model, id_, lang, home_coords=self.home_coords, school_coords=None,
+            # find closest school to parent home
+            clust_schools_coords = [sc.pos for sc in self.clusters_info[self.city_idx]['schools']]
+            closest_school_idx = np.argmin([pdist([self.home_coords, sc_coord])
+                                        for sc_coord in clust_schools_coords])
+            xs, ys = self.clusters_info[self.city_idx]['schools'][closest_school_idx].pos
+            # instantiate agent
+            a = Simple_Language_Agent(self.model, id_, lang,
+                                      home_coords=self.home_coords, school_coords=(xs, ys),
                                       job_coords=None, city_idx=self.city_idx)
             self.model.add_agent(a, self.pos)
-            num_cat_s = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_s'])
-            num_cat_h = np.random.binomial(init_lang_instances, p=self.lang_freq['cat_pct_h'])
-            a.lang_freq['spoken'] = [init_lang_instances-num_cat_s, num_cat_s]
-            a.lang_freq['heard'] = [init_lang_instances-num_cat_h, num_cat_h]
-            a.update_lang_pcts()
 
             self.num_children += 1
 
