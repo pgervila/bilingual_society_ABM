@@ -130,10 +130,10 @@ class Simple_Language_Agent:
             id_ = self.model.set_available_ids.pop()
             lang = self.language
             # find closest school to parent home
-            clust_schools_coords = [sc.pos for sc in self.clusters_info[self.city_idx]['schools']]
+            clust_schools_coords = [sc.pos for sc in self.model.clusters_info[self.city_idx]['schools']]
             closest_school_idx = np.argmin([pdist([self.home_coords, sc_coord])
                                         for sc_coord in clust_schools_coords])
-            xs, ys = self.clusters_info[self.city_idx]['schools'][closest_school_idx].pos
+            xs, ys = self.model.clusters_info[self.city_idx]['schools'][closest_school_idx].pos
             # instantiate agent
             a = Simple_Language_Agent(self.model, id_, lang,
                                       home_coords=self.home_coords, school_coords=(xs, ys),
