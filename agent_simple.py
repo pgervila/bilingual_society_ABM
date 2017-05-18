@@ -126,7 +126,7 @@ class Simple_Language_Agent:
         self.model.grid.move_agent(self, chosen_cell)
 
     def reproduce(self, age_1=20, age_2=40):
-        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() > 1 - 5/20):
+        if (age_1 * 36 <= self.age <= age_2 * 36) and (self.num_children < 1) and (random.random() > 1 - 5/20):
             id_ = self.model.set_available_ids.pop()
             lang = self.language
             # find closest school to parent home
@@ -138,19 +138,22 @@ class Simple_Language_Agent:
             a = Simple_Language_Agent(self.model, id_, lang,
                                       home_coords=self.home_coords, school_coords=(xs, ys),
                                       job_coords=None, city_idx=self.city_idx)
+            # Add agent to model
             self.model.add_agent(a, self.pos)
-
+            # Update num of children
             self.num_children += 1
 
-    def simulate_random_death(self):  ##
+    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):  ##
+        # transform ages to steps
+        age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
         # define stochastic probability of agent death as function of age
-        if (self.age > 20) and (self.age <= 75):
-            if random.random() > (1 - 0.25 / 55):  # 25% pop will die through this period
+        if (self.age > age_1) and (self.age <= age_2):
+            if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
                 self.remove_after_death()
-        elif (self.age > 75) and (self.age < 90):
-            if random.random() > (1 - 0.70 / 15):  # 70% will die
+        elif (self.age > age_2) and (self.age < age_3):
+            if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
                 self.remove_after_death()
-        elif self.age >= 90:
+        elif self.age >= age_3:
             self.remove_after_death()
 
     def remove_after_death(self):

@@ -41,6 +41,7 @@ class StagedActivation_modif(StagedActivation):
         """ Executes all the stages for all agents. """
         for agent in self.agents[:]:
             agent.age += 1
+            agent.reproduce()
             for lang in ['L1', 'L2']:
                 # update last-time word use vector
                 agent.lang_stats[lang]['t'][~agent.day_mask[lang]] += 1
@@ -57,6 +58,9 @@ class StagedActivation_modif(StagedActivation):
             if self.shuffle_between_stages:
                 random.shuffle(self.agents)
             self.time += self.stage_time
+        # simulate death chance
+        for agent in self.agents[:]:
+            agent.simulate_random_death()
         self.steps += 1
 
 
@@ -304,7 +308,7 @@ class Simple_Language_Model(Model):
                                             for sc_coord in clust_schools_coords])
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1500,
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1000,
                                            home_coords=(x, y), school_coords=(xs, ys),
                                            job_coords=job.pos, city_idx=clust_idx)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
