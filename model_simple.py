@@ -308,9 +308,9 @@ class Simple_Language_Model(Model):
                                             for sc_coord in clust_schools_coords])
                 xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1000,
-                                           home_coords=(x, y), school_coords=(xs, ys),
-                                           job_coords=job.pos, city_idx=clust_idx)
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1000, home_coords=(x, y),
+                                           school_coords=(xs, ys), job_coords=job.pos, city_idx=clust_idx,
+                                           import_IC=True)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
                 self.add_agent(ag, (x, y))
 
@@ -347,7 +347,6 @@ class Simple_Language_Model(Model):
                 return 1
             else:
                 return 0
-
 
     def step(self):
         self.datacollector.collect(self)

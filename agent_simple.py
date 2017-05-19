@@ -14,7 +14,8 @@ class Simple_Language_Agent:
     k = np.log(10 / 9)
 
     def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025, age=0,
-                 num_children=0, home_coords=None, school_coords=None, job_coords=None, city_idx=None):
+                 num_children=0, home_coords=None, school_coords=None, job_coords=None, city_idx=None,
+                 import_IC=False):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
@@ -37,75 +38,87 @@ class Simple_Language_Agent:
         # define hours needed for agent to be able to converse in other language
         # -> 10 % of vocabulary ??? ENOUGH??
 
+        if import_IC:
+            if self.language == 0:
+                # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
+                self.lang_stats['L1']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'])
+                # S: numpy array(shape=vocab_size) that measures memory stability for each word
+                self.lang_stats['L1']['S'] = np.copy(self.model.lang_ICs['100_pct']['S'])
+                # compute R from t, S
+                self.lang_stats['L1']['R'] = np.exp( - self.k *
+                                                             self.lang_stats['L1']['t'] /
+                                                             self.lang_stats['L1']['S']
+                                                            ).astype(np.float64)
+                # word counter
+                self.lang_stats['L1']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'])
+                #L2
+                self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, 0.01)
+                self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, 1000)
+                self.lang_stats['L2']['R'] = np.exp( - self.k *
+                                                             self.lang_stats['L2']['t'] /
+                                                             self.lang_stats['L2']['S']
+                                                            ).astype(np.float32)
+                self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red)
+
+                for lang in ['L1', 'L2']:
+                    self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+                    self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                              self.model.vocab_red)
 
 
-        if self.language == 0:
-            # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
-            self.lang_stats['L1']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'])
-            # S: numpy array(shape=vocab_size) that measures memory stability for each word
-            self.lang_stats['L1']['S'] = np.copy(self.model.lang_ICs['100_pct']['S'])
-            # compute R from t, S
-            self.lang_stats['L1']['R'] = np.exp( - self.k *
-                                                         self.lang_stats['L1']['t'] /
-                                                         self.lang_stats['L1']['S']
+
+            elif self.language == 2:
+                self.lang_stats['L2']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'])
+                self.lang_stats['L2']['S'] = np.copy(self.model.lang_ICs['100_pct']['S'])
+                self.lang_stats['L2']['R'] = np.exp( - self.k *
+                                                               self.lang_stats['L2']['t'] /
+                                                               self.lang_stats['L2']['S']
+                                                            ).astype(np.float64)
+                self.lang_stats['L2']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'])
+
+                #L1
+                self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, 0.01)
+                self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, 1000)
+                self.lang_stats['L1']['R'] = np.exp( - self.k *
+                                                             self.lang_stats['L1']['t'] /
+                                                             self.lang_stats['L1']['S']
+                                                            ).astype(np.float64)
+                self.lang_stats['L1']['wc'] = np.zeros(self.model.vocab_red)
+
+                for lang in ['L1', 'L2']:
+                    self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
+                    self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                              self.model.vocab_red)
+
+
+            else: # BILINGUAL
+                biling_key = np.random.choice([25,50,75])
+                L1_key = str(biling_key) + '_pct'
+                L2_key = str(100 - biling_key) + '_pct'
+                for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
+                    self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[key]['t'])
+                    self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[key]['S'])
+                    self.lang_stats[lang]['R'] = np.exp(- self.k *
+                                                        self.lang_stats[lang]['t'] /
+                                                        self.lang_stats[lang]['S']
                                                         ).astype(np.float64)
-            # word counter
-            self.lang_stats['L1']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'])
-            #L2
-            self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, 0.01)
-            self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, 1000)
-            self.lang_stats['L2']['R'] = np.exp( - self.k *
-                                                         self.lang_stats['L2']['t'] /
-                                                         self.lang_stats['L2']['S']
-                                                        ).astype(np.float32)
-            self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red)
-
+                    self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[key]['wc'])
+                    self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+                    self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                              self.model.vocab_red)
+        else:
             for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
-
-
-
-        elif self.language == 2:
-            self.lang_stats['L2']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'])
-            self.lang_stats['L2']['S'] = np.copy(self.model.lang_ICs['100_pct']['S'])
-            self.lang_stats['L2']['R'] = np.exp( - self.k *
-                                                           self.lang_stats['L2']['t'] /
-                                                           self.lang_stats['L2']['S']
-                                                        ).astype(np.float64)
-            self.lang_stats['L2']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'])
-
-            #L2
-            self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, 0.01)
-            self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, 1000)
-            self.lang_stats['L1']['R'] = np.exp( - self.k *
-                                                         self.lang_stats['L1']['t'] /
-                                                         self.lang_stats['L1']['S']
-                                                        ).astype(np.float64)
-            self.lang_stats['L1']['wc'] = np.zeros(self.model.vocab_red)
-
-            for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype = np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
-
-
-        else: # BILINGUAL
-            biling_key = np.random.choice([25,50,75])
-            L1_key = str(biling_key) + '_pct'
-            L2_key = str(100 - biling_key) + '_pct'
-            for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
-                self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[key]['t'])
-                self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[key]['S'])
+                self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, 0.01)
+                self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, 1000)
                 self.lang_stats[lang]['R'] = np.exp(- self.k *
                                                     self.lang_stats[lang]['t'] /
                                                     self.lang_stats[lang]['S']
                                                     ).astype(np.float64)
-                self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[key]['wc'])
+                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
                 self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
                 self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           self.model.vocab_red)
+
 
 
     def move_random(self):
@@ -126,7 +139,8 @@ class Simple_Language_Agent:
         self.model.grid.move_agent(self, chosen_cell)
 
     def reproduce(self, age_1=20, age_2=40):
-        if (age_1 * 36 <= self.age <= age_2 * 36) and (self.num_children < 1) and (random.random() > 1 - 5/20):
+        age_1, age_2 = age_1 * 36, age_2 * 36
+        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() < 5/(age_2 - age_1)):
             id_ = self.model.set_available_ids.pop()
             lang = self.language
             # find closest school to parent home
@@ -135,8 +149,7 @@ class Simple_Language_Agent:
                                         for sc_coord in clust_schools_coords])
             xs, ys = self.model.clusters_info[self.city_idx]['schools'][closest_school_idx].pos
             # instantiate agent
-            a = Simple_Language_Agent(self.model, id_, lang,
-                                      home_coords=self.home_coords, school_coords=(xs, ys),
+            a = Simple_Language_Agent(self.model, id_, lang, home_coords=self.home_coords, school_coords=(xs, ys),
                                       job_coords=None, city_idx=self.city_idx)
             # Add agent to model
             self.model.add_agent(a, self.pos)
@@ -493,7 +506,7 @@ class Simple_Language_Agent:
         #self.listen()
 
     def stage_3(self):
-        if self.age < 100:
+        if self.age < 1000:
             self.model.grid.move_agent(self, self.school_coords)
             self.study_lang(0)
             self.study_lang(1)
