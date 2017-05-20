@@ -181,6 +181,16 @@ class Simple_Language_Agent:
         self.model.grid._remove_agent((x,y), self)
         self.model.schedule.remove(self)
 
+    def look_for_job(self):
+        # loop through shuffled job centers list until a job is found
+        np.random.shuffle(self.model.clusters_info[self.city_idx]['jobs'])
+        for job_c in self.model.clusters_info[self.city_idx]['jobs']:
+            if job_c.num_places:
+                job_c.num_places -= 1
+                self.job_coords = job_c.pos
+                break
+
+
     def speak(self, with_agent=None):
         """ Pick random lang_agent from current cell and start a conversation
             with it. It updates heard words in order to shape future vocab.
@@ -441,14 +451,19 @@ class Simple_Language_Agent:
         #self.listen()
 
     def stage_3(self):
-        if self.age < 1000:
+        if self.age < 720:
             self.model.grid.move_agent(self, self.school_coords)
             self.study_lang(0)
             self.study_lang(1)
             self.speak()
         else:
-            self.model.grid.move_agent(self, self.job_coords)
-            self.speak()
+            if self.job_coords:
+                self.model.grid.move_agent(self, self.job_coords)
+                self.speak()
+                self.speak()
+            else:
+                self.look_for_job()
+                self.speak()
 
     def stage_4(self):
         self.move_random()
