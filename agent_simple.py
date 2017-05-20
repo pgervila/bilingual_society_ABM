@@ -32,12 +32,6 @@ class Simple_Language_Agent:
         self.day_mask = {'L1':np.zeros(self.model.vocab_red, dtype=np.bool),
                          'L2':np.zeros(self.model.vocab_red, dtype=np.bool)}
 
-
-        # Add randomness to number of hours needed to learn second language
-        #-> See min_mem_times arg in update_lang_arrays method
-        # define hours needed for agent to be able to converse in other language
-        # -> 10 % of vocabulary ??? ENOUGH??
-
         if import_IC:
             if self.language == 0:
                 # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
@@ -301,12 +295,13 @@ class Simple_Language_Agent:
         """ Computes number of words spoken per conversation for a given age
             If conversation=False, computes average number of words per day,
             assuming 16000 tokens per adult per day as average """
-        if self.age < 36 * age_1:
+        age_1, age_2 = 36 * age_1, 36 * age_2
+        if self.age < age_1:
             factor = 2.5 + 100 * np.exp(-0.014 * self.age)
-        elif 36 * age_1 <= self.age <= 36 * age_2:
+        elif age_1 <= self.age <= age_2:
             factor = 2.5
         else:
-            factor = 1.5 + np.exp(0.002 * (self.age - 36 * age_2))
+            factor = 1.5 + np.exp(0.002 * (self.age - age_2))
 
         if long:
             return self.model.num_words_conv[1] / factor
@@ -382,7 +377,6 @@ class Simple_Language_Agent:
             #self.lang_stats[lang]['t'][~mask] += 1  # add ones to last activation time counter if word not act
             self.lang_stats[lang]['t'][self.day_mask[lang]] = 0  # set last activation time counter to one if word act
 
-
         # compute memory retrievability R from t, S
         self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
@@ -416,60 +410,15 @@ class Simple_Language_Agent:
         # call listener's update
         ag2.update_lang_arrays(lang, spoken_words, speak=False)
 
-
         # TODO: NOW NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???
         if return_values:
             return spoken_words
-
-    def update_lang_pcts(self):
-
-        freqs_s = self.lang_stats['s']['LT']['freqs']
-        freqs_l = self.lang_stats['l']['LT']['freqs']
-
-        self.lang_stats['s']['LT']['L2_pct'] = round(freqs_s[1] / sum(freqs_s), 2)
-        self.lang_stats['l']['LT']['L2_pct'] = round(freqs_l[1] / sum(freqs_l), 2)
-
-        a = np.array(self.lang_stats['s']['ST']['freqs'])
-        np.average(np.around(a[0] / (a[0] + a[1]), 2), weights=a[0] + a[1])
 
     def update_lang_switch(self, switch_threshold=0.1):
         """Switch to a new linguistic regime whn threshold is reached
            If language knowledge falls below switch_threshold value, agent
            becomes monolingual"""
 
-        # days_per_year = 365
-        # max_lang_h_day = 16
-        # max_words_per_day = 50 # saturation value
-        # lang_hours_per_day = (max_lang_h_day *
-        #                      (sum(self.lang_stats['l']['LT']['freqs']) + sum(self.lang_stats['s']['LT']['freqs'])) /
-        #                      (self.model.schedule.steps + max_words_per_day))
-        # steps_per_year = 36.5
-        # pct = (self.lang_stats['l']['LT']['L2_pct'] + self.lang_stats['s']['LT']['L2_pct'])
-        # if self.model.schedule.steps > self.lang_stats['maxmem']:
-        #     if self.language == 0:
-        #         num_hours_L2 = (pct * days_per_year *
-        #                         lang_hours_per_day * self.model.schedule.steps) / steps_per_year
-        #         if num_hours_L2 >= self.lang_stats['learning_hours']:
-        #             self.language = 1
-        #     elif self.language == 2:
-        #         pct = 1 - pct
-        #         num_hours_L1 = (pct * days_per_year *
-        #                         lang_hours_per_day * self.model.schedule.steps) / steps_per_year
-        #         if num_hours_L1 >= self.lang_stats['learning_hours']:
-        #             self.language = 1
-        #     else: # LANGUAGE ATTRITION
-        #
-        #         if pct:
-        #             pass
-        #
-        #
-        #
-        #         if self.lang_stats['l']['LT']['L2_pct'] >= 0.8:
-        #             if 0 not in self.lang_stats['s']['ST']['freqs']:
-        #                 self.language = 2
-        #         elif self.lang_stats['l']['LT']['L2_pct'] <= 0.2:
-        #             if 1 not in self.lang_stats['s']['ST']['freqs']:
-        #                 self.language = 0
         if self.language == 0:
             if self.lang_stats['L2']['pct'][self.age] >= switch_threshold:
                 self.language = 1
@@ -481,20 +430,6 @@ class Simple_Language_Agent:
                 self.language == 2
             elif self.lang_stats['L2']['pct'][self.age] < switch_threshold:
                 self.language == 0
-
-
-
-
-
-
-
-
-
-    def update_lang_status(self):
-        # update lang experience
-        self.update_lang_pcts()
-        # check lang switch
-        self.update_lang_switch()
 
     def stage_1(self):
         self.speak()
@@ -526,10 +461,10 @@ class Simple_Language_Agent:
                 self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] >= 0.01,
                                                       self.lang_stats[lang]['S'] - 0.01,
                                                       0.000001)
-        # update at the end of each step
-        for lang in ['L1', 'L2']:
-            self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                      self.model.vocab_red)
+        # Update at the end of each step
+        # for lang in ['L1', 'L2']:
+        #     self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+        #                                               self.model.vocab_red)
 
     def __repr__(self):
         return 'Lang_Agent_{0.unique_id!r}'.format(self)

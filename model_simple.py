@@ -49,6 +49,7 @@ class StagedActivation_modif(StagedActivation):
                 agent.lang_stats[lang]['pct'][agent.age] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                             agent.model.vocab_red)
                 agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
+            # Update lang switch
             agent.update_lang_switch()
         if self.shuffle:
             random.shuffle(self.agents)
@@ -83,7 +84,7 @@ class Simple_Language_Model(Model):
         self.cluster_sizes = None
 
         # import lang ICs and lang CDFs data as step function
-        self.lang_ICs = dd.io.load('IC_lang_1500_steps.h5')
+        self.lang_ICs = dd.io.load('IC_lang_ONLY_SPOKEN_1000_steps.h5')
         self.cdf_data = dd.io.load('cdfs_3R_vs_step.h5')
 
         # define grid and schedule
