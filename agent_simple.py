@@ -190,7 +190,6 @@ class Simple_Language_Agent:
                 self.job_coords = job_c.pos
                 break
 
-
     def speak(self, with_agent=None):
         """ Pick random lang_agent from current cell and start a conversation
             with it. It updates heard words in order to shape future vocab.
