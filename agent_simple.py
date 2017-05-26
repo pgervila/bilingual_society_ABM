@@ -190,7 +190,7 @@ class Simple_Language_Agent:
                 self.job_coords = job_c.pos
                 break
 
-    def speak(self, with_agent=None):
+    def speak(self, with_agent=None, lang=None):
         """ Pick random lang_agent from current cell and start a conversation
             with it. It updates heard words in order to shape future vocab.
             Language of the conversation is determined by given laws
@@ -215,7 +215,12 @@ class Simple_Language_Agent:
                 other = random.choice(others)
                 self.get_conversation_lang(self, other)
         else:
-            self.get_conversation_lang(self, with_agent)
+            if not lang:
+                self.get_conversation_lang(self, with_agent)
+            else:
+                self.speak_choice_model(lang, with_agent)
+                with_agent.speak_choice_model(lang, self)
+
 
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
@@ -468,7 +473,13 @@ class Simple_Language_Agent:
         self.move_random()
         self.speak()
         self.model.grid.move_agent(self, self.home_coords)
-        self.speak()
+        try:
+            for key in self.model.family_network[self]:
+                if key.pos == self.home_coords:
+                    lang = self.model.family_network[self][key]['lang']
+                    self.speak(with_agent=key, lang=lang)
+        except:
+            pass
         # memory becomes ever shakier after turning 65...
         if self.age > 65 * 36:
             for lang in ['L1', 'L2']:
