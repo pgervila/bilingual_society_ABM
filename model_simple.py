@@ -66,11 +66,14 @@ class StagedActivation_modif(StagedActivation):
 
 
 class Simple_Language_Model(Model):
-    def __init__(self, num_people, vocab_red=1000, num_words_conv=(3, 25), width=5, height=5, max_people_factor=5,
-                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000,
-                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
+    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25), width=5, height=5, max_people_factor=5,
+                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000, lang_ags_sorted_by_dist=True,
+                 lang_ags_sorted_in_clust=True):
         self.num_people = num_people
-        self.vocab_red = vocab_red
+        if spoken_only:
+            self.vocab_red = 500
+        else:
+            self.vocab_red = 1000
         self.num_words_conv = num_words_conv
         self.grid_width = width
         self.grid_height = height
