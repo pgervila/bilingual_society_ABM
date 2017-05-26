@@ -129,6 +129,11 @@ class Simple_Language_Model(Model):
         self.generate_schools()
         self.generate_agents()
 
+
+        # DEFINE FAMILY NETWORKS
+        self.define_family_networks()
+
+
         # DATA COLLECTOR
         self.datacollector = DataCollector(
             model_reporters={"count_spa": lambda m: m.get_lang_stats(0),
@@ -140,6 +145,67 @@ class Simple_Language_Model(Model):
             agent_reporters={"pct_cat_in_biling": lambda a:a.lang_stats['L2']['pct'][a.age],
                              "pct_spa_in_biling": lambda a:a.lang_stats['L1']['pct'][a.age]}
         )
+
+    def define_family_networks(self):
+        # define families
+        # marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
+        family_size = 4
+        for family in zip(*[iter(sorted(self.schedule.agents, key=lambda ag:ag.language))] *
+                          family_size):
+            graph_fam = self.family_network
+            family[0].age, family[1].age = np.random.randint(40, 60, size=2)
+            family[2].age, family[3].age = np.random.randint(10, 20, size=2)
+
+            # find out lang btw family members
+            # consorts
+            if (family[0].language, family[1].language) in [(0, 0), (0, 1), (1, 0)]:
+                lang_consorts = 0
+            elif (family[0].language, family[1].language) in [(2, 1), (1, 2), (2, 2)]:
+                lang_consorts = 1
+            elif (family[0].language, family[1].language) == (1, 1):
+                p1 = family[0].lang_freq['cat_pct_s']
+                p2 = family[1].lang_freq['cat_pct_s']
+                if all(x >= 0.5 for x in (p1, p2)):
+                    if p1 > 0.5 or p2 > 0.5:
+                        lang_consorts = 1
+                    else:
+                        lang_consorts = random.choice([0, 1])
+                elif all(x <= 0.5 for x in (p1, p2)):
+                    lang_consorts = 0
+                else:
+                    delta_abs = np.abs([p1 - 0.5, p2 - 0.5])
+                    most_distant_agent = np.argmax(delta_abs)
+                    if family[most_distant_agent].lang_freq['cat_pct_s'] > 0.5:
+                        lang_consorts = 1
+                    else:
+                        lang_consorts = 0
+
+            # parent, mother
+            lang_with_father = np.random.binomial(1,family[0].lang_freq['cat_pct_s'])
+            lang_with_mother = np.random.binomial(1,family[1].lang_freq['cat_pct_s'])
+
+            #siblings
+            avg_lang = (lang_with_father + lang_with_mother) / 2
+            if avg_lang == 0:
+                lang_siblings = 0
+            elif avg_lang == 1:
+                lang_siblings = 1
+            else:
+                avg = (family[0].lang_freq['cat_pct_s'] + family[1].lang_freq['cat_pct_s']) / 2
+                lang_siblings = np.random.binomial(1, avg)
+
+            graph_fam.add_edge(family[0], family[1], fam_link='consort', lang=lang_consorts)
+            graph_fam.add_edge(family[1], family[0], fam_link='consort', lang=lang_consorts)
+            graph_fam.add_edge(family[0], family[2], fam_link='child', lang=lang_with_father)
+            graph_fam.add_edge(family[2], family[0], fam_link='father', lang=lang_with_father)
+            graph_fam.add_edge(family[0], family[3], fam_link='child', lang=lang_with_father)
+            graph_fam.add_edge(family[3], family[0], fam_link='father', lang=lang_with_father)
+            graph_fam.add_edge(family[1], family[2], fam_link='child', lang=lang_with_mother)
+            graph_fam.add_edge(family[2], family[1], fam_link='mother', lang=lang_with_mother)
+            graph_fam.add_edge(family[1], family[3], fam_link='child', lang=lang_with_mother)
+            graph_fam.add_edge(family[3], family[1], fam_link='mother', lang=lang_with_mother)
+            graph_fam.add_edge(family[2], family[3], fam_link='sibling', lang=lang_siblings)
+            graph_fam.add_edge(family[3], family[2], fam_link='sibling', lang=lang_siblings)
 
     def add_agent(self, a, coords):
         """Method to add a given agent to grid, schedule and system networks
@@ -352,6 +418,7 @@ class Simple_Language_Model(Model):
             else:
                 return 0
 
+
     def step(self):
         self.datacollector.collect(self)
         self.schedule.step()
@@ -550,6 +617,16 @@ class Simple_Language_Model(Model):
 
     def load_model_data(self, data_filename, key='/' ):
         return dd.io.load(data_filename,key)
+
+    def plot_family_networks(self):
+        """PLOT NETWORK with lang colors and position"""
+        #        people_pos = [elem.pos for elem in self.schedule.agents if elem.agent_type == 'language']
+        #        # Following works because lang agents are added before other agent types
+        #        people_pos_dict= dict(zip(self.schedule.agents, people_pos))
+        people_pos_dict = {elem: elem.pos
+                           for elem in self.schedule.agents}
+        people_color = [elem.language for elem in self.family_network]
+        nx.draw(self.family_network, pos=people_pos_dict, node_color=people_color)
 
 
 
