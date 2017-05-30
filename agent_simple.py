@@ -146,7 +146,7 @@ class Simple_Language_Agent:
             a = Simple_Language_Agent(self.model, id_, lang, home_coords=self.home_coords, school_coords=(xs, ys),
                                       job_coords=None, city_idx=self.city_idx)
             # Add agent to model
-            self.model.add_agent(a, self.pos)
+            self.model.add_agent(a)
             # Update num of children
             self.num_children += 1
 
