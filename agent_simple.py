@@ -14,24 +14,24 @@ class Simple_Language_Agent:
     k = np.log(10 / 9)
 
     def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025, age=0,
-                 num_children=0, home_coords=None, school_coords=None, job_coords=None, city_idx=None,
-                 import_IC=False):
+                 num_children=0, ag_home=None, ag_school=None, ag_job=None, city_idx=None, import_IC=False):
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.lang_thresholds = {'speak':lang_act_thresh, 'understand':lang_passive_thresh}
         self.age = age
         self.num_children = num_children
-        self.home_coords = home_coords
-        self.school_coords = school_coords
-        self.job_coords = job_coords
-        self.city_idx = city_idx
+
+        self.loc_info = {'home':ag_home, 'school':ag_school, 'job':ag_job, 'city_idx':city_idx}
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
         self.day_mask = {'L1':np.zeros(self.model.vocab_red, dtype=np.bool),
                          'L2':np.zeros(self.model.vocab_red, dtype=np.bool)}
 
+        # lang memory parameters init values
+        S_0 = 0.01
+        t_0 = 1000
         if import_IC:
             if self.language == 0:
                 # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
@@ -40,14 +40,14 @@ class Simple_Language_Agent:
                 self.lang_stats['L1']['S'] = np.copy(self.model.lang_ICs['100_pct']['S'][self.age])
                 # compute R from t, S
                 self.lang_stats['L1']['R'] = np.exp( - self.k *
-                                                             self.lang_stats['L1']['t'] /
-                                                             self.lang_stats['L1']['S']
-                                                            ).astype(np.float64)
+                                                     self.lang_stats['L1']['t'] /
+                                                     self.lang_stats['L1']['S']
+                                                    ).astype(np.float64)
                 # word counter
                 self.lang_stats['L1']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'][self.age])
                 #L2
-                self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, 0.01)
-                self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, 1000)
+                self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, S_0)
+                self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, t_0)
                 self.lang_stats['L2']['R'] = np.exp( - self.k *
                                                              self.lang_stats['L2']['t'] /
                                                              self.lang_stats['L2']['S']
@@ -71,8 +71,8 @@ class Simple_Language_Agent:
                 self.lang_stats['L2']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'][self.age])
 
                 #L1
-                self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, 0.01)
-                self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, 1000)
+                self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, S_0)
+                self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, t_0)
                 self.lang_stats['L1']['R'] = np.exp( - self.k *
                                                      self.lang_stats['L1']['t'] /
                                                      self.lang_stats['L1']['S']
@@ -102,8 +102,8 @@ class Simple_Language_Agent:
                                                               self.model.vocab_red)
         else:
             for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, 0.01)
-                self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, 1000)
+                self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0)
+                self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0)
                 self.lang_stats[lang]['R'] = np.exp(- self.k *
                                                     self.lang_stats[lang]['t'] /
                                                     self.lang_stats[lang]['S']
@@ -138,13 +138,15 @@ class Simple_Language_Agent:
             id_ = self.model.set_available_ids.pop()
             lang = self.language
             # find closest school to parent home
-            clust_schools_coords = [sc.pos for sc in self.model.clusters_info[self.city_idx]['schools']]
-            closest_school_idx = np.argmin([pdist([self.home_coords, sc_coord])
-                                        for sc_coord in clust_schools_coords])
-            xs, ys = self.model.clusters_info[self.city_idx]['schools'][closest_school_idx].pos
+            city_idx = self.loc_info['city_idx']
+            clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
+            closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
+                                            for sc_coord in clust_schools_coords])
             # instantiate agent
-            a = Simple_Language_Agent(self.model, id_, lang, home_coords=self.home_coords, school_coords=(xs, ys),
-                                      job_coords=None, city_idx=self.city_idx)
+            a = Simple_Language_Agent(self.model, id_, lang, ag_home=self.loc_info['home'],
+                                      ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
+                                      ag_job=None,
+                                      city_idx=self.loc_info['city_idx'])
             # Add agent to model
             self.model.add_agent(a)
             # Update num of children
@@ -183,11 +185,11 @@ class Simple_Language_Agent:
 
     def look_for_job(self):
         # loop through shuffled job centers list until a job is found
-        np.random.shuffle(self.model.clusters_info[self.city_idx]['jobs'])
-        for job_c in self.model.clusters_info[self.city_idx]['jobs']:
+        np.random.shuffle(self.model.clusters_info[self.loc_info['city_idx']]['jobs'])
+        for job_c in self.model.clusters_info[self.loc_info['city_idx']]['jobs']:
             if job_c.num_places:
                 job_c.num_places -= 1
-                self.job_coords = job_c.pos
+                self.loc_info['job'] = job_c
                 break
 
     def speak(self, with_agent=None, lang=None):
@@ -456,13 +458,13 @@ class Simple_Language_Agent:
 
     def stage_3(self):
         if self.age < 720:
-            self.model.grid.move_agent(self, self.school_coords)
+            self.model.grid.move_agent(self, self.loc_info['school'].pos)
             self.study_lang(0)
             self.study_lang(1)
             self.speak()
         else:
-            if self.job_coords:
-                self.model.grid.move_agent(self, self.job_coords)
+            if self.loc_info['job']:
+                self.model.grid.move_agent(self, self.loc_info['job'].pos)
                 self.speak()
                 self.speak()
             else:
@@ -472,10 +474,10 @@ class Simple_Language_Agent:
     def stage_4(self):
         self.move_random()
         self.speak()
-        self.model.grid.move_agent(self, self.home_coords)
+        self.model.grid.move_agent(self, self.loc_info['home'].pos)
         try:
             for key in self.model.family_network[self]:
-                if key.pos == self.home_coords:
+                if key.pos == self.loc_info['home'].pos:
                     lang = self.model.family_network[self][key]['lang']
                     self.speak(with_agent=key, lang=lang)
         except:

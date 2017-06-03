@@ -125,8 +125,8 @@ class Simple_Language_Model(Model):
         self.family_network = nx.DiGraph()
 
         # ADD ALL AGENTS TO GRID AND SCHEDULE
-        self.generate_jobs()
-        self.generate_schools()
+        self.map_jobs()
+        self.map_schools()
         self.map_lang_agents()
 
 
@@ -220,7 +220,6 @@ class Simple_Language_Model(Model):
 
         return x_coords, y_coords
 
-
     def set_clusters_info(self):
         """ Create dict container for all cluster info"""
         self.clusters_info = defaultdict(dict)
@@ -229,15 +228,15 @@ class Simple_Language_Model(Model):
             self.clusters_info[idx]['num_agents'] = clust_size
             self.clusters_info[idx]['jobs'] = []
             self.clusters_info[idx]['schools'] = []
+            self.clusters_info[idx]['homes'] = []
             self.clusters_info[idx]['agents_id'] = []
 
-    def generate_jobs(self, num_job_c_per_agent=0.1, pct_agents_with_job=5, min_places=2, max_places=200):
+    def map_jobs(self, num_job_c_per_agent=0.1, pct_agents_with_job=5, min_places=2, max_places=200):
         """ Generates job centers coordinates and num places per center
         Args:
-            * job_c_per_agent: float. Number of jobs centers expressed as percentage of number of agents
+            * num_job_c_per_agent: float. Number of jobs centers expressed as percentage of number of agents
             * min_places: integer. Minimum number of places for each job center
             * max_places: integer. Maximum number of places for each job center
-
         """
         # iterate to generate job center coordinates
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
@@ -259,7 +258,7 @@ class Simple_Language_Model(Model):
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
                 self.clusters_info[clust_idx]['jobs'].append(Job((x,y), num_places))
 
-    def generate_schools(self, schools_per_agent=0.05, school_size=100):
+    def map_schools(self, schools_per_agent=0.05, school_size=100):
         """ Generate coordinates for school centers and instantiate school objects
             Args:
                 * Schools_per_agent: number of schools in cluster as percentage of num agents in cluster
@@ -274,12 +273,11 @@ class Simple_Language_Model(Model):
                 school_p_coords = sorted(list(zip(x_s, y_s)), key=lambda p:pdist([p, c_coords]))
                 x_s, y_s = list(zip(*school_p_coords))
 
-            for x,y in zip(x_s,y_s):
+            for x,y in zip(x_s, y_s):
                 self.clusters_info[clust_idx]['schools'].append(School((x,y), school_size))
 
     def map_lang_agents(self):
         """ Method to instantiate all agents
-
         Arguments:
             * sort_lang_types_by_dist: boolean to specify
                 if agents must be sorted by distance to global origin
@@ -314,16 +312,18 @@ class Simple_Language_Model(Model):
             #
             for ag_lang, x, y in zip(langs_per_clust[clust_idx], x_ags, y_ags):
                 # get closest school given agent coordinates
-                closest_school = np.argmin([pdist([(x,y), sc_coord])
+                closest_school_idx = np.argmin([pdist([(x,y), sc_coord])
                                             for sc_coord in clust_schools_coords])
-                xs, ys = self.clusters_info[clust_idx]['schools'][closest_school].pos
+                school = self.clusters_info[clust_idx]['schools'][closest_school_idx]
                 # get random job
                 job = random.choice(self.clusters_info[clust_idx]['jobs'])
+                # instantiate home
+                home = Home((x, y))
                 # instantiate agent
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1000, home_coords=(x, y),
-                                           school_coords=(xs, ys), job_coords=job.pos, city_idx=clust_idx,
-                                           import_IC=True)
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1000, ag_home=home, ag_school=school,
+                                           ag_job=job, city_idx=clust_idx, import_IC=True)
                 self.clusters_info[clust_idx]['agents_id'].append(ag.unique_id)
+                self.clusters_info[clust_idx]['homes'].append(Home((x, y)))
                 # add agent
                 self.add_agent(ag)
 
@@ -336,7 +336,7 @@ class Simple_Language_Model(Model):
         """
         # add agent to grid and schedule
         self.schedule.add(a)
-        self.grid.place_agent(a, a.home_coords)
+        self.grid.place_agent(a, a.loc_info['home'].pos)
         ## add agent node to all networks
         self.known_people_network.add_node(a)
         self.friendship_network.add_node(a)
