@@ -87,7 +87,7 @@ class Simple_Language_Model(Model):
         self.cluster_sizes = None
 
         # import lang ICs and lang CDFs data as step function
-        self.lang_ICs = dd.io.load('IC_lang_ONLY_SPOKEN_1000_steps.h5')
+        self.lang_ICs = dd.io.load('IC_lang_SPOKEN_all_steps.h5')
         self.cdf_data = dd.io.load('cdfs_3R_vs_step.h5')
 
         # define grid and schedule
