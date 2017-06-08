@@ -46,7 +46,14 @@ class Simple_Language_Agent:
                                                           self.model.vocab_red)
 
     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
-        """ set agent's language Initial Conditions"""
+        """ set agent's linguistic Initial Conditions
+        Args:
+            * S_0: float <= 1. Initial memory intensity
+            * t_0: last-activation days counter
+            * biling_key: integer from [10,25,50,75,90,100]. Specify only if
+            specific bilingual level is needed as input
+        """
+
         if self.language == 0:
             # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
             self.lang_stats['L1']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'][self.age])

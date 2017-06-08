@@ -251,18 +251,20 @@ class Simple_Language_Model(Model):
         x_coords, y_coords = list(zip(*sorted_coords))
         return x_coords, y_coords
 
-    def map_jobs(self, num_job_cs_per_agent=0.1, min_places=2, max_places=200):
+    def map_jobs(self, min_places=2, max_places=200):
         """ Generates job centers coordinates and num places per center
         Args:
-            * num_job_cs_per_agent: float. Number of jobs centers expressed as percentage of number of agents
             * min_places: integer. Minimum number of places for each job center
             * max_places: integer. Maximum number of places for each job center
         """
         # iterate to generate job center coordinates
+
+        num_job_cs_per_agent = self.max_people_factor / ((max_places - min_places)/2)
+
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
             x_j, y_j = self.generate_cluster_points_coords(clust_c_coords,
-                                                           int(clust_size * num_job_cs_per_agent))
+                                                           ceil(clust_size * num_job_cs_per_agent))
             if (not self.lang_ags_sorted_by_dist) and self.lang_ags_sorted_in_clust:
                 x_j, y_j = self.sort_coords_in_clust(x_j, y_j, clust_idx)
 
@@ -276,29 +278,31 @@ class Simple_Language_Model(Model):
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
                 self.clusters_info[clust_idx]['jobs'].append(Job((x,y), num_places))
 
-    def map_schools(self, num_schools_per_agent=0.05, school_size=100):
+    def map_schools(self, school_size=100):
         """ Generate coordinates for school centers and instantiate school objects
             Args:
-                * Schools_per_agent: number of schools in cluster as percentage of num agents in cluster
                 * school_size: fixed size of all schools generated
         """
+        num_schools_per_agent = self.max_people_factor / school_size
+
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
             x_s, y_s = self.generate_cluster_points_coords(clust_c_coords,
-                                                           int(clust_size * num_schools_per_agent))
+                                                           ceil(clust_size * num_schools_per_agent))
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 x_s, y_s = self.sort_coords_in_clust(x_s, y_s, clust_idx)
             for x,y in zip(x_s, y_s):
                 self.clusters_info[clust_idx]['schools'].append(School((x,y), school_size))
 
-    def map_homes(self, avg_num_people_per_home=4):
+    def map_homes(self, num_people_per_home=4):
         """ Generate coordinates for agent homes and instantiate Home objects"""
+
+        num_homes_per_agent = self.max_people_factor / num_people_per_home
+
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
             x_h, y_h = self.generate_cluster_points_coords(clust_c_coords,
-                                                           int(clust_size *
-                                                               self.max_people_factor /
-                                                               avg_num_people_per_home))
+                                                           ceil(clust_size * num_homes_per_agent))
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 x_h, y_h = self.sort_coords_in_clust(x_h, y_h, clust_idx)
             for x,y in zip(x_h, y_h):
