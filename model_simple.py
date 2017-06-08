@@ -303,10 +303,38 @@ class Simple_Language_Model(Model):
                                                                      self.clust_centers)):
             x_h, y_h = self.generate_cluster_points_coords(clust_c_coords,
                                                            ceil(clust_size * num_homes_per_agent))
+            # check if sorting within cluster is requested
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 x_h, y_h = self.sort_coords_in_clust(x_h, y_h, clust_idx)
-            for x,y in zip(x_h, y_h):
+            for x, y in zip(x_h, y_h):
                 self.clusters_info[clust_idx]['homes'].append(Home((x,y)))
+
+    def generate_lang_distrib(self):
+        # generate random array with lang labels ( no sorting at all )
+        langs_per_ag_array = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
+        idxs_to_split_by_clust = self.cluster_sizes.cumsum()[:-1]
+        # check if agent sorting by distance to origin is requested
+        if self.lang_ags_sorted_by_dist:
+            langs_per_ag_array.sort()
+            # split lang labels by cluster
+            langs_per_clust = np.split(langs_per_ag_array, idxs_to_split_by_clust)
+            if not self.lang_ags_sorted_in_clust:
+                for clust in langs_per_clust:
+                    random.shuffle(clust)
+        else:
+            # split lang labels by cluster
+            langs_per_clust = np.split(langs_per_ag_array, idxs_to_split_by_clust)
+            # check if sorting within cluster is requested
+            if self.lang_ags_sorted_in_clust:
+                for clust in langs_per_clust:
+                    clust.sort()  # invert if needed
+            else:
+                for clust in langs_per_clust:
+                    clust.sort()
+                    clust_subsorted_by_groups = []
+                    for lang_group in zip(*[iter(clust)] * 4):
+                        clust_subsorted_by_groups.append(lang_group)
+                        clust[:] = [val for group in clust_subsorted_by_groups for val in group]
 
     def map_lang_agents(self):
         """ Method to instantiate all agents
@@ -331,6 +359,7 @@ class Simple_Language_Model(Model):
         ids = set(range(self.num_people))
         #start mapping
         for clust_idx, clust_info in self.clusters_info.items():
+            # iterate on homes within cluster
             for ag_lang, home in zip(langs_per_clust[clust_idx], clust_info['homes']):
                 # get random job from cluster
                 job = random.choice(clust_info['jobs'])
