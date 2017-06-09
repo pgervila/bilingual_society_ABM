@@ -230,7 +230,7 @@ class Simple_Language_Model(Model):
             self.clusters_info[idx]['jobs'] = []
             self.clusters_info[idx]['schools'] = []
             self.clusters_info[idx]['homes'] = []
-            self.clusters_info[idx]['agents_id'] = []
+            self.clusters_info[idx]['agents'] = []
 
     def sort_coords_in_clust(self, x_coords, y_coords, clust_idx):
         """ Method that sorts a collection of x and y cluster coordinates
@@ -328,6 +328,7 @@ class Simple_Language_Model(Model):
             if self.lang_ags_sorted_in_clust:
                 for clust in langs_per_clust:
                     clust.sort()  # invert if needed
+            # if no clust sorting, need to cluster langs by groups of 4 for easier family definition
             else:
                 for clust in langs_per_clust:
                     clust.sort()
@@ -335,51 +336,35 @@ class Simple_Language_Model(Model):
                     for lang_group in zip(*[iter(clust)] * 4):
                         clust_subsorted_by_groups.append(lang_group)
                         clust[:] = [val for group in clust_subsorted_by_groups for val in group]
+        return langs_per_clust
 
     def map_lang_agents(self):
-        """ Method to instantiate all agents
-        Arguments:
-            * sort_lang_types_by_dist: boolean to specify
-                if agents must be sorted by distance to global origin
-            * sort_sub_types_within_clust: boolean to specify
-                if agents must be sorted by distance to center of cluster they belong to
-            """
-        # generate random array with lang labels ( no sorting at all )
-        langs_per_ag_array = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
-        idxs_to_split_by_clust = self.cluster_sizes.cumsum()[:-1]
-        # check if agent sorting by distance to origin is requested
-        if self.lang_ags_sorted_by_dist:
-            langs_per_ag_array.sort()
-        # split lang labels by cluster
-        langs_per_clust = np.split(langs_per_ag_array, idxs_to_split_by_clust)
-        # check if sorting within cluster is requested
-        if (not self.lang_ags_sorted_by_dist) and self.lang_ags_sorted_in_clust:
-            for subarray in langs_per_clust:
-                subarray.sort()  # invert if needed
+        """ Method to instantiate all agents"""
+        # get lang distribution for each cluster
+        langs_per_clust = self.generate_lang_distrib()
+        # set agents ids
         ids = set(range(self.num_people))
-        #start mapping
+        # generate agents
         for clust_idx, clust_info in self.clusters_info.items():
-            # iterate on homes within cluster
-            for ag_lang, home in zip(langs_per_clust[clust_idx], clust_info['homes']):
-                # get random job from cluster
-                job = random.choice(clust_info['jobs'])
-                # instantiate agent
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, age=1000, ag_home=home,
-                                           ag_job=job, city_idx=clust_idx, import_IC=True)
-                clust_info['agents_id'].append(ag.unique_id)
+            for ag_lang, home in langs_per_clust[clust_idx]:
+                # instantiate agent with no job, school and home specified
+                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, city_idx=clust_idx, import_IC=False)
+                clust_info['agents'].append(ag)
                 # add agent to schedule, grid and networks
                 self.add_agent(ag)
 
     def add_agent(self, a):
         """Method to add a given agent to grid, schedule and system networks
-
         Arguments:
             * a : agent class instance
             * coords : agent location on grid (2-D tuple of integers)
         """
         # add agent to grid and schedule
         self.schedule.add(a)
-        self.grid.place_agent(a, a.loc_info['home'].pos)
+        if a.loc_info['home']:
+            self.grid.place_agent(a, a.loc_info['home'].pos)
+        else:
+            self.grid.place_agent()
         ## add agent node to all networks
         self.known_people_network.add_node(a)
         self.friendship_network.add_node(a)
@@ -389,6 +374,53 @@ class Simple_Language_Model(Model):
         # define families
         # marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
         family_size = 4
+
+        graph_fam = self.family_network
+
+        for clust_idx, clust_info in self.clusters_info.items():
+            for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * family_size)):
+
+                family[0].age, family[1].age = np.random.randint(40, 60, size=2)
+                family[2].age, family[3].age = np.random.randint(10, 20, size=2)
+
+                #import ICs
+                for member in family:
+                    member.set_lang_ics()
+
+                # assign same home to family
+                home = clust_info['homes'][idx]
+                for member in family:
+                    member.loc_info['home'] = home
+
+
+                # assign job to parents
+                for parent in family[:2]:
+                    while True:
+                        job = np.random.choice(clust_info['jobs'])
+                        if job.num_places:
+                            job.num_places -= 1
+                            parent.loc_info['job'] = job
+                            break
+                # assign school to children
+                for child in family[2:]:
+                    closest_school_idx = np.argmin([pdist([(x, y), sc_coord])
+                                                    for sc_coord in clust_schools_coords])
+                    school = self.clusters_info[clust_idx]['schools'][closest_school_idx]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         for family in zip(*[iter(sorted(self.schedule.agents, key=lambda ag:ag.language))] *
                           family_size):
             graph_fam = self.family_network
