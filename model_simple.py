@@ -394,13 +394,14 @@ class Simple_Language_Model(Model):
                 min_age, max_age = 10 * steps_per_year, 20 * steps_per_year
                 family[2].age, family[3].age = np.random.randint(min_age, max_age, size=2)
 
-                #import ICs
+                #import ICs # TODO: set some proportionality constraints parent-children in bilingual cases
                 for member in family:
                     member.set_lang_ics()
                 # assign same home to family
                 home = clust_info['homes'][idx]
                 for member in family:
                     member.loc_info['home'] = home
+                    home.agents_in.add(member)
                 # assign job to parents
                 for parent in family[:2]:
                     while True:
@@ -425,6 +426,7 @@ class Simple_Language_Model(Model):
                 ag.set_lang_ics()
                 home = clust_info['homes'][idx + 1]
                 ag.loc_info['home'] = home
+                home.agents_in.add(ag)
                 while True:
                     job = np.random.choice(clust_info['jobs'])
                     if job.num_places:
@@ -432,79 +434,52 @@ class Simple_Language_Model(Model):
                         ag.loc_info['job'] = job
                         break
 
+            # find out lang btw family members
+            # consorts
+            if (family[0].language, family[1].language) in [(0, 0), (0, 1), (1, 0)]:
+                lang_consorts = 0
+            elif (family[0].language, family[1].language) in [(2, 1), (1, 2), (2, 2)]:
+                lang_consorts = 1
+            elif (family[0].language, family[1].language) == (1, 1):
+                # Find weakest combination lang-agent, pick other language as common
+                pct11, pct12 = family[0].lang_stats['L1']['pct'], family[0].lang_stats['L2']['pct']
+                pct21, pct22 = family[1].lang_stats['L1']['pct'], family[1].lang_stats['L2']['pct']
+                idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
+                if idx_weakest in [0,2]:
+                    lang_consorts = 1
+                else:
+                    lang_consorts = 0
+                # parent, mother
+                lang_with_father = np.argmax([pct11, pct12])
+                lang_with_mother = np.argmax([pct21, pct22])
+                #siblings
+                avg_lang = (lang_with_father + lang_with_mother) / 2
+                if avg_lang == 0:
+                    lang_siblings = 0
+                elif avg_lang == 1:
+                    lang_siblings = 1
+                else:
+                    # find weakest, pick opposite
+                    pct11, pct12 = family[2].lang_stats['L1']['pct'], family[2].lang_stats['L2']['pct']
+                    pct21, pct22 = family[3].lang_stats['L1']['pct'], family[3].lang_stats['L2']['pct']
+                    idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
+                    if idx_weakest in [0, 2]:
+                        lang_siblings = 1
+                    else:
+                        lang_siblings = 0
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # for family in zip(*[iter(sorted(self.schedule.agents, key=lambda ag:ag.language))] *
-        #                   family_size):
-        #     graph_fam = self.family_network
-        #     family[0].age, family[1].age = np.random.randint(40, 60, size=2)
-        #     family[2].age, family[3].age = np.random.randint(10, 20, size=2)
-        #
-
-
-        #     # find out lang btw family members
-        #     # consorts
-        #     if (family[0].language, family[1].language) in [(0, 0), (0, 1), (1, 0)]:
-        #         lang_consorts = 0
-        #     elif (family[0].language, family[1].language) in [(2, 1), (1, 2), (2, 2)]:
-        #         lang_consorts = 1
-        #     elif (family[0].language, family[1].language) == (1, 1):
-        #         p1 = family[0].lang_freq['cat_pct_s']
-        #         p2 = family[1].lang_freq['cat_pct_s']
-        #         if all(x >= 0.5 for x in (p1, p2)):
-        #             if p1 > 0.5 or p2 > 0.5:
-        #                 lang_consorts = 1
-        #             else:
-        #                 lang_consorts = random.choice([0, 1])
-        #         elif all(x <= 0.5 for x in (p1, p2)):
-        #             lang_consorts = 0
-        #         else:
-        #             delta_abs = np.abs([p1 - 0.5, p2 - 0.5])
-        #             most_distant_agent = np.argmax(delta_abs)
-        #             if family[most_distant_agent].lang_freq['cat_pct_s'] > 0.5:
-        #                 lang_consorts = 1
-        #             else:
-        #                 lang_consorts = 0
-        #
-        #     # parent, mother
-        #     lang_with_father = np.random.binomial(1,family[0].lang_freq['cat_pct_s'])
-        #     lang_with_mother = np.random.binomial(1,family[1].lang_freq['cat_pct_s'])
-        #
-        #     #siblings
-        #     avg_lang = (lang_with_father + lang_with_mother) / 2
-        #     if avg_lang == 0:
-        #         lang_siblings = 0
-        #     elif avg_lang == 1:
-        #         lang_siblings = 1
-        #     else:
-        #         avg = (family[0].lang_freq['cat_pct_s'] + family[1].lang_freq['cat_pct_s']) / 2
-        #         lang_siblings = np.random.binomial(1, avg)
-        #
-        #     graph_fam.add_edge(family[0], family[1], fam_link='consort', lang=lang_consorts)
-        #     graph_fam.add_edge(family[1], family[0], fam_link='consort', lang=lang_consorts)
-        #     graph_fam.add_edge(family[0], family[2], fam_link='child', lang=lang_with_father)
-        #     graph_fam.add_edge(family[2], family[0], fam_link='father', lang=lang_with_father)
-        #     graph_fam.add_edge(family[0], family[3], fam_link='child', lang=lang_with_father)
-        #     graph_fam.add_edge(family[3], family[0], fam_link='father', lang=lang_with_father)
-        #     graph_fam.add_edge(family[1], family[2], fam_link='child', lang=lang_with_mother)
-        #     graph_fam.add_edge(family[2], family[1], fam_link='mother', lang=lang_with_mother)
-        #     graph_fam.add_edge(family[1], family[3], fam_link='child', lang=lang_with_mother)
-        #     graph_fam.add_edge(family[3], family[1], fam_link='mother', lang=lang_with_mother)
-        #     graph_fam.add_edge(family[2], family[3], fam_link='sibling', lang=lang_siblings)
-        #     graph_fam.add_edge(family[3], family[2], fam_link='sibling', lang=lang_siblings)
+                graph_fam.add_edge(family[0], family[1], fam_link='consort', lang=lang_consorts)
+                graph_fam.add_edge(family[1], family[0], fam_link='consort', lang=lang_consorts)
+                graph_fam.add_edge(family[0], family[2], fam_link='child', lang=lang_with_father)
+                graph_fam.add_edge(family[2], family[0], fam_link='father', lang=lang_with_father)
+                graph_fam.add_edge(family[0], family[3], fam_link='child', lang=lang_with_father)
+                graph_fam.add_edge(family[3], family[0], fam_link='father', lang=lang_with_father)
+                graph_fam.add_edge(family[1], family[2], fam_link='child', lang=lang_with_mother)
+                graph_fam.add_edge(family[2], family[1], fam_link='mother', lang=lang_with_mother)
+                graph_fam.add_edge(family[1], family[3], fam_link='child', lang=lang_with_mother)
+                graph_fam.add_edge(family[3], family[1], fam_link='mother', lang=lang_with_mother)
+                graph_fam.add_edge(family[2], family[3], fam_link='sibling', lang=lang_siblings)
+                graph_fam.add_edge(family[3], family[2], fam_link='sibling', lang=lang_siblings)
 
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent

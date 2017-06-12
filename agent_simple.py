@@ -456,7 +456,9 @@ class Simple_Language_Agent:
     def stage_1(self):
         self.speak()
 
+
     def stage_2(self):
+        self.loc_info['home'].agents_in.remove(self)
         self.move_random()
         self.speak()
         self.move_random()
@@ -481,6 +483,7 @@ class Simple_Language_Agent:
         self.move_random()
         self.speak()
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
+        self.loc_info['home'].agents_in.add(self)
         try:
             for key in self.model.family_network[self]:
                 if key.pos == self.loc_info['home'].pos:
@@ -507,6 +510,7 @@ class Simple_Language_Agent:
 class Home:
     def __init__(self, pos):
         self.pos=pos
+        self.agents_in = set()
     def __repr__(self):
         return 'Home_{0.pos!r}'.format(self)
 
@@ -514,6 +518,7 @@ class School:
     def __init__(self, pos, num_places):
         self.pos=pos
         self.num_free=num_places
+        self.agents_in = set()
     def __repr__(self):
         return 'School_{0.pos!r}'.format(self)
 
@@ -522,5 +527,6 @@ class Job:
         self.pos=pos
         self.num_places=num_places
         self.skill_level = skill_level
+        self.agents_in = {}
     def __repr__(self):
         return 'Job{0.pos!r}'.format(self)
