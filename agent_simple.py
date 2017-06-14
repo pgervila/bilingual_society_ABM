@@ -331,16 +331,17 @@ class Simple_Language_Agent:
             return self.model.num_words_conv[0] / factor
 
     def update_lang_arrays(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
-                           min_mem_times=5, pct_threshold=0.9):
+                           delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * lang :
                 * sample_words:
-                * speak
+                * speak:
                 * a, b, c, d: parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
-                * min_mem_times
-                * max_age
-                * pct_threshold
+                * delta_s_factor:
+                * min_mem_times:
+                * max_age:
+                * pct_threshold:
 
             MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
 
@@ -348,7 +349,7 @@ class Simple_Language_Agent:
             Michaël Stevens, Paweł Mandera and Emmanuel Keuleers):
                 * ~16000 spoken tokens per day + 16000 heard tokens per day + TV, RADIO
                 * 1min reading -> 220-300 tokens with large individual differences, thus
-                  in 1 h we get ~ 16000 words"""
+                  in 1 h we get ~ 16000 words """
 
         # if not active_words:
         #     # get real number of words per conversation for a given age
@@ -365,17 +366,20 @@ class Simple_Language_Agent:
         self.lang_stats[lang]['wc'][act] += act_c
         # if words are from listening, they might be new to agent
         if not speak:
+            ds_factor = delta_s_factor
             # check which words are available for memorization (need minimum number of times)
             mem_availab_words = np.where(self.lang_stats[lang]['wc'] > min_mem_times)[0]
             # compute indices of active words that are available for memory
             idxs_act = np.nonzero(np.in1d(act, mem_availab_words, assume_unique=True))
             # get really activated words and apply indices to counts ( retrieve only counts of really active words)
             act, act_c = act[idxs_act], act_c[idxs_act]
+        else:
+            ds_factor = 1
 
         if act.any():  # check that there are any real active words
             # compute increase in memory stability S due to (re)activation
             # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
-            delta_S = a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d
+            delta_S = ds_factor * a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d
             # update memory stability value
             self.lang_stats[lang]['S'][act] += delta_S
 
@@ -388,7 +392,7 @@ class Simple_Language_Agent:
             # discount one to counts
             act_c -= 1
             # Simplification with good approx : we apply delta_S without iteration !!
-            delta_S = act_c * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
+            delta_S = ds_factor * act_c * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
             # update
             self.lang_stats[lang]['S'][act] += delta_S
 
@@ -467,12 +471,15 @@ class Simple_Language_Agent:
     def stage_3(self):
         if self.age < 720:
             self.model.grid.move_agent(self, self.loc_info['school'].pos)
+            self.loc_info['school'].agents_in.add(self)
             self.study_lang(0)
             self.study_lang(1)
             self.speak()
         else:
             if self.loc_info['job']:
                 self.model.grid.move_agent(self, self.loc_info['job'].pos)
+                self.loc_info['job'].agents_in.add(self)
+                # TODO speak to people in job !!!
                 self.speak()
                 self.speak()
             else:
