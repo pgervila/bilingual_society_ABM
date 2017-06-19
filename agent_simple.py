@@ -499,9 +499,24 @@ class School:
         return 'School_{0.pos!r}'.format(self)
 
 class Job:
-    def __init__(self, pos, num_places, skill_level=0):
+    def __init__(self, pos, num_places):
         self.pos=pos
         self.num_places=num_places
-        self.skill_level = skill_level
     def __repr__(self):
         return 'Job{0.pos!r}'.format(self)
+
+
+class Shop(Job):
+    """ Defines a special type of job agent where agents can go shopping, eating, etc
+        Args:
+            * type: string. It may take following values {'supermarket', 'restaurant'}
+            * skill_level: integer. It ranges from 0 to 2 ( from lowest to highest)
+
+            """
+    def __init__(self, pos, num_places, type, skill_level=0):
+        super().__init__(pos, num_places)
+        self.type = type
+        self.skill_level = skill_level
+
+    def __repr__(self):
+        return 'Shop{0.pos!r}'.format(self)
