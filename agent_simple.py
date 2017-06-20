@@ -334,14 +334,18 @@ class Simple_Language_Agent:
                            delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
-                * lang :
-                * sample_words:
-                * speak:
-                * a, b, c, d: parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
-                * delta_s_factor:
-                * min_mem_times:
-                * max_age:
-                * pct_threshold:
+                * lang : integer in [0,1] {0:'spa', 1:'cat'}
+                * sample_words: tuple of 2 numpy arrays of integers.
+                                First array is of word indices, second of word counts
+                * speak: boolean. Defines whether agent is speaking or listening
+                * a, b, c, d: float parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
+                * delta_s_factor: positive float < 1.
+                                  Defines increase of mem stability due to passive rehearsal
+                                  as a fraction of that due to active rehearsal
+                * min_mem_times: positive integer. Minimum number of times
+                * pct_threshold: positive float < 1. Value to define percentage lang knowledge.
+                                 If retrievability R for a given word is higher than R, the word is considered
+                                 as well known. Otherwise, it is not
 
             MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
 
@@ -350,16 +354,6 @@ class Simple_Language_Agent:
                 * ~16000 spoken tokens per day + 16000 heard tokens per day + TV, RADIO
                 * 1min reading -> 220-300 tokens with large individual differences, thus
                   in 1 h we get ~ 16000 words """
-
-        # if not active_words:
-        #     # get real number of words per conversation for a given age
-        #     num_words = self.get_words_per_conv()
-        #     # get conv samples
-        #     zipf_samples = randZipf(self.model.cdf_data['s'][self.age], int(num_words * 10))
-        #     # assess which words and how many of each were encountered in current step
-        #     act, act_c = np.unique(zipf_samples, return_counts=True)
-        # else:
-        #     act, act_c = active_words
 
         act, act_c = sample_words
         # update word counter with newly active words
@@ -414,7 +408,7 @@ class Simple_Language_Agent:
             Both self and ag2 lang arrays are updated according to the sampled words
 
             Args:
-                * lang: integer in [0, 1]
+                * lang: integer in [0, 1] {0:'spa', 1:'cat'}
                 * ag2: agent instance with which self is talking to
                 * long: boolean that defines conversation length"""
 
