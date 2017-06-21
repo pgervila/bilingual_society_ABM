@@ -132,10 +132,6 @@ class Simple_Language_Model(Model):
         self.define_family_networks()
 
 
-        # DEFINE FAMILY NETWORKS
-        #self.define_family_networks()
-
-
         # DATA COLLECTOR
         self.datacollector = DataCollector(
             model_reporters={"count_spa": lambda m: m.get_lang_stats(0),
@@ -149,43 +145,57 @@ class Simple_Language_Model(Model):
         )
 
     def compute_cluster_centers(self, min_dist=0.20):
-        """ Generate 2D coordinates for all cluster centers (in percentage of grid dimensions) """
+        """ Generate 2D coordinates for all cluster (towns/villages) centers
+            Args:
+                * min_dist: float. Minimum distance between cluster centers
+                            expressed as percentage of square grid side dimension
+
+            Returns:
+                * A numpy array with 2D coordinates of cluster centers
+        """
 
         # Define available points as pct of squared grid length
         grid_pct_list = np.linspace(0.1, 0.9, 100) # avoid edges
-        # Assure min distance btwn clusters
+        # Define a set of all available gridpoints coordinates
         s1 = set(product(grid_pct_list, grid_pct_list))
+        # initiate list of cluster centers and append random point froms set
         self.clust_centers = []
         p = random.sample(s1, 1)[0]
         self.clust_centers.append(p)
+        # remove picked point from availability list
         s1.remove(p)
+        # Ensure min distance btwn clusters
+        # Iterate over available points until all requested centers are found
         for _ in range(self.num_cities - 1):
+            # Before picking new point, remove all points too-close to existing centers
+            # from availability set
             for point in set(s1):
                 if pdist([point, p]) < min_dist * (grid_pct_list.max() - grid_pct_list.min()):
                     s1.remove(point)
+            # Try picking new center from availability set ( if it's not already empty...)
             try:
                 p = random.sample(s1, 1)[0]
             except ValueError:
                 print('INPUT ERROR: Reduce either number of cities or minimum distance '
                       'in order to meet distance constraint')
                 raise
+            # Add new center to return list and remove it from availability set
             self.clust_centers.append(p)
             s1.remove(p)
         self.clust_centers = np.array(self.clust_centers)
-        # If requested, sort centers based on their distance to grid origin
+        # If requested, sort cluster centers based on their distance to grid origin
         if self.lang_ags_sorted_by_dist:
             self.clust_centers = sorted(self.clust_centers, key=lambda x:pdist([x,[0,0]]))
 
-
     def compute_cluster_sizes(self, min_size=20):
-        """ Method to compute sizes of each agent cluster.
-        Cluster size equals number of language agents that live in this cluster
+        """ Method to compute sizes of each cluster in model.
+            Cluster size equals number of language agents that live in this cluster
 
-        Arguments:
-            * min_size: minimum accepted cluster size ( integer)
+            Arguments:
+                * min_size: minimum accepted cluster size ( integer)
 
-        Returns:
-            * list of integers representing cluster sizes
+            Returns:
+                * list of integers representing cluster sizes
 
         """
         p = np.random.pareto(1.25, size=self.num_cities)
