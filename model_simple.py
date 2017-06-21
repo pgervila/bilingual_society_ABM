@@ -352,7 +352,6 @@ class Simple_Language_Model(Model):
         # set agents ids
         ids = set(range(self.num_people))
 
-        # TODO IDEA: iterate over lang values per groups of four. Instantiate 2 adults, 2 youngs
         family_size = 4
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * family_size)):
@@ -368,6 +367,14 @@ class Simple_Language_Model(Model):
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
                 self.add_agent_to_grid_sched_networks(ag1, ag2, ag3, ag4)
 
+            # set up agents left out of family partition of cluster
+            len_clust = len(clust_info['agents'])
+            num_left_agents = len_clust%family_size
+            if num_left_agents:
+                for lang in clust_info['agents'][-num_left_agents:]:
+                    ag = Simple_Language_Agent(self, ids.pop(), lang, city_idx=clust_idx)
+                    clust_info['agents'].append(ag)
+                    self.add_agent_to_grid_sched_networks(ag)
 
     def add_agent_to_grid_sched_networks(self, ag, *more_ags):
         """ Method to add a number of agents to grid, schedule and system networks
@@ -376,8 +383,8 @@ class Simple_Language_Model(Model):
                 * more_ags : optional. A tuple of agent class instances if
                              more than one agent needs to be added at once
         """
+        # make an iterable list out of all inputs
         agents = [ag, *more_ags]
-
         # add agent to grid and schedule
         for a in agents:
             self.schedule.add(a)
@@ -433,19 +440,21 @@ class Simple_Language_Model(Model):
 
             # set up agents left out of family partition of cluster
             len_clust = len(clust_info['agents'])
-            for ag in clust_info['agents'][-(len_clust%family_size):]:
-                min_age, max_age = 40 * steps_per_year, 60 * steps_per_year
-                ag.age = np.random.randint(min_age, max_age)
-                ag.set_lang_ics()
-                home = clust_info['homes'][idx + 1]
-                ag.loc_info['home'] = home
-                home.agents_in.add(ag)
-                while True:
-                    job = np.random.choice(clust_info['jobs'])
-                    if job.num_places:
-                        job.num_places -= 1
-                        ag.loc_info['job'] = job
-                        break
+            num_left_agents = len_clust%family_size
+            if num_left_agents:
+                for ag in clust_info['agents'][-num_left_agents:]:
+                    min_age, max_age = 40 * steps_per_year, 60 * steps_per_year
+                    ag.age = np.random.randint(min_age, max_age)
+                    ag.set_lang_ics()
+                    home = clust_info['homes'][idx + 1]
+                    ag.loc_info['home'] = home
+                    home.agents_in.add(ag)
+                    while True:
+                        job = np.random.choice(clust_info['jobs'])
+                        if job.num_places:
+                            job.num_places -= 1
+                            ag.loc_info['job'] = job
+                            break
 
             # find out lang of interaction btw family members
             # consorts

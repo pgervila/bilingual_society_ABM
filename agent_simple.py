@@ -528,6 +528,6 @@ class Job:
         self.pos=pos
         self.num_places=num_places
         self.skill_level = skill_level
-        self.agents_in = {}
+        self.agents_in = set()
     def __repr__(self):
         return 'Job{0.pos!r}'.format(self)
