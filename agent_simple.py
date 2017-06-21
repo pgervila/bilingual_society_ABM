@@ -154,7 +154,7 @@ class Simple_Language_Agent:
                                       ag_job=None,
                                       city_idx=self.loc_info['city_idx'])
             # Add agent to model
-            self.model.add_agent(a)
+            self.model.add_agent_to_grid_sched_networks(a)
             # Update num of children
             self.num_children += 1
 

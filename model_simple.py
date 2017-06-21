@@ -351,31 +351,44 @@ class Simple_Language_Model(Model):
         langs_per_clust = self.generate_lang_distrib()
         # set agents ids
         ids = set(range(self.num_people))
-        # generate agents
-        for clust_idx, clust_info in self.clusters_info.items():
-            for ag_lang in langs_per_clust[clust_idx]:
-                # instantiate agent with no job, school and home specified
-                ag = Simple_Language_Agent(self, ids.pop(), ag_lang, city_idx=clust_idx, import_IC=False)
-                clust_info['agents'].append(ag)
-                # add agent to schedule, grid and networks
-                self.add_agent(ag)
 
-    def add_agent(self, a):
-        """Method to add a given agent to grid, schedule and system networks
-        Arguments:
-            * a : agent class instance
-            * coords : agent location on grid (2-D tuple of integers)
+        # TODO IDEA: iterate over lang values per groups of four. Instantiate 2 adults, 2 youngs
+        family_size = 4
+        for clust_idx, clust_info in self.clusters_info.items():
+            for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * family_size)):
+                # instantiate 2 adults with neither job nor home assigned
+                ag1 = Simple_Language_Agent(self, ids.pop(), family_langs[0], city_idx=clust_idx)
+                ag2 = Simple_Language_Agent(self, ids.pop(), family_langs[1], city_idx=clust_idx)
+
+                # instantiate 2 adolescents with neither school nor home assigned
+                ag3 = Simple_Language_Agent(self, ids.pop(), family_langs[2], city_idx=clust_idx)
+                ag4 = Simple_Language_Agent(self, ids.pop(), family_langs[3], city_idx=clust_idx)
+
+                # add agents to schedule, grid and networks
+                clust_info['agents'].extend([ag1, ag2, ag3, ag4])
+                self.add_agent_to_grid_sched_networks(ag1, ag2, ag3, ag4)
+
+
+    def add_agent_to_grid_sched_networks(self, ag, *more_ags):
+        """ Method to add a number of agents to grid, schedule and system networks
+            Arguments:
+                * a : agent class instance
+                * more_ags : optional. A tuple of agent class instances if
+                             more than one agent needs to be added at once
         """
+        agents = [ag, *more_ags]
+
         # add agent to grid and schedule
-        self.schedule.add(a)
-        if a.loc_info['home']:
-            self.grid.place_agent(a, a.loc_info['home'].pos)
-        else:
-            self.grid.place_agent(a, (0, 0))
+        for a in agents:
+            self.schedule.add(a)
+            if a.loc_info['home']:
+                self.grid.place_agent(a, a.loc_info['home'].pos)
+            else:
+                self.grid.place_agent(a, (0, 0))
         ## add agent node to all networks
-        self.known_people_network.add_node(a)
-        self.friendship_network.add_node(a)
-        self.family_network.add_node(a)
+        self.known_people_network.add_nodes_from(agents)
+        self.friendship_network.add_nodes_from(agents)
+        self.family_network.add_nodes_from(agents)
 
     def define_family_networks(self):
         # define families
@@ -389,7 +402,7 @@ class Simple_Language_Model(Model):
 
                 # set ages of family members
                 steps_per_year = 36
-                min_age, max_age = 40 * steps_per_year, 60 * steps_per_year
+                min_age, max_age = 40 * steps_per_year, 50 * steps_per_year
                 family[0].age, family[1].age = np.random.randint(min_age, max_age, size=2)
                 min_age, max_age = 10 * steps_per_year, 20 * steps_per_year
                 family[2].age, family[3].age = np.random.randint(min_age, max_age, size=2)
@@ -434,7 +447,7 @@ class Simple_Language_Model(Model):
                         ag.loc_info['job'] = job
                         break
 
-            # find out lang btw family members
+            # find out lang of interaction btw family members
             # consorts
             if (family[0].language, family[1].language) in [(0, 0), (0, 1), (1, 0)]:
                 lang_consorts = 0
@@ -445,7 +458,7 @@ class Simple_Language_Model(Model):
                 pct11, pct12 = family[0].lang_stats['L1']['pct'], family[0].lang_stats['L2']['pct']
                 pct21, pct22 = family[1].lang_stats['L1']['pct'], family[1].lang_stats['L2']['pct']
                 idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-                if idx_weakest in [0,2]:
+                if idx_weakest in [0, 2]:
                     lang_consorts = 1
                 else:
                     lang_consorts = 0
@@ -480,6 +493,10 @@ class Simple_Language_Model(Model):
                 graph_fam.add_edge(family[3], family[1], fam_link='mother', lang=lang_with_mother)
                 graph_fam.add_edge(family[2], family[3], fam_link='sibling', lang=lang_siblings)
                 graph_fam.add_edge(family[3], family[2], fam_link='sibling', lang=lang_siblings)
+
+    def define_friendship_networks(self):
+        graph_friends = self.friendship_network
+
 
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent
