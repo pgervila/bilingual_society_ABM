@@ -25,7 +25,9 @@ class Simple_Language_Agent:
         self.loc_info = {'home':ag_home, 'school':ag_school, 'job':ag_job, 'city_idx':city_idx}
 
         # define container for languages' tracking and statistics
-        self.lang_stats = defaultdict(lambda:defaultdict(dict))
+        # Need three key levels to entirely define lang branch ->
+        # Language {'L1', 'L2'}, mode{'a','p'}, attribute{'R','t','S','pct'}
+        self.lang_stats = defaultdict(lambda:defaultdict(lambda:defaultdict(dict)))
         self.day_mask = {'L1':np.zeros(self.model.vocab_red, dtype=np.bool),
                          'L2':np.zeros(self.model.vocab_red, dtype=np.bool)}
 
@@ -34,16 +36,36 @@ class Simple_Language_Agent:
         else:
             S_0, t_0 = 0.01, 1000
             for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0)
-                self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0)
-                self.lang_stats[lang]['R'] = np.exp(- self.k *
-                                                    self.lang_stats[lang]['t'] /
-                                                    self.lang_stats[lang]['S']
-                                                    ).astype(np.float64)
-                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
+                for mode in ['a', 'p']:
+                    self.lang_stats[lang][mode]['S'] = np.full(self.model.vocab_red, S_0)
+                    self.lang_stats[lang][mode]['t'] = np.full(self.model.vocab_red, t_0)
+                    self.lang_stats[lang][mode]['R'] = np.exp(- self.k *
+                                                        self.lang_stats[lang][mode]['t'] /
+                                                        self.lang_stats[lang][mode]['S']
+                                                        ).astype(np.float64)
+                    self.lang_stats[lang][mode]['wc'] = np.zeros(self.model.vocab_red)
+                    self.lang_stats[lang][mode]['pct'] = np.zeros(3600, dtype=np.float64)
+                    self.lang_stats[lang][mode]['pct'][self.age] = (np.where(self.lang_stats[lang][mode]['R'] > 0.9)[0].shape[0] /
+                                                                    self.model.vocab_red)
+
+
+
+    def _set_lang_attrs(self, lang, pct_key, ):
+        for mode in ['a', 'p']:
+            # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
+            self.lang_stats[lang][mode]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.age])
+            # S: numpy array(shape=vocab_size) that measures memory stability for each word
+            self.lang_stats[lang][mode]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.age])
+            # compute R from t, S (R defines retrievability of each word)
+            self.lang_stats[lang][mode]['R'] = np.exp(- self.k *
+                                                      self.lang_stats[lang][mode]['t'] /
+                                                      self.lang_stats[lang][mode]['S']
+                                                      ).astype(np.float64)
+            # word counter
+            self.lang_stats[lang][mode]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.age])
+
+
+
 
     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
         """ set agent's linguistic Initial Conditions
@@ -55,30 +77,32 @@ class Simple_Language_Agent:
         """
 
         if self.language == 0:
-            # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
-            self.lang_stats['L1']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'][self.age])
-            # S: numpy array(shape=vocab_size) that measures memory stability for each word
-            self.lang_stats['L1']['S'] = np.copy(self.model.lang_ICs['100_pct']['S'][self.age])
-            # compute R from t, S
-            self.lang_stats['L1']['R'] = np.exp( - self.k *
-                                                 self.lang_stats['L1']['t'] /
-                                                 self.lang_stats['L1']['S']
-                                                ).astype(np.float64)
-            # word counter
-            self.lang_stats['L1']['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'][self.age])
-            #L2
-            self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, S_0)
-            self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, t_0)
-            self.lang_stats['L2']['R'] = np.exp( - self.k *
-                                                 self.lang_stats['L2']['t'] /
-                                                 self.lang_stats['L2']['S']
-                                                ).astype(np.float32)
-            self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red)
+            for mode in ['a', 'p']:
+                # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
+                self.lang_stats['L1'][mode]['t'] = np.copy(self.model.lang_ICs['100_pct']['t'][self.age])
+                # S: numpy array(shape=vocab_size) that measures memory stability for each word
+                self.lang_stats['L1'][mode]['S'] = np.copy(self.model.lang_ICs['100_pct']['S'][self.age])
+                # compute R from t, S (R defines retrievability of each word)
+                self.lang_stats['L1'][mode]['R'] = np.exp( - self.k *
+                                                     self.lang_stats['L1']['t'] /
+                                                     self.lang_stats['L1']['S']
+                                                    ).astype(np.float64)
+                # word counter
+                self.lang_stats['L1'][mode]['wc'] = np.copy(self.model.lang_ICs['100_pct']['wc'][self.age])
 
-            for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
+                #L2
+                self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, S_0)
+                self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, t_0)
+                self.lang_stats['L2']['R'] = np.exp( - self.k *
+                                                     self.lang_stats['L2']['t'] /
+                                                     self.lang_stats['L2']['S']
+                                                    ).astype(np.float32)
+                self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red)
+
+                for lang in ['L1', 'L2']:
+                    self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+                    self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                              self.model.vocab_red)
 
         elif self.language == 2:
             self.lang_stats['L2']['t'] = np.copy(self.model.lang_ICs['100_pct']['t'][self.age])
@@ -370,10 +394,10 @@ class Simple_Language_Agent:
         else:
             ds_factor = 1
 
-        if act.any():  # check that there are any real active words
+        if len(act):  # check that there are any real active words
             # compute increase in memory stability S due to (re)activation
             # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
-            delta_S = ds_factor * a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d
+            delta_S = ds_factor * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
             # update memory stability value
             self.lang_stats[lang]['S'][act] += delta_S
 
@@ -386,7 +410,7 @@ class Simple_Language_Agent:
             # discount one to counts
             act_c -= 1
             # Simplification with good approx : we apply delta_S without iteration !!
-            delta_S = ds_factor * act_c * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
+            delta_S = ds_factor * (act_c * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d))
             # update
             self.lang_stats[lang]['S'][act] += delta_S
 

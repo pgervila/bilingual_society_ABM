@@ -86,11 +86,11 @@ class Simple_Language_Model(Model):
         self.clust_centers = None
         self.cluster_sizes = None
 
-        # import lang ICs and lang CDFs data as step function
-        self.lang_ICs = dd.io.load('IC_lang_SPOKEN_all_steps.h5')
-        self.cdf_data = dd.io.load('cdfs_3R_vs_step.h5')
+        # import lang ICs and lang CDFs data as function of steps
+        self.lang_ICs = dd.io.load('lang_spoken_ics_vs_step.h5')
+        self.cdf_data = dd.io.load('lang_cdfs_vs_step.h5')
 
-        # define grid and schedule
+        # define model grid and schedule
         self.grid = MultiGrid(height, width, False)
         self.schedule = StagedActivation_modif(self,
                                                stage_list=["stage_1", "stage_2",
@@ -98,7 +98,7 @@ class Simple_Language_Model(Model):
                                                shuffle=True,
                                                shuffle_between_stages=True)
 
-        ## define clusters and add jobs, schools, agents
+        ## Define clusters parameters
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
         self.set_clusters_info()
