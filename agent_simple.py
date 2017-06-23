@@ -341,14 +341,20 @@ class Simple_Language_Agent:
         """ Computes number of words spoken per conversation for a given age
             If conversation=False, computes average number of words per day,
             assuming 16000 tokens per adult per day as average """
-        age_1, age_2 = 36 * age_1, 36 * age_2
-        if self.age < age_1:
-            factor = 2.5 + 100 * np.exp(-0.014 * self.age)
-        elif age_1 <= self.age <= age_2:
-            factor = 2.5
-        else:
-            factor = 1.5 + np.exp(0.002 * (self.age - age_2))
 
+        age_1, age_2 = 36 * age_1, 36 * age_2
+        real_vocab_size = 40 * self.model.vocab_red
+        real_spoken_words_per_day = 16000
+        f = real_vocab_size / real_spoken_words_per_day
+
+        if self.age < age_1:
+            delta = 0.0001
+            decay = -np.log(delta / 100) / (age_1)
+            factor =  f + 400 * np.exp(-decay * self.age)
+        elif age_1 <= self.age <= age_2:
+            factor = f
+        else:
+            factor = f - 1 + np.exp(0.0005 * (self.age - age_2 ) )
         if long:
             return self.model.num_words_conv[1] / factor
         else:
