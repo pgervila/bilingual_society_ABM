@@ -400,13 +400,6 @@ class Simple_Language_Agent:
             delta_S = ds_factor * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
             # update memory stability value
             self.lang_stats[lang]['S'][act] += delta_S
-
-            # define mask to update elapsed-steps array t
-            #mask = np.zeros(self.model.vocab_red, dtype=np.bool)
-            self.day_mask[lang][act] = True
-            #self.lang_stats[lang]['t'][~mask] += 1  # add ones to last activation time counter if word not act
-            self.lang_stats[lang]['t'][self.day_mask[lang]] = 0  # set last activation time counter to zero if word act
-
             # discount one to counts
             act_c -= 1
             # Simplification with good approx : we apply delta_S without iteration !!
@@ -414,12 +407,10 @@ class Simple_Language_Agent:
             # update
             self.lang_stats[lang]['S'][act] += delta_S
 
-        else:
-            # define mask to update elapsed-steps array t
-            #mask = np.zeros(self.model.vocab_red, dtype=np.bool)
-            self.day_mask[lang][act] = True
-            #self.lang_stats[lang]['t'][~mask] += 1  # add ones to last activation time counter if word not act
-            self.lang_stats[lang]['t'][self.day_mask[lang]] = 0  # set last activation time counter to one if word act
+        # define mask to update elapsed-steps array t
+        self.day_mask[lang][act] = True
+        self.lang_stats[lang]['t'][~self.day_mask[lang]] += 1  # add ones to last activation time counter if word not act
+        self.lang_stats[lang]['t'][self.day_mask[lang]] = 0  # set last activation time counter to zero if word act
 
         # compute memory retrievability R from t, S
         self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
