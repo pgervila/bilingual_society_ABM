@@ -8,6 +8,434 @@ from collections import defaultdict
 #import private library to model lang zipf CDF
 from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
 
+
+class BaseAgent:
+
+    #define memory retrievability constant
+    k = np.log(10 / 9)
+
+    def __init__(self, model, unique_id, language, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
+                 ag_home=None, ag_school=None, ag_job=None, city_idx=None, import_IC=False):
+        self.model = model
+        self.unique_id = unique_id
+        self.language = language # 0, 1, 2 => spa, bil, cat
+        self.age = age
+        self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
+        self.loc_info = {'home': ag_home, 'city_idx': city_idx}
+
+        # define container for languages' tracking and statistics
+        # Need three key levels to entirely define lang branch ->
+        # Language {'L1', 'L2'}, mode{'a','p'}, attribute{'R','t','S','pct'}
+        self.lang_stats = defaultdict(lambda:defaultdict(dict))
+        self.day_mask = {'L1':np.zeros(self.model.vocab_red, dtype=np.bool),
+                         'L2':np.zeros(self.model.vocab_red, dtype=np.bool)}
+
+        if import_IC:
+            self.set_lang_ics()
+        else:
+            for lang in ['L1', 'L2']:
+                self._set_null_lang_attrs(lang)
+
+    def _set_lang_attrs(self, lang, pct_key):
+        """ Private method that sets agent linguistic status for a given age
+            Args:
+                * lang: string. It can take two different values: 'L1' or 'L2'
+                * pct_key: string. It must be of the form '%_pct' with % an integer
+                  from following list [10,25,50,75,90,100]. ICs are not available for every single level
+        """
+        # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
+        self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.age])
+        # S: numpy array(shape=vocab_size) that measures memory stability for each word
+        self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.age])
+        # compute R from t, S (R defines retrievability of each word)
+        self.lang_stats[lang]['R'] = np.exp(- self.k *
+                                                  self.lang_stats[lang]['t'] /
+                                                  self.lang_stats[lang]['S']
+                                                  ).astype(np.float64)
+        # word counter
+        self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.age])
+        # vocab pct
+        self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                  self.model.vocab_red)
+
+    def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
+        """Private method that sets null agent linguistic status, i.e. without knowledge
+           of the specified language
+           Args:
+               * lang: string. It can take two different values: 'L1' or 'L2'
+               * S_0: float. Initial value of memory stability
+               * t_0: integer. Initial value of time-elapsed ( in days) from last time words were encountered
+        """
+        self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0)
+        self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0)
+        self.lang_stats[lang]['R'] = np.exp(- self.k *
+                                            self.lang_stats[lang]['t'] /
+                                            self.lang_stats[lang]['S']
+                                            ).astype(np.float32)
+        self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
+        self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                  self.model.vocab_red)
+
+    def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
+        """ set agent's linguistic Initial Conditions
+        Args:
+            * S_0: float <= 1. Initial memory intensity
+            * t_0: last-activation days counter
+            * biling_key: integer from [10,25,50,75,90,100]. Specify only if
+              specific bilingual level is needed as input
+        """
+        if self.language == 0:
+            self._set_lang_attrs('L1', '100_pct')
+            self._set_null_lang_attrs('L2', S_0, t_0)
+        elif self.language == 2:
+            self._set_null_lang_attrs('L1', S_0, t_0)
+            self._set_lang_attrs('L2', '100_pct')
+        else: # BILINGUAL
+            if not biling_key:
+                biling_key = np.random.choice([10, 25, 50, 75, 90])
+            L1_key = str(biling_key) + '_pct'
+            L2_key = str(100 - biling_key) + '_pct'
+            for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
+                self._set_lang_attrs(lang, key)
+
+    def listen(self):
+        # TODO : incomplete method
+        """Listen to random agents placed on the same cell as calling agent"""
+        pos = [self.pos]
+        # get all agents currently placed on chosen cell
+        others = self.model.grid.get_cell_list_contents(pos)
+        others.remove(self)
+        ## if two or more agents in cell, conversation is possible
+        if len(others) >= 2:
+            ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
+            k1, k2 = 'L' + str(l1), 'L' + str(l2)
+
+            self.update_lang_arrays(l1, spoken_words, speak=False)
+            self.update_lang_arrays(l2, spoken_words, speak=False)
+
+
+    def replace_agent(self, new_class):
+        """ It replaces current agent with a new agent class once a certain age is reached.
+            It removes instance from all networks, lists, sets in model and adds new instance
+            to them """
+        new_agent = new_class(self.model, self.unique_id, self.language, self.age)
+        # copy all Baby instance attributes to new_child instance
+        for key, val in self.__dict__.items():
+            setattr(new_agent, key, val)
+        map_new = {self: new_agent}
+        for network in [self.model.family_network,
+                        self.model.known_people_network,
+                        self.model.friendship_network]:
+            try:
+                nx.relabel_nodes(network, map_new, copy=False)
+            except nx.NetworkXError:
+                pass
+        # remove agent from all locations where it might have been
+        for loc in [self.loc_info['home'], self.loc_info['job'], self.loc_info['school']]:
+            try:
+                loc.agents_in.remove(self)
+                loc.agents_in.add(new_agent)
+            except:
+                pass
+        # remove agent from city
+        self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
+        self.model.clusters_info[self.loc_info['city_idx']]['agents'].add(new_agent)
+        # remove agent from grid and schedule
+        self.model.grid._remove_agent(self.pos, self)
+        self.model.schedule.remove(self)
+        # add new_agent to grid and schedule
+        self.model.grid.place_agent(new_agent, self.pos)
+        self.model.schedule.add(new_agent)
+
+    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):  ##
+        # transform ages to steps
+        age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
+        # define stochastic probability of agent death as function of age
+        if (self.age > age_1) and (self.age <= age_2):
+            if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
+                self.remove_after_death()
+        elif (self.age > age_2) and (self.age < age_3):
+            if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
+                self.remove_after_death()
+        elif self.age >= age_3:
+            self.remove_after_death()
+
+    def remove_after_death(self):
+        """ Removes agent object from all places where it belongs.
+            It makes sure no references to agent object are left aftr removal,
+            so that garbage collector can free memory
+            Call this function if death conditions for agent are verified
+        """
+        # Remove agent from all networks
+        for network in [self.model.family_network,
+                        self.model.known_people_network,
+                        self.model.friendship_network]:
+            try:
+                network.remove_node(self)
+            except nx.NetworkXError:
+                pass
+        # remove agent from all locations where it might be
+        for loc in [self.loc_info['home'], self.loc_info['job'], self.loc_info['school']]:
+            try:
+                loc.agents_in.remove(self)
+            except:
+                pass
+        # remove agent from city
+        self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
+
+        # remove agent from grid and schedule
+        self.model.grid._remove_agent(self.pos, self)
+        self.model.schedule.remove(self)
+
+        # make id from deceased agent available
+        self.model.set_available_ids.add(self.unique_id)
+
+
+
+class Baby(BaseAgent): # from 0 to 2
+
+    def listen(self):
+        """Listen to parents, siblings, family, friends of family """
+        pass
+
+    def get_conversation_lang(self):
+        """ Adapt to baby exceptions"""
+        pass
+
+    def set_baby_family_links(self, father, mother):
+        lang_with_father =
+        self.model.family_network.add_edge(father, self, fam_link='child', lang=lang_with_father)
+        self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_father)
+        self.model.family_network.add_edge(mother, self, fam_link='child', lang=lang_with_mother)
+        self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_mother)
+
+        for parent in [father, mother]:
+            self.model.family_network[father]
+
+
+
+
+    def define_newborn_family_links(self, parent_agent, child):
+        self.model.family_network.add_edge(parent_agent, child,
+                                      fam_link = 'child',
+                                      link_strength = 9 )
+        self.model.family_network.add_edge(child, parent_agent,
+                                      fam_link = 'parent',
+                                      link_strength = 9 )
+        for agent, labels in self.model.family_network[parent_agent].items():
+            if labels["fam_link"] == 'parent':
+                self.family_networks.add_edge(child, agent,
+                                              fam_link = 'grandparent',
+                                              link_strength = 7 )
+                self.family_networks.add_edge(agent, child,
+                                              fam_link = 'grandchild',
+                                              link_strength = 7 )
+            if labels["fam_link"] == 'sibling':
+                self.family_networks.add_edge(child, agent,
+                                               fam_link = 'uncle',
+                                               link_strength = 6 )
+                self.family_networks.add_edge(agent, child,
+                                               fam_link = 'nephew',
+                                               link_strength = 6 )
+                uncle_consort = [key for key,value
+                                 in self.family_networks[parent_agent].items()
+                                 if value['fam_link'] == 'consort']
+                if uncle_consort:
+                    self.family_networks.add_edge(child, uncle_consort[0],
+                                                  fam_link = 'uncle',
+                                                  link_strength = 6 )
+                    self.family_networks.add_edge(uncle_consort[0], child,
+                                                  fam_link = 'nephew',
+                                                  link_strength = 6 )
+            if labels["fam_link"] == 'nephew':
+                self.family_networks.add_edge(child, agent,
+                                               fam_link = 'cousin',
+                                               link_strength = 8 )
+                self.family_networks.add_edge(agent, child,
+                                               fam_link = 'cousin',
+                                               link_strength = 8 )
+
+
+
+    def stage_1(self):
+        pass
+
+    def stage_2(self):
+        pass
+
+    def stage_3(self):
+        pass
+
+    def stage_4(self):
+        if self.age == 36 * 2:
+            self.replace_agent(Child)
+
+class Child(Baby): #from 2 to 10
+
+    def __init__(self, model, unique_id, language, age=0, ag_home=None, ag_school=None,
+                 city_idx=None, import_IC=False):
+        super().__init__(model, unique_id, language, age, ag_home, city_idx, import_IC)
+        self.loc_info['school'] = ag_school
+
+    def stage_1(self):
+        pass
+
+    def stage_2(self):
+        pass
+
+    def stage_3(self):
+        pass
+
+    def stage_4(self):
+        if self.age == 36 * 10:
+            self.replace_agent(Adolescent)
+
+class Adolescent(Child): # from 10 to 18
+
+    def move_random(self):
+        """ Take a random step into any surrounding cell
+            All eight surrounding cells are available as choices
+            Current cell is not an output choice
+
+            Returns:
+                * modifies self.pos attribute
+        """
+        x, y = self.pos  # attr pos is defined when adding agent to schedule
+        possible_steps = self.model.grid.get_neighborhood(
+            (x, y),
+            moore=True,
+            include_center=False
+        )
+        chosen_cell = random.choice(possible_steps)
+        self.model.grid.move_agent(self, chosen_cell)
+
+    def stage_1(self):
+        pass
+
+    def stage_2(self):
+        pass
+
+    def stage_3(self):
+        pass
+
+    def stage_4(self):
+        if self.age == 36 * 18:
+            self.replace_agent(Young)
+
+
+class Young(Adolescent): # from 18 to 30
+
+    def __init__(self, model, unique_id, language, age=0, ag_home=None, ag_school=None,
+                 ag_job=None, city_idx=None, import_IC=False, num_children=0):
+        super().__init__(model, unique_id, language, age, ag_home, ag_school, city_idx, import_IC)
+        self.loc_info['job'] = ag_job
+        self.num_children = num_children
+
+
+    def reproduce(self, age_1=20, age_2=40):
+        age_1, age_2 = age_1 * 36, age_2 * 36
+        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() < 5/(age_2 - age_1)):
+            id_ = self.model.set_available_ids.pop()
+            lang = self.language
+            # find closest school to parent home
+            city_idx = self.loc_info['city_idx']
+            clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
+            closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
+                                            for sc_coord in clust_schools_coords])
+            # instantiate agent
+            a = Baby(self.model, id_, lang, ag_home=self.loc_info['home'],
+                                      ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
+                                      ag_job=None,
+                                      city_idx=self.loc_info['city_idx'])
+            # Add agent to model
+            self.model.add_agent_to_grid_sched_networks(a)
+            # Update num of children
+            self.num_children += 1
+
+    def remove_after_death(self):
+        """ call this function if death conditions
+        for agent are verified """
+        for network in [self.model.family_network,
+                        self.model.known_people_network,
+                        self.model.friendship_network]:
+            try:
+                network.remove_node(self)
+            except nx.NetworkXError:
+                pass
+        # find agent coordinates
+        x, y = self.pos
+        # make id from deceased agent available
+        self.model.set_available_ids.add(self.unique_id)
+        # remove agent from grid and schedule
+        self.model.grid._remove_agent((x,y), self)
+        self.model.schedule.remove(self)
+
+
+    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):  ##
+        # transform ages to steps
+        age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
+        # define stochastic probability of agent death as function of age
+        if (self.age > age_1) and (self.age <= age_2):
+            if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
+                self.remove_after_death()
+        elif (self.age > age_2) and (self.age < age_3):
+            if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
+                self.remove_after_death()
+        elif self.age >= age_3:
+            self.remove_after_death()
+
+    def look_for_job(self):
+        # loop through shuffled job centers list until a job is found
+        np.random.shuffle(self.model.clusters_info[self.loc_info['city_idx']]['jobs'])
+        for job_c in self.model.clusters_info[self.loc_info['city_idx']]['jobs']:
+            if job_c.num_places:
+                job_c.num_places -= 1
+                self.loc_info['job'] = job_c
+                break
+
+    def stage_1(self):
+        pass
+
+    def stage_2(self):
+        pass
+
+    def stage_3(self):
+        pass
+
+    def stage_4(self):
+        if self.age == 36 * 30:
+            self.replace_agent(Adult)
+
+class Adult(Young): # from 30 to 65
+    def stage_1(self):
+        pass
+
+    def stage_2(self):
+        pass
+
+    def stage_3(self):
+        pass
+
+    def stage_4(self):
+        if self.age == 36 * 65:
+            self.replace_agent(Pensioner)
+
+class Pensioner(Adult): # from 65 to death
+    def stage_1(self):
+        pass
+
+    def stage_2(self):
+        pass
+
+    def stage_3(self):
+        pass
+
+    def stage_4(self):
+        pass
+
 class Simple_Language_Agent:
 
     #define memory retrievability constant

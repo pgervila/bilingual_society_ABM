@@ -398,6 +398,9 @@ class Simple_Language_Model(Model):
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
                 self.add_agent_to_grid_sched_networks(ag1, ag2, ag3, ag4)
 
+                # TODO : need to delete all original references to agent instances except for
+                # networks, grid, schedule
+
             # set up agents left out of family partition of cluster
             len_clust = clust_info['num_agents']
             num_left_agents = len_clust % self.family_size
@@ -811,7 +814,6 @@ class Simple_Language_Model(Model):
             else:
                 return 0
 
-
     def step(self):
         self.datacollector.collect(self)
         self.schedule.step()
@@ -856,7 +858,6 @@ class Simple_Language_Model(Model):
                             cmap='viridis')
             plt.colorbar(s)
             plt.show()
-
 
     def show_results(self, ag_attr='language', step=None,
                      plot_results=True, plot_type='imshow', save_fig=False):
