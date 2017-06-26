@@ -30,26 +30,19 @@ class Simple_Language_Agent:
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
         self.day_mask = {'L1':np.zeros(self.model.vocab_red, dtype=np.bool),
                          'L2':np.zeros(self.model.vocab_red, dtype=np.bool)}
-
         if import_IC:
             self.set_lang_ics()
         else:
-            S_0, t_0 = 0.01, 1000
             for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0)
-                self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0)
-                self.lang_stats[lang]['R'] = np.exp(- self.k *
-                                                    self.lang_stats[lang]['t'] /
-                                                    self.lang_stats[lang]['S']
-                                                    ).astype(np.float64)
-                self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                                self.model.vocab_red)
-
-
+                self._set_null_lang_attrs(lang)
 
     def _set_lang_attrs(self, lang, pct_key):
+        """ Private method that sets agent linguistic status for a given age
+            Args:
+                * lang: string. It can take two different values: 'L1' or 'L2'
+                * pct_key: string. It must be of the form '%_pct' with % an integer
+                  from following list [10,25,50,75,90,100]. ICs are not available for every single level
+        """
         # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
         self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.age])
         # S: numpy array(shape=vocab_size) that measures memory stability for each word
@@ -61,6 +54,29 @@ class Simple_Language_Agent:
                                                   ).astype(np.float64)
         # word counter
         self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.age])
+        # vocab pct
+        self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                  self.model.vocab_red)
+
+    def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
+        """Private method that sets null agent linguistic status, i.e. without knowledge
+           of the specified language
+           Args:
+               * lang: string. It can take two different values: 'L1' or 'L2'
+               * S_0: float. Initial value of memory stability
+               * t_0: integer. Initial value of time-elapsed ( in days) from last time words were encountered
+        """
+        self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0)
+        self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0)
+        self.lang_stats[lang]['R'] = np.exp(- self.k *
+                                            self.lang_stats[lang]['t'] /
+                                            self.lang_stats[lang]['S']
+                                            ).astype(np.float32)
+        self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
+        self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                                                  self.model.vocab_red)
 
     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
         """ set agent's linguistic Initial Conditions
@@ -68,43 +84,14 @@ class Simple_Language_Agent:
             * S_0: float <= 1. Initial memory intensity
             * t_0: last-activation days counter
             * biling_key: integer from [10,25,50,75,90,100]. Specify only if
-            specific bilingual level is needed as input
+              specific bilingual level is needed as input
         """
-
         if self.language == 0:
             self._set_lang_attrs('L1', '100_pct')
-
-            #L2
-            self.lang_stats['L2']['S'] = np.full(self.model.vocab_red, S_0)
-            self.lang_stats['L2']['t'] = np.full(self.model.vocab_red, t_0)
-            self.lang_stats['L2']['R'] = np.exp( - self.k *
-                                                 self.lang_stats['L2']['t'] /
-                                                 self.lang_stats['L2']['S']
-                                                ).astype(np.float32)
-            self.lang_stats['L2']['wc'] = np.zeros(self.model.vocab_red)
-
-            for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
-
+            self._set_null_lang_attrs('L2', S_0, t_0)
         elif self.language == 2:
+            self._set_null_lang_attrs('L1', S_0, t_0)
             self._set_lang_attrs('L2', '100_pct')
-
-            #L1
-            self.lang_stats['L1']['S'] = np.full(self.model.vocab_red, S_0)
-            self.lang_stats['L1']['t'] = np.full(self.model.vocab_red, t_0)
-            self.lang_stats['L1']['R'] = np.exp( - self.k *
-                                                 self.lang_stats['L1']['t'] /
-                                                 self.lang_stats['L1']['S']
-                                                ).astype(np.float64)
-            self.lang_stats['L1']['wc'] = np.zeros(self.model.vocab_red)
-
-            for lang in ['L1', 'L2']:
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
-
         else: # BILINGUAL
             if not biling_key:
                 biling_key = np.random.choice([10, 25, 50, 75, 90])
@@ -112,10 +99,6 @@ class Simple_Language_Agent:
             L2_key = str(100 - biling_key) + '_pct'
             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
                 self._set_lang_attrs(lang, key)
-
-                self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
 
     def move_random(self):
         """ Take a random step into any surrounding cell
