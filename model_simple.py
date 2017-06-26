@@ -516,6 +516,12 @@ class Simple_Language_Model(Model):
     def define_friendship_networks(self):
         graph_friends = self.friendship_network
 
+        # how many friends per agent originally ??
+
+        # Simple idea:
+        # parents - > pick friends from job
+        # children -> pick friends from school
+
 
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent
