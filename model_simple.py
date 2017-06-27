@@ -408,7 +408,7 @@ class Simple_Language_Model(Model):
         self.family_network.add_nodes_from(agents)
 
     def define_family_networks(self):
-        # define families
+        # Method to define families and also adds relatives to known_people_network
         # marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
         family_size = 4
 
@@ -416,7 +416,6 @@ class Simple_Language_Model(Model):
 
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * family_size)):
-
                 # set ages of family members
                 steps_per_year = 36
                 min_age, max_age = 40 * steps_per_year, 50 * steps_per_year
@@ -424,12 +423,12 @@ class Simple_Language_Model(Model):
                 min_age, max_age = 10 * steps_per_year, 20 * steps_per_year
                 family[2].age, family[3].age = np.random.randint(min_age, max_age, size=2)
 
-                #import ICs # TODO: set some proportionality constraints parent-children in bilingual cases
+                # assign same home to all family members
+                home = clust_info['homes'][idx]
+                #import ICs and assign home
+                # TODO: set some proportionality constraints parent-children in bilingual cases
                 for member in family:
                     member.set_lang_ics()
-                # assign same home to family
-                home = clust_info['homes'][idx]
-                for member in family:
                     member.loc_info['home'] = home
                     home.agents_in.add(member)
                 # assign job to parents
@@ -447,6 +446,57 @@ class Simple_Language_Model(Model):
                 school = clust_info['schools'][idx_school]
                 for child in family[2:]:
                     child.loc_info['school'] = school
+                # find out lang of interaction btw family members
+                # consorts
+                pct11 = family[0].lang_stats['L1']['pct'][family[0].age]
+                pct12 = family[0].lang_stats['L2']['pct'][family[0].age]
+                pct21 = family[1].lang_stats['L1']['pct'][family[1].age]
+                pct22 = family[1].lang_stats['L2']['pct'][family[1].age]
+                if (family[0].language, family[1].language) in [(0, 0), (0, 1), (1, 0)]:
+                    lang_consorts = 0
+                elif (family[0].language, family[1].language) in [(2, 1), (1, 2), (2, 2)]:
+                    lang_consorts = 1
+                elif (family[0].language, family[1].language) == (1, 1):
+                    # Find weakest combination lang-agent, pick other language as common
+                    idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
+                    if idx_weakest in [0, 2]:
+                        lang_consorts = 1
+                    else:
+                        lang_consorts = 0
+                # language with father, mother
+                lang_with_father = np.argmax([pct11, pct12])
+                lang_with_mother = np.argmax([pct21, pct22])
+                # siblings
+                avg_lang = (lang_with_father + lang_with_mother) / 2
+                if avg_lang == 0:
+                    lang_siblings = 0
+                elif avg_lang == 1:
+                    lang_siblings = 1
+                else:
+                    # TODO : bug in following lines
+                    # find weakest, pick opposite
+                    pct11 = family[2].lang_stats['L1']['pct'][family[2].age]
+                    pct12 = family[2].lang_stats['L2']['pct'][family[2].age]
+                    pct21 = family[3].lang_stats['L1']['pct'][family[3].age]
+                    pct22 = family[3].lang_stats['L2']['pct'][family[3].age]
+                    idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
+                    if idx_weakest in [0, 2]:
+                        lang_siblings = 1
+                    else:
+                        lang_siblings = 0
+                # add family edges in family and known_people networks
+                for (i, j) in [(0, 1), (1, 0)]:
+                    graph_fam.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_consorts)
+                for (i, j, link) in [(0, 2, 'child'), (2, 0, 'father'), (0, 3, 'child'), (3, 0, 'father')]:
+                    graph_fam.add_edge(family[i], family[j], fam_link=link, lang=lang_with_father)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_father)
+                for (i, j, link) in [(1, 2, 'child'), (2, 1, 'mother'), (1,3, 'child'), (3,1,'mother')]:
+                    graph_fam.add_edge(family[i], family[j], fam_link=link, lang=lang_with_mother)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_mother)
+                for (i, j) in [(2, 3), (3, 2)]:
+                    graph_fam.add_edge(family[i], family[j], fam_link='sibling', lang=lang_siblings)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_siblings)
 
             # set up agents left out of family partition of cluster
             len_clust = len(clust_info['agents'])
@@ -465,70 +515,6 @@ class Simple_Language_Model(Model):
                             job.num_places -= 1
                             ag.loc_info['job'] = job
                             break
-
-            # find out lang of interaction btw family members
-            # consorts
-            if (family[0].language, family[1].language) in [(0, 0), (0, 1), (1, 0)]:
-                lang_consorts = 0
-            elif (family[0].language, family[1].language) in [(2, 1), (1, 2), (2, 2)]:
-                lang_consorts = 1
-            elif (family[0].language, family[1].language) == (1, 1):
-                # Find weakest combination lang-agent, pick other language as common
-                pct11, pct12 = family[0].lang_stats['L1']['pct'], family[0].lang_stats['L2']['pct']
-                pct21, pct22 = family[1].lang_stats['L1']['pct'], family[1].lang_stats['L2']['pct']
-                idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-                if idx_weakest in [0, 2]:
-                    lang_consorts = 1
-                else:
-                    lang_consorts = 0
-                # parent, mother
-                lang_with_father = np.argmax([pct11, pct12])
-                lang_with_mother = np.argmax([pct21, pct22])
-                #siblings
-                avg_lang = (lang_with_father + lang_with_mother) / 2
-                if avg_lang == 0:
-                    lang_siblings = 0
-                elif avg_lang == 1:
-                    lang_siblings = 1
-                else:
-                    # find weakest, pick opposite
-                    pct11, pct12 = family[2].lang_stats['L1']['pct'], family[2].lang_stats['L2']['pct']
-                    pct21, pct22 = family[3].lang_stats['L1']['pct'], family[3].lang_stats['L2']['pct']
-                    idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-                    if idx_weakest in [0, 2]:
-                        lang_siblings = 1
-                    else:
-                        lang_siblings = 0
-
-                graph_fam.add_edge(family[0], family[1], fam_link='consort', lang=lang_consorts)
-                self.known_people_network.add_edge(family[0], family[1], family=True, lang=lang_consorts)
-                graph_fam.add_edge(family[1], family[0], fam_link='consort', lang=lang_consorts)
-                self.known_people_network.add_edge(family[1], family[0], family=True, lang=lang_consorts)
-
-                graph_fam.add_edge(family[0], family[2], fam_link='child', lang=lang_with_father)
-                self.known_people_network.add_edge(family[0], family[2], family=True, lang=lang_with_father)
-                graph_fam.add_edge(family[2], family[0], fam_link='father', lang=lang_with_father)
-                self.known_people_network.add_edge(family[2], family[0], family=True, lang=lang_with_father)
-
-                graph_fam.add_edge(family[0], family[3], fam_link='child', lang=lang_with_father)
-                self.known_people_network.add_edge(family[0], family[3], family=True, lang=lang_with_father)
-                graph_fam.add_edge(family[3], family[0], fam_link='father', lang=lang_with_father)
-                self.known_people_network.add_edge(family[3], family[0], family=True, lang=lang_with_father)
-
-                graph_fam.add_edge(family[1], family[2], fam_link='child', lang=lang_with_mother)
-                self.known_people_network.add_edge(family[1], family[2], family=True, lang=lang_with_mother)
-                graph_fam.add_edge(family[2], family[1], fam_link='mother', lang=lang_with_mother)
-                self.known_people_network.add_edge(family[2], family[1], family=True, lang=lang_with_mother)
-
-                graph_fam.add_edge(family[1], family[3], fam_link='child', lang=lang_with_mother)
-                self.known_people_network.add_edge(family[1], family[3], family=True, lang=lang_with_mother)
-                graph_fam.add_edge(family[3], family[1], fam_link='mother', lang=lang_with_mother)
-                self.known_people_network.add_edge(family[3], family[1], family=True, lang=lang_with_mother)
-
-                graph_fam.add_edge(family[2], family[3], fam_link='sibling', lang=lang_siblings)
-                self.known_people_network.add_edge(family[2], family[3], family=True, lang=lang_siblings)
-                graph_fam.add_edge(family[3], family[2], fam_link='sibling', lang=lang_siblings)
-                self.known_people_network.add_edge(family[3], family[2], family=True, lang=lang_siblings)
 
     def define_friendship_networks(self):
         graph_friends = self.friendship_network
