@@ -501,23 +501,34 @@ class Simple_Language_Model(Model):
                         lang_siblings = 0
 
                 graph_fam.add_edge(family[0], family[1], fam_link='consort', lang=lang_consorts)
+                self.known_people_network.add_edge(family[0], family[1], family=True, lang=lang_consorts)
                 graph_fam.add_edge(family[1], family[0], fam_link='consort', lang=lang_consorts)
+                self.known_people_network.add_edge(family[1], family[0], family=True, lang=lang_consorts)
+
                 graph_fam.add_edge(family[0], family[2], fam_link='child', lang=lang_with_father)
+                self.known_people_network.add_edge(family[0], family[2], family=True, lang=lang_with_father)
                 graph_fam.add_edge(family[2], family[0], fam_link='father', lang=lang_with_father)
+                self.known_people_network.add_edge(family[2], family[0], family=True, lang=lang_with_father)
+
                 graph_fam.add_edge(family[0], family[3], fam_link='child', lang=lang_with_father)
+                self.known_people_network.add_edge(family[0], family[3], family=True, lang=lang_with_father)
                 graph_fam.add_edge(family[3], family[0], fam_link='father', lang=lang_with_father)
+                self.known_people_network.add_edge(family[3], family[0], family=True, lang=lang_with_father)
+
                 graph_fam.add_edge(family[1], family[2], fam_link='child', lang=lang_with_mother)
+                self.known_people_network.add_edge(family[1], family[2], family=True, lang=lang_with_mother)
                 graph_fam.add_edge(family[2], family[1], fam_link='mother', lang=lang_with_mother)
+                self.known_people_network.add_edge(family[2], family[1], family=True, lang=lang_with_mother)
+
                 graph_fam.add_edge(family[1], family[3], fam_link='child', lang=lang_with_mother)
+                self.known_people_network.add_edge(family[1], family[3], family=True, lang=lang_with_mother)
                 graph_fam.add_edge(family[3], family[1], fam_link='mother', lang=lang_with_mother)
+                self.known_people_network.add_edge(family[3], family[1], family=True, lang=lang_with_mother)
+
                 graph_fam.add_edge(family[2], family[3], fam_link='sibling', lang=lang_siblings)
+                self.known_people_network.add_edge(family[2], family[3], family=True, lang=lang_siblings)
                 graph_fam.add_edge(family[3], family[2], fam_link='sibling', lang=lang_siblings)
-
-
-    def define_known_people_networks(self):
-        pass
-
-
+                self.known_people_network.add_edge(family[3], family[2], family=True, lang=lang_siblings)
 
     def define_friendship_networks(self):
         graph_friends = self.friendship_network

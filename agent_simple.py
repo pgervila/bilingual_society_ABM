@@ -235,59 +235,70 @@ class Simple_Language_Agent:
         pass
 
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
-        if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
-            l1 = l2 = 0
+        """ Get language spoken by two given agents"""
+
+        #TODO : check for all networks, or put family and friendship also in known people network ??
+
+        # check if agents already know each other
+        if ag_2 in self.model.known_people_network[ag_1]:
+            l1 = self.model.known_people_network[ag_1][ag_2]['lang']
+            l2 = self.model.known_people_network[ag_2][ag_1]['lang']
             ag_1.speak_choice_model(l1, ag_2)
             ag_2.speak_choice_model(l2, ag_1)
+        else:
+            if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
+                l1 = l2 = 0
+                ag_1.speak_choice_model(l1, ag_2)
+                ag_2.speak_choice_model(l2, ag_1)
 
-        elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
-            l1 = l2 = 1
-            ag_1.speak_choice_model(l1, ag_2)
-            ag_2.speak_choice_model(l2, ag_1)
+            elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
+                l1 = l2 = 1
+                ag_1.speak_choice_model(l1, ag_2)
+                ag_2.speak_choice_model(l2, ag_1)
 
-        elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
-            # simplified PRELIMINARY assumption: ag_1 will start speaking the language they speak best
-            # (at this stage no modeling of place, inertia, known-person influence)
-            l1 = np.argmax([ag_1.lang_stats['L1']['pct'][self.age], ag_1.lang_stats['L2']['pct'][self.age]])
-            l2 = l1
-            ag_1.speak_choice_model(l1, ag_2)
-            ag_2.speak_choice_model(l2, ag_1)
+            elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
+                # simplified PRELIMINARY assumption: ag_1 will start speaking the language they speak best
+                # (at this stage no modeling of place, inertia, known-person influence)
+                l1 = np.argmax([ag_1.lang_stats['L1']['pct'][self.age], ag_1.lang_stats['L2']['pct'][self.age]])
+                l2 = l1
+                ag_1.speak_choice_model(l1, ag_2)
+                ag_2.speak_choice_model(l2, ag_1)
 
-        else: # mono L1 vs mono L2 with relatively close languages -> SOME understanding is possible (LOW THRESHOLD)
-            ag1_pcts = (ag_1.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
-            ag2_pcts = (ag_2.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
-            # if ag_2 can understand some of ag_1 lang
-            if ag_1.language == 0:
-                # if each agent can understand some of other agent's language
-                if (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
-                ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
-                    l1, l2 = 0, 1
-                # otherwise
-                elif (ag1_pcts[1] < ag_1.lang_thresholds['understand'] and
-                ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
-                    l1, l2 = 0, 0
-                elif (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
-                ag2_pcts[0] < ag_2.lang_thresholds['understand']):
-                    l1, l2 = 1, 1
-                else:
-                    l1, l2 = None, None # NO CONVERSATION POSSIBLE
-            elif ag_1.language == 2:
-                if (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
-                ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
-                    l1, l2 = 1, 0
-                elif (ag1_pcts[0] < ag_1.lang_thresholds['understand'] and
-                ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
-                    l1, l2 = 1, 1
-                elif (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
-                ag2_pcts[1] < ag_2.lang_thresholds['understand']):
-                    l1, l2 = 0, 0
-                else:
-                    l1, l2 = None, None # NO CONVERSATION POSSIBLE
-            if l1 or l2: # call update only if conversation takes place
-                ag_1.speak_choice_model(l1, ag_2, long=False)
-                ag_2.speak_choice_model(l2, ag_1, long=False)
-        if return_values:
-            return l1, l2
+            else: # mono L1 vs mono L2 with relatively close languages -> SOME understanding is possible (LOW THRESHOLD)
+                ag1_pcts = (ag_1.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
+                ag2_pcts = (ag_2.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
+                # if ag_2 can understand some of ag_1 lang
+                if ag_1.language == 0:
+                    # if each agent can understand some of other agent's language
+                    if (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
+                    ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
+                        l1, l2 = 0, 1
+                    # otherwise
+                    elif (ag1_pcts[1] < ag_1.lang_thresholds['understand'] and
+                    ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
+                        l1, l2 = 0, 0
+                    elif (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
+                    ag2_pcts[0] < ag_2.lang_thresholds['understand']):
+                        l1, l2 = 1, 1
+                    else:
+                        l1, l2 = None, None # NO CONVERSATION POSSIBLE
+                elif ag_1.language == 2:
+                    if (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
+                    ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
+                        l1, l2 = 1, 0
+                    elif (ag1_pcts[0] < ag_1.lang_thresholds['understand'] and
+                    ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
+                        l1, l2 = 1, 1
+                    elif (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
+                    ag2_pcts[1] < ag_2.lang_thresholds['understand']):
+                        l1, l2 = 0, 0
+                    else:
+                        l1, l2 = None, None # NO CONVERSATION POSSIBLE
+                if l1 or l2: # call update only if conversation takes place
+                    ag_1.speak_choice_model(l1, ag_2, long=False)
+                    ag_2.speak_choice_model(l2, ag_1, long=False)
+            if return_values:
+                return l1, l2
 
     def study_lang(self, lang):
         pass
