@@ -513,10 +513,18 @@ class Simple_Language_Model(Model):
                 graph_fam.add_edge(family[2], family[3], fam_link='sibling', lang=lang_siblings)
                 graph_fam.add_edge(family[3], family[2], fam_link='sibling', lang=lang_siblings)
 
+
+    def define_known_people_networks(self):
+        pass
+
+
+
     def define_friendship_networks(self):
         graph_friends = self.friendship_network
 
         # how many friends per agent originally ??
+        # Let's start with 2
+
 
         # Simple idea:
         # parents - > pick friends from job
