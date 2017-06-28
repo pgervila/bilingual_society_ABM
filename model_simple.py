@@ -3,8 +3,9 @@ import os
 from importlib import reload
 from math import ceil
 import random
+import bisect
 from itertools import product
-from collections import defaultdict, Counter, OrderedDict
+from collections import defaultdict, Counter
 import numpy as np
 import pandas as pd
 #import matplotlib
@@ -66,6 +67,7 @@ class StagedActivation_modif(StagedActivation):
 
 
 class Simple_Language_Model(Model):
+    ic_pct_keys = [10, 25, 50, 75, 90]
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250), width=100, height=100, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000, lang_ags_sorted_by_dist=True,
                  lang_ags_sorted_in_clust=True):
@@ -321,10 +323,14 @@ class Simple_Language_Model(Model):
                 self.clusters_info[clust_idx]['homes'].append(Home((x,y)))
 
     def generate_lang_distrib(self):
+        """ Method that generates a list of lists of lang labels in the requested order
+            Returns:
+                * A list of lists where each list contains lang labels per cluster
+        """
         # generate random array with lang labels ( no sorting at all )
         langs_per_ag_array = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
         idxs_to_split_by_clust = self.cluster_sizes.cumsum()[:-1]
-        # check if agent sorting by distance to origin is requested
+        # check if agent-sorting by distance to origin is requested
         if self.lang_ags_sorted_by_dist:
             langs_per_ag_array.sort()
             # split lang labels by cluster
@@ -356,7 +362,7 @@ class Simple_Language_Model(Model):
         return langs_per_clust
 
     def map_lang_agents(self):
-        """ Method to instantiate all agents"""
+        """ Method to instantiate all agents according to requested linguistic order"""
         # get lang distribution for each cluster
         langs_per_clust = self.generate_lang_distrib()
         # set agents ids
@@ -373,7 +379,7 @@ class Simple_Language_Model(Model):
                 ag3 = Simple_Language_Agent(self, ids.pop(), family_langs[2], city_idx=clust_idx)
                 ag4 = Simple_Language_Agent(self, ids.pop(), family_langs[3], city_idx=clust_idx)
 
-                # add agents to schedule, grid and networks
+                # add agents to clust_info, schedule, grid and networks
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
                 self.add_agent_to_grid_sched_networks(ag1, ag2, ag3, ag4)
 
@@ -412,8 +418,6 @@ class Simple_Language_Model(Model):
         # marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
         family_size = 4
 
-        graph_fam = self.family_network
-
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * family_size)):
                 # set ages of family members
@@ -425,10 +429,45 @@ class Simple_Language_Model(Model):
 
                 # assign same home to all family members
                 home = clust_info['homes'][idx]
-                #import ICs and assign home
-                # TODO: set some proportionality constraints parent-children in bilingual cases
-                for member in family:
-                    member.set_lang_ics()
+                # import ICs and assign home
+                # apply correlation between parents' and children's lang knowledge if parents bilinguals
+                if 1 in [family[0].language, family[1].language]:
+                    key_parents = [] # define list to store parents' percentage knowledge
+                    for ix, member in enumerate(family):
+                        if ix <2 and member.language == 1:
+                            key = np.random.choice(self.ic_pct_keys)
+                            key_parents.append(key)
+                            member.set_lang_ics(biling_key=key)
+                        elif ix < 2:
+                            lang_mono = member.language
+                            member.set_lang_ics()
+                        elif ix >= 2:
+                            if len(key_parents) == 1:
+                                if not lang_mono: # mono in lang 0
+                                    key = (key_parents[0] + 100) / 2
+                                else: # mono in lang 1
+                                    key = key_parents[0] / 2
+                            else:
+                                key = sum(key_parents) / len(key_parents)
+                            key = self.ic_pct_keys[bisect.bisect_left(self.ic_pct_keys, key)]
+                            member.set_lang_ics(biling_key=key)
+                        member.loc_info['home'] = home
+                        home.agents_in.add(member)
+                else: # monolingual parents
+                    # check if children are bilingual
+                    if 1 in [family[2].language, family[3].language]:
+                        for ix, member in enumerate(family):
+                            if ix < 2:
+                                member.set_lang_ics()
+                            else:
+                                if member.language == 1:
+                                    # logical that child has much better knowledge of parents lang
+                                    member.set_lang_ics(biling_key=90)
+                                else:
+                                    member.set_lang_ics()
+                    else:
+                        for member in family:
+                            member.set_lang_ics()
                     member.loc_info['home'] = home
                     home.agents_in.add(member)
                 # assign job to parents
@@ -473,7 +512,6 @@ class Simple_Language_Model(Model):
                 elif avg_lang == 1:
                     lang_siblings = 1
                 else:
-                    # TODO : bug in following lines
                     # find weakest, pick opposite
                     pct11 = family[2].lang_stats['L1']['pct'][family[2].age]
                     pct12 = family[2].lang_stats['L2']['pct'][family[2].age]
@@ -486,16 +524,16 @@ class Simple_Language_Model(Model):
                         lang_siblings = 0
                 # add family edges in family and known_people networks
                 for (i, j) in [(0, 1), (1, 0)]:
-                    graph_fam.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
+                    self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
                     self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_consorts)
                 for (i, j, link) in [(0, 2, 'child'), (2, 0, 'father'), (0, 3, 'child'), (3, 0, 'father')]:
-                    graph_fam.add_edge(family[i], family[j], fam_link=link, lang=lang_with_father)
+                    self.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_father)
                     self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_father)
                 for (i, j, link) in [(1, 2, 'child'), (2, 1, 'mother'), (1,3, 'child'), (3,1,'mother')]:
-                    graph_fam.add_edge(family[i], family[j], fam_link=link, lang=lang_with_mother)
+                    self.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_mother)
                     self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_mother)
                 for (i, j) in [(2, 3), (3, 2)]:
-                    graph_fam.add_edge(family[i], family[j], fam_link='sibling', lang=lang_siblings)
+                    self.family_network.add_edge(family[i], family[j], fam_link='sibling', lang=lang_siblings)
                     self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_siblings)
 
             # set up agents left out of family partition of cluster

@@ -2,8 +2,9 @@
 import random
 import numpy as np
 import networkx as nx
+import bisect
 from scipy.spatial.distance import pdist
-from collections import deque, Counter, defaultdict
+from collections import defaultdict
 
 #import private library to model lang zipf CDF
 from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
@@ -94,7 +95,7 @@ class Simple_Language_Agent:
             self._set_lang_attrs('L2', '100_pct')
         else: # BILINGUAL
             if not biling_key:
-                biling_key = np.random.choice([10, 25, 50, 75, 90])
+                biling_key = np.random.choice(self.model.ic_pct_keys)
             L1_key = str(biling_key) + '_pct'
             L2_key = str(100 - biling_key) + '_pct'
             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
