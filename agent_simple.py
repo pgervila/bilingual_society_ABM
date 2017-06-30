@@ -247,23 +247,39 @@ class Simple_Language_Agent:
             ag_1.speak_choice_model(l1, ag_2)
             ag_2.speak_choice_model(l2, ag_1)
         else:
+            pct11 = ag_1.lang_stats['L1']['pct'][ag_1.age]
+            pct12 = ag_1.lang_stats['L2']['pct'][ag_1.age]
+            pct21 = ag_2.lang_stats['L1']['pct'][ag_2.age]
+            pct22 = ag_2.lang_stats['L2']['pct'][ag_2.age]
             if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
                 l1 = l2 = 0
                 ag_1.speak_choice_model(l1, ag_2)
                 ag_2.speak_choice_model(l2, ag_1)
-
             elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
                 l1 = l2 = 1
                 ag_1.speak_choice_model(l1, ag_2)
                 ag_2.speak_choice_model(l2, ag_1)
-
             elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
                 # simplified PRELIMINARY assumption: ag_1 will start speaking the language they speak best
                 # (at this stage no modeling of place, inertia, known-person influence)
-                l1 = np.argmax([ag_1.lang_stats['L1']['pct'][self.age], ag_1.lang_stats['L2']['pct'][self.age]])
+                l1 = np.argmax([pct11, pct12])
                 l2 = l1
                 ag_1.speak_choice_model(l1, ag_2)
                 ag_2.speak_choice_model(l2, ag_1)
+
+
+                # Version from family links
+                # Find weakest combination lang-agent, pick other language as common
+                idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
+                if idx_weakest in [0, 2]:
+                    l1 = l2 = 1
+                elif idx_weakest in [1, 3]:
+                    l1 = l2 = 0
+                ag_1.speak_choice_model(l1, ag_2)
+                ag_2.speak_choice_model(l2, ag_1)
+
+                #TODO : introduce new agent random variable measuring lang assertiveness to help pick lang
+
 
             else: # mono L1 vs mono L2 with relatively close languages -> SOME understanding is possible (LOW THRESHOLD)
                 ag1_pcts = (ag_1.lang_stats['L1']['pct'][self.age], ag_2.lang_stats['L2']['pct'][self.age])
