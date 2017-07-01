@@ -210,6 +210,38 @@ class Simple_Language_Agent:
                 with_agent.speak_choice_model(lang, self)
 
 
+    def speak_in_group(self, first_speaker=True, group=None, group_max_size=5):
+        """ Determine language spoken when a group meets
+            Group is split between initiator and rest_of_group
+        """
+
+        if group:
+            group_set = set(group)
+        else:
+            ags_in_cell = self.model.grid.get_cell_list_contents([self.pos])
+            num_ags_in_cell = len(ags_in_cell)
+            if num_ags_in_cell >= 3:
+                if num_ags_in_cell >= group_max_size:
+                    group_size = np.random.randint(3, group_max_size + 1)
+                    group = list(np.random.choice(ags_in_cell, replace=False, size=group_size))
+                    if self not in group:
+                        group = [self] + group[:-1]
+                else:
+                    group_size = np.random.randint(3, num_ags_in_cell + 1)
+                    group = np.random.choice(ags_in_cell, replace=False, size=group_size)
+                group_set = set(group)
+            else:
+                group_set = None
+        if group_set:
+            if not first_speaker:
+                initiator = np.random.choice(group_set.difference({self}))
+                rest_of_group = list(group_set.difference({initiator}))
+                self.get_group_conversation_lang(initiator, rest_of_group )
+            else:
+                rest_of_group = list(group_set.difference({self}))
+                self.get_group_conversation_lang(self, rest_of_group)
+
+
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
         pos = [self.pos]
@@ -362,6 +394,65 @@ class Simple_Language_Agent:
                     ag_2.speak_choice_model(l2, ag_1, long=False)
             if return_values:
                 return l1, l2
+
+    def get_group_conversation_lang(self, initiator, rest_of_group):
+        """ Method that allows to
+        Initiator of conversation is seprated from rest_of_group
+        """
+        ags_lang_profile = [(ag.language, ag.lang_freq['cat_pct_s'], ag) for ag in rest_of_group]
+
+        ags_lang_profile = sorted(ags_lang_profile, key=lambda elem: (elem[0], elem[1]))
+        rest_of_group = [tup[2] for tup in ags_lang_profile]
+
+        # map init lang profile
+        def fun_map_init(x):
+            if (x <= 0.2):
+                return 0
+            elif (0.2<x<=0.5):
+                return 1
+            elif (0.5<x<=0.8):
+                return 2
+            elif (x > 0.8):
+                return 3
+
+        # define inputs to group_lang_map_dict
+        init = fun_map_init(initiator.lang_freq['cat_pct_s'])
+        group_lang_min = rest_of_group[0].language
+        group_lang_max = rest_of_group[-1].language
+        # call group_lang_map_dict model method to get conversat layout
+        init_lang, common_lang = self.model.group_lang_map_dict[(init,
+                                                                 group_lang_min,
+                                                                 group_lang_max)]
+        if common_lang: # only one group conversation lang
+            langs_list = [init_lang] + [init_lang for ag in rest_of_group]
+            self.update_lang_counter([initiator] + rest_of_group, langs_list)
+        else: # cases wherein group conversat lang is not unique
+            langs_list = []
+            if (init, group_lang_min, group_lang_max) in [(0, 0, 2), (1, 0, 2)] :
+                for ag in [initiator] + rest_of_group:
+                    if ag.language == 2:
+                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
+                                0.5 * (ag.lang_freq['cat_pct_h']))
+                        langs_list.append(np.random.binomial(1, p_ag))
+                    else:
+                        langs_list.append(0)
+            elif (init, group_lang_min, group_lang_max) == (3, 0, 0):
+                langs_list.append(1)
+                for ag in rest_of_group:
+                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
+                                0.5 * (ag.lang_freq['cat_pct_h']))
+                        langs_list.append(np.random.binomial(1, p_ag))
+            elif (init, group_lang_min, group_lang_max) in [(2, 0, 2), (3, 0, 1), (3, 0, 2)]:
+                for ag in [initiator] + rest_of_group:
+                    if ag.language == 0:
+                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
+                                0.5 * (ag.lang_freq['cat_pct_h']))
+                        langs_list.append(np.random.binomial(1, p_ag))
+                    else:
+                        langs_list.append(1)
+
+            self.update_lang_counter([initiator] + rest_of_group, langs_list)
+
 
     def study_lang(self, lang):
         pass

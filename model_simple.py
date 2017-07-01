@@ -87,6 +87,8 @@ class Simple_Language_Model(Model):
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.clust_centers = None
         self.cluster_sizes = None
+        # Define model group conversation laws
+        self.map_conversat_lang()
 
         # import lang ICs and lang CDFs data as function of steps
         self.lang_ICs = dd.io.load('lang_spoken_ics_vs_step.h5')
@@ -564,6 +566,53 @@ class Simple_Language_Model(Model):
         # Simple idea:
         # parents - > pick friends from job
         # children -> pick friends from school
+
+    def map_conversat_lang(self):
+        """Lookup method to determine group lang from key input factors
+         Inputs are tuples, combinations of 3 integer values : conversation's initiator lang range,
+         as well as ranges for both linguistic low and high extreme present in conversation
+         Outputs are combination of effective language used by initiator in conversation,
+         and a boolean defining whether conversation is conducted in a unique language or not
+        """
+
+        # initiator's lang range
+        init = range(4)
+        # extr_low, extr_high lang ranges
+        extr_low, extr_high = range(3), range(3)
+        # compute all combination values
+        input_comb = list(product(init, extr_low, extr_high))
+        # filter out impossible cases
+        for elem in input_comb[:]:
+            if elem[1] > elem[2]:
+                input_comb.remove(elem)
+        # define dict map
+        self.group_lang_map_dict = dict()
+        for (x, y, z) in input_comb:
+            if x == 0:
+                if ((z - y) >= 2) or (abs(x - y) > 2) or (abs(x - z) > 2):
+                    self.group_lang_map_dict[(x, y, z)] = [0, False]
+                else:
+                    self.group_lang_map_dict[(x, y, z)] = [0, True]
+            elif x == 3:
+                if ((z - y) >= 2) or (abs(x - y) > 2) or (abs(x - z) > 2):
+                    self.group_lang_map_dict[(x, y, z)] = [1, False]
+                else:
+                    self.group_lang_map_dict[(x, y, z)] = [1, True]
+
+        self.group_lang_map_dict[(1, 0, 0)] = [0, True]
+        self.group_lang_map_dict[(1, 0, 1)] = [0, True]
+        self.group_lang_map_dict[(1, 0, 2)] = [0, False]
+        self.group_lang_map_dict[(1, 1, 1)] = [0, True]
+        self.group_lang_map_dict[(1, 1, 2)] = [1, True]
+        self.group_lang_map_dict[(1, 2, 2)] = [1, True]
+
+        self.group_lang_map_dict[(2, 0, 0)] = [0, True]
+        self.group_lang_map_dict[(2, 0, 1)] = [0, True]
+        self.group_lang_map_dict[(2, 0, 2)] = [1, False]
+        self.group_lang_map_dict[(2, 1, 1)] = [1, True]
+        self.group_lang_map_dict[(2, 1, 2)] = [1, True]
+        self.group_lang_map_dict[(2, 2, 2)] = [1, True]
+
 
 
     def get_lang_stats(self, i):
