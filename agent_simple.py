@@ -235,6 +235,49 @@ class Simple_Language_Agent:
     def read(self):
         pass
 
+    def get_conv_lang_IMP(self, *ags, return_values=False):
+        """ MAXIMIN language rule from Van Parijs"""
+
+        # TODO : build MIN vectors for L1, L2
+
+        def get_pcts_per_lang(ags):
+            l1_pcts, l2_pcts = list(), list()
+            for ag in ags:
+                pct1 = ag.lang_stats['L1']['pct'][ag.age]
+                pct2 = ag.lang_stats['L2']['pct'][ag.age]
+                l1_pcts.append(pct1)
+                l2_pcts.append(pct2)
+            return l1_pcts, l2_pcts
+
+        num_ags = len(ags)
+
+        if num_ags == 2:
+            if ags[1] in self.model.known_people_network[ags[0]]:
+                l1 = self.model.known_people_network[ags[0]][ags[1]]['lang']
+                l2 = self.model.known_people_network[ags[1]][ags[0]]['lang']
+                ags[0].speak_choice_model(l1, ags[1])
+                ags[1].speak_choice_model(l2, ags[0])
+            else:
+                l1_pcts, l2_pcts = get_pcts_per_lang(ags)
+        elif num_ags > 2:
+            # we have a group
+            l1_pcts, l2_pcts = get_pcts_per_lang(ags)
+
+        ag_langs = [ag.lang for ag in ags]
+        if set(ag_langs) == {0, 1}:
+            pass
+        elif set(ag_langs) == {1}:
+            pass
+        elif set(ag_langs) == {1, 2}:
+            pass
+        else:
+
+
+
+
+
+
+
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
         """ Get language spoken by two given agents"""
 
@@ -279,6 +322,9 @@ class Simple_Language_Agent:
                 ag_2.speak_choice_model(l2, ag_1)
 
                 #TODO : introduce new agent random variable measuring lang assertiveness to help pick lang
+                #TODO : how to call this new var ? 'Loyalty' ??
+                #TODO IDEA : start with neutral people. No preference at all for any language, just spontaneity, ease of use, etc...
+                #TODO : Then start playing with random distributions of loyalty across population and evaluate effect
 
 
             else: # mono L1 vs mono L2 with relatively close languages -> SOME understanding is possible (LOW THRESHOLD)
