@@ -206,8 +206,8 @@ class Simple_Language_Agent:
             if not lang:
                 self.get_conversation_lang(self, with_agent)
             else:
-                self.speak_choice_model(lang, with_agent)
-                with_agent.speak_choice_model(lang, self)
+                self.vocab_choice_model(lang, with_agent)
+                with_agent.vocab_choice_model(lang, self)
 
 
     def speak_in_group(self, first_speaker=True, group=None, group_max_size=5):
@@ -267,42 +267,42 @@ class Simple_Language_Agent:
     def read(self):
         pass
 
-    def get_conv_lang_IMP(self, *ags, return_values=False):
+    def get_conv_lang_IMP(self, ag_init, others, return_values=False):
         """ MAXIMIN language rule from Van Parijs"""
 
         # TODO : build MIN vectors for L1, L2
 
         def get_pcts_per_lang(ags):
-            l1_pcts, l2_pcts = list(), list()
-            for ag in ags:
-                pct1 = ag.lang_stats['L1']['pct'][ag.age]
-                pct2 = ag.lang_stats['L2']['pct'][ag.age]
-                l1_pcts.append(pct1)
-                l2_pcts.append(pct2)
+            l1_pcts = [ag.lang_stats['L1']['pct'][ag.age] for ag in ags]
+            l2_pcts = [ag.lang_stats['L2']['pct'][ag.age] for ag in ags]
             return l1_pcts, l2_pcts
 
+        ags = [ag_init]
+        ags.extend(others)
         num_ags = len(ags)
 
         if num_ags == 2:
             if ags[1] in self.model.known_people_network[ags[0]]:
                 l1 = self.model.known_people_network[ags[0]][ags[1]]['lang']
                 l2 = self.model.known_people_network[ags[1]][ags[0]]['lang']
-                ags[0].speak_choice_model(l1, ags[1])
-                ags[1].speak_choice_model(l2, ags[0])
+                ags[0].vocab_choice_model(l1, ags[1])
+                ags[1].vocab_choice_model(l2, ags[0])
             else:
                 l1_pcts, l2_pcts = get_pcts_per_lang(ags)
         elif num_ags > 2:
             # we have a group
             l1_pcts, l2_pcts = get_pcts_per_lang(ags)
-
         ag_langs = [ag.lang for ag in ags]
-        if set(ag_langs) == {0, 1}:
-            pass
+        if set(ag_langs) in [{0}, {0, 1}]:
+                lang_group= 0
+                ag_1.vocab_choice_model(l1, ag_2)
+                ag_2.vocab_choice_model(l2, ag_1)
         elif set(ag_langs) == {1}:
             pass
-        elif set(ag_langs) == {1, 2}:
+        elif set(ag_langs) in [{1, 2}, {2}]:
             pass
         else:
+            pass
 
 
 
@@ -311,16 +311,16 @@ class Simple_Language_Agent:
 
 
     def get_conversation_lang(self, ag_1, ag_2, return_values=False):
-        """ Get language spoken by two given agents"""
+        """ Get language spoken by two given agents """
 
-        #TODO : check for all networks, or put family and friendship also in known people network ??
+        # TODO : check for all networks, or put family and friendship also in known people network ??
 
         # check if agents already know each other
         if ag_2 in self.model.known_people_network[ag_1]:
             l1 = self.model.known_people_network[ag_1][ag_2]['lang']
             l2 = self.model.known_people_network[ag_2][ag_1]['lang']
-            ag_1.speak_choice_model(l1, ag_2)
-            ag_2.speak_choice_model(l2, ag_1)
+            ag_1.vocab_choice_model(l1, ag_2)
+            ag_2.vocab_choice_model(l2, ag_1)
         else:
             pct11 = ag_1.lang_stats['L1']['pct'][ag_1.age]
             pct12 = ag_1.lang_stats['L2']['pct'][ag_1.age]
@@ -328,19 +328,20 @@ class Simple_Language_Agent:
             pct22 = ag_2.lang_stats['L2']['pct'][ag_2.age]
             if (ag_1.language, ag_2.language) in [(0, 0), (0, 1), (1, 0)]:# spa-bilingual
                 l1 = l2 = 0
-                ag_1.speak_choice_model(l1, ag_2)
-                ag_2.speak_choice_model(l2, ag_1)
+                ag_1.vocab_choice_model(l1, ag_2)
+                ag_2.vocab_choice_model(l2, ag_1)
             elif (ag_1.language, ag_2.language) in [(2, 1), (1, 2), (2, 2)]:# bilingual-cat
                 l1 = l2 = 1
-                ag_1.speak_choice_model(l1, ag_2)
-                ag_2.speak_choice_model(l2, ag_1)
+                ag_1.vocab_choice_model(l1, ag_2)
+                ag_2.vocab_choice_model(l2, ag_1)
             elif (ag_1.language, ag_2.language) == (1, 1): # bilingual-bilingual
-                # simplified PRELIMINARY assumption: ag_1 will start speaking the language they speak best
+                # simplified PRELIMINARY NEUTRAL assumption: ag_1 will start speaking the language they speak best
                 # (at this stage no modeling of place, inertia, known-person influence)
                 l1 = np.argmax([pct11, pct12])
+                # who starts conversation matters
                 l2 = l1
-                ag_1.speak_choice_model(l1, ag_2)
-                ag_2.speak_choice_model(l2, ag_1)
+                ag_1.vocab_choice_model(l1, ag_2)
+                ag_2.vocab_choice_model(l2, ag_1)
 
 
                 # Version from family links
@@ -350,8 +351,8 @@ class Simple_Language_Agent:
                     l1 = l2 = 1
                 elif idx_weakest in [1, 3]:
                     l1 = l2 = 0
-                ag_1.speak_choice_model(l1, ag_2)
-                ag_2.speak_choice_model(l2, ag_1)
+                ag_1.vocab_choice_model(l1, ag_2)
+                ag_2.vocab_choice_model(l2, ag_1)
 
                 #TODO : introduce new agent random variable measuring lang assertiveness to help pick lang
                 #TODO : how to call this new var ? 'Loyalty' ??
@@ -390,14 +391,14 @@ class Simple_Language_Agent:
                     else:
                         l1, l2 = None, None # NO CONVERSATION POSSIBLE
                 if l1 or l2: # call update only if conversation takes place
-                    ag_1.speak_choice_model(l1, ag_2, long=False)
-                    ag_2.speak_choice_model(l2, ag_1, long=False)
+                    ag_1.vocab_choice_model(l1, ag_2, long=False)
+                    ag_2.vocab_choice_model(l2, ag_1, long=False)
             if return_values:
                 return l1, l2
 
     def get_group_conversation_lang(self, initiator, rest_of_group):
         """ Method that allows to
-        Initiator of conversation is seprated from rest_of_group
+            Initiator of conversation is separated from rest_of_group
         """
         ags_lang_profile = [(ag.language, ag.lang_freq['cat_pct_s'], ag) for ag in rest_of_group]
 
@@ -543,7 +544,7 @@ class Simple_Language_Agent:
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                   self.model.vocab_red)
 
-    def speak_choice_model(self, lang, ag2, long=True, return_values=False):
+    def vocab_choice_model(self, lang, ag2, long=True, return_values=False):
         """ Method that models word choice by self agent in a conversation
             Word choice is governed by vocabulary knowledge constraints
             Both self and ag2 lang arrays are updated according to the sampled words

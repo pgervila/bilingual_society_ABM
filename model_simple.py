@@ -577,7 +577,7 @@ class Simple_Language_Model(Model):
 
         # initiator's lang range
         init = range(4)
-        # extr_low, extr_high lang ranges
+        # extr_low, extr_high lang ranges ( BUT THIS WAS THOUGHT FOR PCT_L1 + PCT_L2 = 100% )
         extr_low, extr_high = range(3), range(3)
         # compute all combination values
         input_comb = list(product(init, extr_low, extr_high))
