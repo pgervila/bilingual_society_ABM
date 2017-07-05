@@ -270,39 +270,117 @@ class Simple_Language_Agent:
     def get_conv_lang_IMP(self, ag_init, others, return_values=False):
         """ MAXIMIN language rule from Van Parijs"""
 
-        # TODO : build MIN vectors for L1, L2
+        ags = [ag_init]
+        ags.extend(others)
+        num_ags = len(ags)
 
         def get_pcts_per_lang(ags):
             l1_pcts = [ag.lang_stats['L1']['pct'][ag.age] for ag in ags]
             l2_pcts = [ag.lang_stats['L2']['pct'][ag.age] for ag in ags]
             return l1_pcts, l2_pcts
 
-        ags = [ag_init]
-        ags.extend(others)
-        num_ags = len(ags)
+        def model_monolang_conv(lang_group): # unique group lang only
+            ag_init.vocab_choice_model(lang_group, others)
+            for ix, ag in enumerate(others):
+                if ix < num_ags - 2:
+                    ag.vocab_choice_model(lang_group, [ag_init] + ags[:ix] + ags[ix + 1:])
+                else:
+                    ag.vocab_choice_model(lang_group, ags[:-1])
 
-        if num_ags == 2:
-            if ags[1] in self.model.known_people_network[ags[0]]:
-                l1 = self.model.known_people_network[ags[0]][ags[1]]['lang']
-                l2 = self.model.known_people_network[ags[1]][ags[0]]['lang']
-                ags[0].vocab_choice_model(l1, ags[1])
-                ags[1].vocab_choice_model(l2, ags[0])
-            else:
-                l1_pcts, l2_pcts = get_pcts_per_lang(ags)
-        elif num_ags > 2:
-            # we have a group
-            l1_pcts, l2_pcts = get_pcts_per_lang(ags)
-        ag_langs = [ag.lang for ag in ags]
-        if set(ag_langs) in [{0}, {0, 1}]:
-                lang_group= 0
-                ag_1.vocab_choice_model(l1, ag_2)
-                ag_2.vocab_choice_model(l2, ag_1)
+        def model_multilang_conv():
+            pass
+
+        # if num_ags == 2:
+        #     if ags[1] in self.model.known_people_network[ags[0]]:
+        #         l1 = self.model.known_people_network[ags[0]][ags[1]]['lang']
+        #         l2 = self.model.known_people_network[ags[1]][ags[0]]['lang']
+        #         ags[0].vocab_choice_model(l1, ags[1])
+        #         ags[1].vocab_choice_model(l2, ags[0])
+        #     else:
+        #         l1_pcts, l2_pcts = get_pcts_per_lang(ags)
+        # elif num_ags > 2:
+        #     # we have a group
+        #     l1_pcts, l2_pcts = get_pcts_per_lang(ags)
+
+        l1_pcts, l2_pcts = get_pcts_per_lang(ags)
+        ag_langs = [ag.language for ag in ags]
+        if set(ag_langs) in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
+            lang_group = 0
+            model_monolang_conv(lang_group)
         elif set(ag_langs) == {1}:
-            pass
+            # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
+            # ( TODO : at this stage no modeling of place bias !!!!)
+            # who starts conversation matters, but also average lang spoken with already known agents
+            lang_init = np.argmax([l1_pcts[0], l2_pcts[0]])
+            langs_with_known_agents = [self.model.known_people_network[ag_init][ag]['lang']
+                                       for ag in others
+                                       if ag in self.model.known_people_network[ag_init]]
+            if langs_with_known_agents:
+                av_k_lang = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
+                lang_group = av_k_lang
+            else:
+                lang_group = lang_init
+            model_monolang_conv(lang_group)
         elif set(ag_langs) in [{1, 2}, {2}]:
-            pass
-        else:
-            pass
+            lang_group = 1
+            model_monolang_conv(lang_group)
+        else: # monolinguals on both linguistic sides => SHORT CONV
+            # get agents n both lang sides unable to follow conv in other lang
+            idxs_real_monolings_l1 = [idx for idx, pct in l1_pcts if pct < 0.025]
+            idxs_real_monolings_l2 = [idx for idx, pct in l2_pcts if pct < 0.025]
+
+            if not idxs_real_monolings_l1 and not idxs_real_monolings_l2: # => All agents understand each other langs
+                # find absolute weakest, pick opposite lang
+                # monolang agents will of course speak their own lang
+                # each agent picks favorite lang ??
+                ###
+                ag_init.vocab_choice_model(lang_group, others)
+                for ix, ag in enumerate(others):
+                    if ix < num_ags - 2:
+                        ag.vocab_choice_model(lang_group, [ag_init] + ags[:ix] + ags[ix + 1:])
+                    else:
+                        ag.vocab_choice_model(lang_group, ags[:-1])
+                ###
+                pass
+            elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
+                pass
+            elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
+                pass
+            else: # conversation impossible because there are agents on both lang sides unable to follow other's lang
+                pass # DO NOT CALL update
+
+
+##OLD
+            # if ag_2 can understand some of ag_1 lang
+            if ag_1.language == 0:
+                # if each agent can understand some of other agent's language
+                if (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
+                            ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 0, 1
+                # otherwise
+                elif (ag1_pcts[1] < ag_1.lang_thresholds['understand'] and
+                              ag2_pcts[0] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 0, 0
+                elif (ag1_pcts[1] >= ag_1.lang_thresholds['understand'] and
+                              ag2_pcts[0] < ag_2.lang_thresholds['understand']):
+                    l1, l2 = 1, 1
+                else:
+                    l1, l2 = None, None  # NO CONVERSATION POSSIBLE
+            elif ag_1.language == 2:
+                if (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
+                    ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 1, 0
+                elif (ag1_pcts[0] < ag_1.lang_thresholds['understand'] and
+                              ag2_pcts[1] >= ag_2.lang_thresholds['understand']):
+                    l1, l2 = 1, 1
+                elif (ag1_pcts[0] >= ag_1.lang_thresholds['understand'] and
+                              ag2_pcts[1] < ag_2.lang_thresholds['understand']):
+                    l1, l2 = 0, 0
+                else:
+                    l1, l2 = None, None  # NO CONVERSATION POSSIBLE
+            if l1 or l2:  # call update only if conversation takes place
+                ag_1.vocab_choice_model(l1, ag_2, long=False)
+                ag_2.vocab_choice_model(l2, ag_1, long=False)
 
 
 
@@ -344,7 +422,7 @@ class Simple_Language_Agent:
                 ag_2.vocab_choice_model(l2, ag_1)
 
 
-                # Version from family links
+                # Version from family links ( for closer ties, where feelings-love may play a role )
                 # Find weakest combination lang-agent, pick other language as common
                 idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
                 if idx_weakest in [0, 2]:
@@ -544,15 +622,17 @@ class Simple_Language_Agent:
         self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                   self.model.vocab_red)
 
-    def vocab_choice_model(self, lang, ag2, long=True, return_values=False):
+    def vocab_choice_model(self, lang, listeners, long=True, return_values=False):
         """ Method that models word choice by self agent in a conversation
             Word choice is governed by vocabulary knowledge constraints
-            Both self and ag2 lang arrays are updated according to the sampled words
+            Both self and listeners lang arrays are updated according to the sampled words
 
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
-                * ag2: agent instance with which self is talking to
-                * long: boolean that defines conversation length"""
+                * listeners: list of agent instances self is talking to
+                * long: boolean that defines conversation length
+                * return_values : boolean. If true, chosen words are returned
+        """
 
         # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in TWO STEPS
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
@@ -570,8 +650,8 @@ class Simple_Language_Agent:
         # call own update
         self.update_lang_arrays(lang, spoken_words)
         # call listener's update
-        ag2.update_lang_arrays(lang, spoken_words, speak=False)
-
+        for ag in listeners:
+            ag.update_lang_arrays(lang, spoken_words, speak=False)
         # TODO: NOW NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???
         if return_values:
             return spoken_words
