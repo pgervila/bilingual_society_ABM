@@ -90,9 +90,9 @@ class Simple_Language_Model(Model):
         # Define model group conversation laws
         self.map_conversat_lang()
 
-        # import lang ICs and lang CDFs data as function of steps
-        self.lang_ICs = dd.io.load('lang_spoken_ics_vs_step.h5')
-        self.cdf_data = dd.io.load('lang_cdfs_vs_step.h5')
+        # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
+        self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_spoken_ics_vs_step.h5'))
+        self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_cdfs_vs_step.h5'))
 
         # define model grid and schedule
         self.grid = MultiGrid(height, width, False)

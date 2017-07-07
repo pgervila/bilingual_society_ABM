@@ -201,20 +201,18 @@ class Simple_Language_Agent:
             ## linguistic model of encounter with another random agent
             if len(others) >= 1:
                 other = random.choice(others)
-                self.get_conversation_lang(self, other)
+                self.get_conv_lang(self, other)
         else:
             if not lang:
-                self.get_conversation_lang(self, with_agent)
+                self.get_conv_lang(self, with_agent)
             else:
                 self.vocab_choice_model(lang, with_agent)
                 with_agent.vocab_choice_model(lang, self)
-
 
     def speak_in_group(self, first_speaker=True, group=None, group_max_size=5):
         """ Determine language spoken when a group meets
             Group is split between initiator and rest_of_group
         """
-
         if group:
             group_set = set(group)
         else:
@@ -236,11 +234,10 @@ class Simple_Language_Agent:
             if not first_speaker:
                 initiator = np.random.choice(group_set.difference({self}))
                 rest_of_group = list(group_set.difference({initiator}))
-                self.get_group_conversation_lang_OLD(initiator, rest_of_group)
+                self.get_conv_lang(initiator, rest_of_group)
             else:
                 rest_of_group = list(group_set.difference({self}))
-                self.get_group_conversation_lang_OLD(self, rest_of_group)
-
+                self.get_conv_lang(self, rest_of_group)
 
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
@@ -251,35 +248,25 @@ class Simple_Language_Agent:
         ## if two or more agents in cell, conversation is possible
         if len(others) >= 2:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
+            l1, l2 = self.get_conv_lang(ag_1, [ag_2], return_values=True)
             k1, k2 = 'L' + str(l1), 'L' + str(l2)
 
             self.update_lang_arrays(l1, spoken_words, speak=False)
             self.update_lang_arrays(l2, spoken_words, speak=False)
 
-
-            #OLD
-            self.lang_stats[k1]['LT']['freqs'][l1] += 1
-            self.lang_stats['l']['ST']['freqs'][l1][-1] += 1
-            self.lang_stats['l']['LT']['freqs'][l2] += 1
-            self.lang_stats['l']['ST']['freqs'][l2][-1] += 1
-
     def read(self):
         pass
 
     def get_conv_lang(self, ag_init, others):
-
         """
         Method to model conversation between 2 or more agents
-        It defines speakers, lang for each speakers and makes them speak and the rest listen
+        It defines speakers, lang for each speakers and makes all of them speak and the rest listen
+        It implements MAXIMIN language rule from Van Parijs
         Args:
-                * ag_init : object instance .Agent that starts conversation
-                * others : list of agent object instances. Rest of agents that take part in conversation
+            * ag_init : object instance .Agent that starts conversation
+            * others : list of agent object instances. Rest of agents that take part in conversation
         Returns:
-                * it calls 'vocab_choice_model' method for each agent
-
-        Implements MAXIMIN language rule from Van Parijs
-
+            * it calls 'vocab_choice_model' method for each agent
         """
 
         ags = [ag_init]
@@ -546,7 +533,7 @@ class Simple_Language_Agent:
             return spoken_words
 
     def update_lang_switch(self, switch_threshold=0.1):
-        """Switch to a new linguistic regime whn threshold is reached
+        """Switch to a new linguistic regime when threshold is reached
            If language knowledge falls below switch_threshold value, agent
            becomes monolingual"""
 
@@ -564,7 +551,6 @@ class Simple_Language_Agent:
 
     def stage_1(self):
         self.speak()
-
 
     def stage_2(self):
         self.loc_info['home'].agents_in.remove(self)
