@@ -451,7 +451,9 @@ class Simple_Language_Model(Model):
                                     key = key_parents[0] / 2
                             else:
                                 key = sum(key_parents) / len(key_parents)
-                            key = self.ic_pct_keys[bisect.bisect_left(self.ic_pct_keys, key)]
+                            key = self.ic_pct_keys[
+                                bisect.bisect_left(self.ic_pct_keys, key, hi=len(self.ic_pct_keys)-1)
+                            ]
                             member.set_lang_ics(biling_key=key)
                         member.loc_info['home'] = home
                         home.agents_in.add(member)

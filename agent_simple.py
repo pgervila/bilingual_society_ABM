@@ -257,7 +257,7 @@ class Simple_Language_Agent:
     def read(self):
         pass
 
-    def get_conv_lang(self, ag_init, others):
+    def get_conv_lang(self, ag_init, others, ret_results=False):
         """
         Method to model conversation between 2 or more agents
         It defines speakers, lang for each speakers and makes all of them speak and the rest listen
@@ -349,6 +349,15 @@ class Simple_Language_Agent:
                 model_multilang_conv(max_pcts, multilang=False, lang=1, excluded_type=0)
             else: # conversation impossible because there are agents on both lang sides unable to follow other's lang
                 pass # DO NOT CALL update
+
+        if ret_results:
+            try:
+                return lang_group
+            except:
+                try:
+                    return max_pcts
+                except:
+                    return None
 
     def get_group_conversation_lang_OLD(self, initiator, rest_of_group):
         """ Method that allows to
