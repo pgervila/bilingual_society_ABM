@@ -273,7 +273,9 @@ class Simple_Language_Agent:
         ags.extend(others)
         num_ags = len(ags)
 
-        def model_monolang_conv(lang_group, others): # unique group lang only
+        def model_commonlang_conv(lang_group, others):
+            """ Convenience function that models group conversation where all agents involved speak and
+                understand a common language """
             ag_init.vocab_choice_model(lang_group, others)
             for ix, ag in enumerate(others):
                 if ix < num_ags - 2:
@@ -282,16 +284,21 @@ class Simple_Language_Agent:
                     ag.vocab_choice_model(lang_group, ags[:-1])
 
         def model_multilang_conv(max_pcts, multilang=True, lang=None, excluded_type=None):
+            """ Convenience function that models group conversation where NOT ALL agents involved
+                speak and understand a common language """
             if multilang:
+                # conversation can be held in different languages ( everybody understands both langs passively !)
                 ag_init.vocab_choice_model(max_pcts[0], others, long=False)
                 for ix, ag in enumerate(others):
                     if ix < num_ags - 2:
                         ag.vocab_choice_model(max_pcts[ix], [ag_init] + others[:ix] + others[ix + 1:], long=False)
                     else:
                         ag.vocab_choice_model(max_pcts[ix], ags[:-1], long=False)
-            else: # excluded-type agents are unable to understand lang
+            else:
+                # excluded-type agents are unable to understand conv lang -> excluded from short conversation
                 if ag_init.language == excluded_type:
-                    pass # no conversation possible if originated by ag_init
+                    # no conversation possible if originated by ag_init
+                    pass
                 else:
                     ag_init.vocab_choice_model(lang, others, long=False)
                     for ix, ag in enumerate(others):
@@ -308,17 +315,20 @@ class Simple_Language_Agent:
 
         l1_pcts = [ag.lang_stats['L1']['pct'][ag.age] for ag in ags]
         l2_pcts = [ag.lang_stats['L2']['pct'][ag.age] for ag in ags]
-        max_pcts = np.argmax([l1_pcts, l2_pcts], axis=0)
+        fav_lang_per_agent = np.argmax([l1_pcts, l2_pcts], axis=0)
         ag_langs = [ag.language for ag in ags]
         # define current case
         if set(ag_langs) in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
             lang_group = 0
-            model_monolang_conv(lang_group, others)
+            model_commonlang_conv(lang_group, others)
         elif set(ag_langs) == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
             # who starts conversation matters, but also average lang spoken with already known agents
-            lang_init = np.argmax([l1_pcts[0], l2_pcts[0]])
+            if l1_pcts[0] == l2_pcts[0]:
+                lang_init = 1 if random.random() > 0.5 else 0
+            else:
+                lang_init = np.argmax([l1_pcts[0], l2_pcts[0]])
             langs_with_known_agents = [self.model.known_people_network[ag_init][ag]['lang']
                                        for ag in others
                                        if ag in self.model.known_people_network[ag_init]]
@@ -327,37 +337,59 @@ class Simple_Language_Agent:
                 lang_group = av_k_lang
             else:
                 lang_group = lang_init
-            model_monolang_conv(lang_group, others)
+            model_commonlang_conv(lang_group, others)
         elif set(ag_langs) in [{1, 2}, {2}]:
             lang_group = 1
-            model_monolang_conv(lang_group, others)
+            model_commonlang_conv(lang_group, others)
         else: # monolinguals on both linguistic sides => SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
             idxs_real_monolings_l2 = [idx for idx, pct in enumerate(l1_pcts) if pct < 0.025]
             idxs_real_monolings_l1 = [idx for idx, pct in enumerate(l2_pcts) if pct < 0.025]
-            # => All agents partially understand each other langs, but some can't speak l1 and some can't speak l2
             if not idxs_real_monolings_l1 and not idxs_real_monolings_l2:
+                # All agents partially understand each other langs, but some can't speak l1 and some can't speak l2
                 # each agent picks favorite lang
-                model_multilang_conv(max_pcts, multilang=True)
-            # some agents only understand and speak l1, while some partially understand but can't speak l1
+                model_multilang_conv(fav_lang_per_agent, multilang=True)
+                if ret_results:
+                    return fav_lang_per_agent
+
             elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
+                # Everybody partially understands l1, but some agents don't understand l2 at all
+                # Some agents only understand and speak l1, while others partially understand but can't speak l1
                 # slight bias towards l1 => conversation in l1 but some speakers unable to speak = > short conversation
-                model_multilang_conv(max_pcts, multilang=False, lang=0, excluded_type=2)
-            # some agents only understand and speak l2, while some partially understand but can't speak l2
-            elif not idxs_real_monolings_l1 and idxs_real_monolings_l2: # some agents don't understand l1
+                lang = 0
+                model_multilang_conv(fav_lang_per_agent, multilang=False, lang=lang, excluded_type=2)
+                if ret_results:
+                    return [(ix, 0) if ags[ix].language != 2 else (ix, 'mute') for (ix, _) in enumerate(ags)]
+
+            elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
+                # Everybody partially understands l2, but some agents don't understand l1 at all
+                # Some agents only understand and speak l2, while others partially understand but can't speak l2
                 # slight bias towards l2 => all speak in l2 but some speakers unable to speak
-                model_multilang_conv(max_pcts, multilang=False, lang=1, excluded_type=0)
-            else: # conversation impossible because there are agents on both lang sides unable to follow other's lang
-                pass # DO NOT CALL update
+                lang = 1
+                model_multilang_conv(fav_lang_per_agent, multilang=False, lang=lang, excluded_type=0)
+                if ret_results:
+                    return [(ix, 1) if ags[ix].language != 0 else (ix, 'mute') for (ix, _) in enumerate(ags)]
+
+            else:
+                # There are non-initiating agents on both lang sides unable to follow other's speech.
+                # Init will speak with whom understands him, others will listen but understand nothing
+                lang = fav_lang_per_agent[0]
+                if lang == 0:
+                    excluded_type = 2
+                else:
+                    excluded_type = 0
+                model_multilang_conv(fav_lang_per_agent, multilang=False, lang=lang, excluded_type=excluded_type)
+                if ret_results:
+                    return [(ix, lang) if ags[ix].language != excluded_type else (ix, 'mute and excluded')
+                            for (ix, _) in enumerate(ags)]
+
 
         if ret_results:
             try:
                 return lang_group
             except:
-                try:
-                    return max_pcts
-                except:
-                    return None
+                return None
+
 
     def get_group_conversation_lang_OLD(self, initiator, rest_of_group):
         """ Method that allows to
