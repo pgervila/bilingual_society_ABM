@@ -561,6 +561,8 @@ class Simple_Language_Model(Model):
     def define_friendship_networks(self):
         graph_friends = self.friendship_network
 
+        # Apply small world graph to relevant nodes using networkx
+
         # how many friends per agent originally ??
         # Let's start with 2
 
