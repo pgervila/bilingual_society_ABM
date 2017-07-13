@@ -1,8 +1,9 @@
 import pytest
 import numpy as np
-import sys
+import os, sys
 from imp import reload
-sys.path.append("/Users/PG/Paolo/python_repos/language_proj/lang_model_simple/")
+#sys.path.append("/Users/PG/Paolo/python_repos/language_proj/lang_model_simple/")
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import agent_simple
 import model_simple
 reload(agent_simple)
@@ -46,4 +47,4 @@ def test_group_conv_lang(model, langs, pcts_1, pcts_2, delete_edges, expected):
     assert np.all(expected == lang_conv)
         
         
-    
+#@pytest.mark.parametrize("num_agents, num_cities", [()]    
