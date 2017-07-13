@@ -386,7 +386,7 @@ class Simple_Language_Model(Model):
                 self.add_agent_to_grid_sched_networks(ag1, ag2, ag3, ag4)
 
             # set up agents left out of family partition of cluster
-            len_clust = len(clust_info['agents'])
+            len_clust = clust_info['num_agents']
             num_left_agents = len_clust%family_size
             if num_left_agents:
                 for lang in clust_info['agents'][-num_left_agents:]:
