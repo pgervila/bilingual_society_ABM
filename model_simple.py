@@ -469,11 +469,13 @@ class Simple_Language_Model(Model):
                                     member.set_lang_ics(biling_key=90)
                                 else:
                                     member.set_lang_ics()
+                            member.loc_info['home'] = home
+                            home.agents_in.add(member)
                     else:
                         for member in family:
                             member.set_lang_ics()
-                    member.loc_info['home'] = home
-                    home.agents_in.add(member)
+                            member.loc_info['home'] = home
+                            home.agents_in.add(member)
                 # assign job to parents
                 for parent in family[:2]:
                     while True:
