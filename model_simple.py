@@ -148,7 +148,7 @@ class Simple_Language_Model(Model):
                              "pct_spa_in_biling": lambda a:a.lang_stats['L1']['pct'][a.age]}
         )
 
-    def compute_cluster_centers(self, min_dist=0.20):
+    def compute_cluster_centers(self, min_dist=0.20, min_grid_pct_val=0.1, max_grid_pct_val=0.9):
         """ Generate 2D coordinates for all cluster (towns/villages) centers
             Args:
                 * min_dist: float. Minimum distance between cluster centers
@@ -159,9 +159,9 @@ class Simple_Language_Model(Model):
         """
 
         # Define available points as pct of squared grid length
-        grid_pct_list = np.linspace(0.1, 0.9, 100) # avoid edges
+        grid_side_pcts = np.linspace(min_grid_pct_val, max_grid_pct_val, 100) # avoid edges
         # Define a set of all available gridpoints coordinates
-        s1 = set(product(grid_pct_list, grid_pct_list))
+        s1 = set(product(grid_side_pcts, grid_side_pcts))
         # initiate list of cluster centers and append random point froms set
         self.clust_centers = []
         p = random.sample(s1, 1)[0]
@@ -173,8 +173,10 @@ class Simple_Language_Model(Model):
         for _ in range(self.num_cities - 1):
             # Before picking new point, remove all points too-close to existing centers
             # from availability set
+            # Iterate over copy of original set since elements are being removed during iteration
             for point in set(s1):
-                if pdist([point, p]) < min_dist * (grid_pct_list.max() - grid_pct_list.min()):
+                if pdist([point, p]) < min_dist * (grid_side_pcts.max() - grid_side_pcts.min()):
+                # if pdist([point, p]) < min_dist:
                     s1.remove(point)
             # Try picking new center from availability set ( if it's not already empty...)
             try:
@@ -226,7 +228,7 @@ class Simple_Language_Model(Model):
             respectively
 
         """
-        x_coords = np.random.binomial(self.grid_width,  pcts_grid[0], size=clust_size)
+        x_coords = np.random.binomial(self.grid_width, pcts_grid[0], size=clust_size)
         # limit coords values to grid boundaries
         x_coords = np.clip(x_coords, 1, self.grid_width - 1)
 
