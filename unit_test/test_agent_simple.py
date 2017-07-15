@@ -31,7 +31,9 @@ test_data_group_conv = [
             ([0, 1, 2], [0.5, 0.5, 0.04], [0.04, 0.5, 0.5], True, [0, 0, 1]),
             ([0, 1, 2], [0.5, 0.5, 0.02], [0.02, 0.4, 0.5], True, [(0, 0), (1, 0), (2, 'mute and excluded')]),
             ([0, 1, 2], [0.5, 0.5, 0.04], [0.04, 0.4, 0.5], True, [0, 0, 1]),
-            ([2, 1, 0], [0.02, 0.5, 0.5], [0.5, 0.4, 0.04], True, [(0, 1), (1, 1), (2, 'mute')])
+            ([2, 1, 0], [0.02, 0.5, 0.5], [0.5, 0.4, 0.04], True, [(0, 1), (1, 1), (2, 'mute')]),
+            ([2, 1, 0, 0], [0.04, 0.4, 0.5, 0.5], [0.5, 0.5, 0.02, 0.02], True, [(0, 1), (1, 1), (2, 'mute and excluded'), (3, 'mute and excluded')]),
+            ([0, 1, 2, 2], [0.5, 0.5, 0.04, 0.02], [0.04, 0.4, 0.5, 0.5], True, [(0, 0), (1, 0), (2,'mute'), (3, 'mute and excluded')])
 ]
 @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", test_data_group_conv)
 def test_group_conv_lang(model, langs, pcts_1, pcts_2, delete_edges, expected): 
@@ -46,5 +48,7 @@ def test_group_conv_lang(model, langs, pcts_1, pcts_2, delete_edges, expected):
 
     assert np.all(expected == lang_conv)
         
+
+
         
 #@pytest.mark.parametrize("num_agents, num_cities", [()]    
