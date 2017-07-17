@@ -202,10 +202,10 @@ class Simple_Language_Agent:
             ## linguistic model of encounter with another random agent
             if len(others) >= 1:
                 other = random.choice(others)
-                self.get_conv_lang(self, other)
+                self.get_conv_params(self, [other]) # TODO : get values and call vocab_choice_model
         else:
             if not lang:
-                self.get_conv_lang(self, with_agent)
+                self.get_conv_params(self, [with_agent]) # TODO : get values and call vocab_choice_model
             else:
                 self.vocab_choice_model(lang, with_agent)
                 with_agent.vocab_choice_model(lang, self)
@@ -235,10 +235,10 @@ class Simple_Language_Agent:
             if not first_speaker:
                 initiator = np.random.choice(group_set.difference({self}))
                 rest_of_group = list(group_set.difference({initiator}))
-                self.get_conv_lang(initiator, rest_of_group)
+                self.get_conv_params(initiator, rest_of_group)
             else:
                 rest_of_group = list(group_set.difference({self}))
-                self.get_conv_lang(self, rest_of_group)
+                self.get_conv_params(self, rest_of_group)
 
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
@@ -249,7 +249,7 @@ class Simple_Language_Agent:
         ## if two or more agents in cell, conversation is possible
         if len(others) >= 2:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-            l1, l2 = self.get_conv_lang(ag_1, [ag_2], return_values=True)
+            l1, l2 = self.get_conv_params(ag_1, [ag_2], return_values=True)
             k1, k2 = 'L' + str(l1), 'L' + str(l2)
 
             self.update_lang_arrays(l1, spoken_words, speak=False)
@@ -258,15 +258,18 @@ class Simple_Language_Agent:
     def read(self):
         pass
 
-    def get_conv_lang(self, ag_init, others, ret_results=False):
+    def get_conv_params(self, ag_init, others, ret_results=False):
         """
-        Method to model conversation between 2 or more agents
+        Method to find out parameters of conversation between 2 or more agents : lang, type:mono or bilingual,
+        mute agents ( only listen), length.
         It defines speakers, lang for each speakers and makes all of them speak and the rest listen
         It implements MAXIMIN language rule from Van Parijs
         Args:
             * ag_init : object instance .Agent that starts conversation
             * others : list of agent object instances. Rest of agents that take part in conversation
         Returns:
+            * lang: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
+            * mute_type: integer. agent lang type that is unable to speak in conversation
             * it calls 'vocab_choice_model' method for each agent involved in conversation
         """
 
@@ -274,9 +277,9 @@ class Simple_Language_Agent:
         ags.extend(others)
         num_ags = len(ags)
 
-        def model_conversation(lang_group, multilang=False, mute_type=None, long=True):
-            """Convenience function to model convs"""
-            if not multilang:
+        def model_conversation(lang_group, bilingual=False, mute_type=None, long=True):
+            """Convenience function to call speakers and listeners as well as conversation length"""
+            if not bilingual:
                 lang_group = itertools.repeat(lang_group, num_ags)
             for ix, (ag, lang) in enumerate(zip(ags, lang_group)):
                 if ag.language != mute_type:
@@ -321,9 +324,8 @@ class Simple_Language_Agent:
                 # No complete monolinguals on either side
                 # All agents partially understand each other langs, but some can't speak l1 and some can't speak l2
                 # Conversation is possible when each agent picks their favorite lang
-                model_conversation(fav_lang_per_agent, multilang=True, long=False)
-                if ret_results:
-                    return fav_lang_per_agent
+                lang_group = list(fav_lang_per_agent)
+                model_conversation(lang_group, bilingual=True, long=False)
 
             elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
                 # There are real L1 monolinguals in the group
@@ -332,10 +334,10 @@ class Simple_Language_Agent:
                 # slight bias towards l1 => conversation in l1 but some speakers will stay mute = > short conversation
                 mute_type = 2
                 if ag_init.language != mute_type:
-                    lang = 0
+                    lang_group = 0
                 else:
-                    lang, mute_type = 1, 0
-                model_conversation(lang, mute_type=mute_type, long=False)
+                    lang_group, mute_type = 1, 0
+                model_conversation(lang_group, mute_type=mute_type, long=False)
 
             elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
                 # There are real L2 monolinguals in the group
@@ -344,10 +346,10 @@ class Simple_Language_Agent:
                 # slight bias towards l2 => conversation in L2 but some speakers will stay mute = > short conversation
                 mute_type = 0
                 if ag_init.language != mute_type:
-                    lang = 1
+                    lang_group = 1
                 else:
-                    lang, mute_type = 0, 2
-                model_conversation(lang, mute_type=mute_type, long=False)
+                    lang_group, mute_type = 0, 2
+                model_conversation(lang_group, mute_type=mute_type, long=False)
 
             else:
                 # There are agents on both lang sides unable to follow other's speech.
@@ -360,23 +362,23 @@ class Simple_Language_Agent:
                     num_l1_speakers = sum([1 if pct >= 0.1 else 0 for pct in l1_pcts])
                     num_l2_speakers = sum([1 if pct >= 0.1 else 0 for pct in l2_pcts])
                     if num_l1_speakers > num_l2_speakers:
-                        lang, mute_type = 0, 2
+                        lang_group, mute_type = 0, 2
                     elif num_l1_speakers < num_l2_speakers:
-                        lang, mute_type = 2, 0
+                        lang_group, mute_type = 2, 0
                     else:
-                        lang = fav_lang_per_agent[0]
-                        mute_type = 2 if lang == 0 else 0
+                        lang_group = fav_lang_per_agent[0]
+                        mute_type = 2 if lang_group == 0 else 0
                 else:
                     # init agent is monolang
-                    lang = fav_lang_per_agent[0]
-                    mute_type = 2 if lang == 0 else 0
-                model_conversation(lang, mute_type=mute_type, long=False)
+                    lang_group = fav_lang_per_agent[0]
+                    mute_type = 2 if lang_group == 0 else 0
+                model_conversation(lang_group, mute_type=mute_type, long=False)
 
         if ret_results:
             try:
-                return lang_group
+                return lang_group, mute_type
             except:
-                return None
+                return lang_group, None
 
 
     def get_group_conversation_lang_OLD(self, initiator, rest_of_group):
@@ -476,7 +478,7 @@ class Simple_Language_Agent:
                 * delta_s_factor: positive float < 1.
                                   Defines increase of mem stability due to passive rehearsal
                                   as a fraction of that due to active rehearsal
-                * min_mem_times: positive integer. Minimum number of times
+                * min_mem_times: positive integer. Minimum number of times to start remembering a word
                 * pct_threshold: positive float < 1. Value to define percentage lang knowledge.
                                  If retrievability R for a given word is higher than R, the word is considered
                                  as well known. Otherwise, it is not
@@ -504,7 +506,7 @@ class Simple_Language_Agent:
         else:
             ds_factor = 1
 
-        if len(act):  # check that there are any real active words
+        if len(act):  # check if there are any real active words
             # compute increase in memory stability S due to (re)activation
             # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
             delta_S = ds_factor * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
@@ -545,7 +547,6 @@ class Simple_Language_Agent:
         act, act_c = np.unique(word_samples, return_counts=True)
         # 2. Then assess which sampled words can be succesfully retrieved from memory
         # get mask for words successfully retrieved from memory
-
         lang = 'L1' if lang == 0 else 'L2'
         mask_R = np.random.rand(self.lang_stats[lang]['R'][act].shape[0]) <= self.lang_stats[lang]['R'][act]
 
