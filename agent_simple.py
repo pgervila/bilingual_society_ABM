@@ -194,18 +194,17 @@ class Simple_Language_Agent:
                 * Defines conversation and language(s) in which it takes place.
                   Updates heard/used stats
         """
-        if with_agent is None:
-            pos = [self.pos]
+        if not with_agent:
             # get all agents currently placed on chosen cell
-            others = self.model.grid.get_cell_list_contents(pos)
+            others = self.model.grid.get_cell_list_contents(self.pos)
             others.remove(self)
-            ## linguistic model of encounter with another random agent
+            # linguistic model of encounter with another random agent
             if len(others) >= 1:
                 other = random.choice(others)
-                self.get_conv_params(self, [other]) # TODO : get values and call vocab_choice_model
+                self.get_conv_params(self, other) # TODO : get values and call vocab_choice_model
         else:
             if not lang:
-                self.get_conv_params(self, [with_agent]) # TODO : get values and call vocab_choice_model
+                self.get_conv_params(self, with_agent) # TODO : get values and call vocab_choice_model
             else:
                 self.vocab_choice_model(lang, with_agent)
                 with_agent.vocab_choice_model(lang, self)
@@ -242,15 +241,14 @@ class Simple_Language_Agent:
 
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
-        pos = [self.pos]
         # get all agents currently placed on chosen cell
-        others = self.model.grid.get_cell_list_contents(pos)
+        others = self.model.grid.get_cell_list_contents(self.pos)
         others.remove(self)
         ## if two or more agents in cell, conversation is possible
         if len(others) >= 2:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-            l1, l2 = self.get_conv_params(ag_1, [ag_2], return_values=True)
-            k1, k2 = 'L' + str(l1), 'L' + str(l2)
+            # TODO : rework following lines of code to adapt output values from methods
+            l1, l2 = self.get_conv_params(ag_1, ag_2, return_values=True)
 
             self.update_lang_arrays(l1, spoken_words, speak=False)
             self.update_lang_arrays(l2, spoken_words, speak=False)
@@ -260,41 +258,44 @@ class Simple_Language_Agent:
 
     def get_conv_params(self, ag_init, others, ret_results=False):
         """
-        Method to find out parameters of conversation between 2 or more agents : lang, type:mono or bilingual,
-        mute agents ( only listen), length.
+        Method to find out parameters of conversation between 2 or more agents :
+            lang,
+            type(mono or bilingual),
+            mute agents (only listen),
+            conversation length.
         It defines speakers, lang for each speakers and makes all of them speak and the rest listen
         It implements MAXIMIN language rule from Van Parijs
         Args:
-            * ag_init : object instance .Agent that starts conversation
+            * ag_init : agent object instance .Agent that starts conversation
             * others : list of agent object instances. Rest of agents that take part in conversation
+                       It can be a single agent object that will be automatically converted into a list
         Returns:
             * lang: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
             * mute_type: integer. agent lang type that is unable to speak in conversation
             * it calls 'vocab_choice_model' method for each agent involved in conversation
         """
 
+        # define list with all agents involved in conversation
         ags = [ag_init]
+        try:
+            iter(others)
+        except TypeError:
+            others = [others]
         ags.extend(others)
         num_ags = len(ags)
-
-        def model_conversation(lang_group, bilingual=False, mute_type=None, long=True):
-            """Convenience function to call speakers and listeners as well as conversation length"""
-            if not bilingual:
-                lang_group = itertools.repeat(lang_group, num_ags)
-            for ix, (ag, lang) in enumerate(zip(ags, lang_group)):
-                if ag.language != mute_type:
-                    ag.vocab_choice_model(lang, ags[:ix] + ags[ix + 1:], long=long)
-
+        conv_params = dict(bilingual=False, mute_type=None, long=True)
+        # define lists with agent competences and preferences in each language
         l1_pcts = [ag.lang_stats['L1']['pct'][ag.age] for ag in ags]
         l2_pcts = [ag.lang_stats['L2']['pct'][ag.age] for ag in ags]
-        fav_lang_per_agent = np.argmax([l1_pcts, l2_pcts], axis=0)
-        ag_langs = [ag.language for ag in ags]
+        fav_lang_per_agent = list(np.argmax([l1_pcts, l2_pcts], axis=0))
+        ag_langs = set([ag.language for ag in ags])
 
         # define current case
-        if set(ag_langs) in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
+        if ag_langs in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
             lang_group = 0
-            model_conversation(lang_group)
-        elif set(ag_langs) == {1}:
+            conv_params.update({'lang_group':0})
+            #run_conversation(lang_group)
+        elif ag_langs == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
             # who starts conversation matters, but also average lang spoken with already known agents
@@ -310,10 +311,12 @@ class Simple_Language_Agent:
                 lang_group = av_k_lang
             else:
                 lang_group = lang_init
-            model_conversation(lang_group)
-        elif set(ag_langs) in [{1, 2}, {2}]:
+            conv_params.update({'lang_group': lang_group})
+            #run_conversation(lang_group)
+        elif ag_langs in [{1, 2}, {2}]:
             lang_group = 1
-            model_conversation(lang_group)
+            conv_params.update({'lang_group': lang_group})
+            #run_conversation(lang_group)
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
@@ -324,8 +327,8 @@ class Simple_Language_Agent:
                 # No complete monolinguals on either side
                 # All agents partially understand each other langs, but some can't speak l1 and some can't speak l2
                 # Conversation is possible when each agent picks their favorite lang
-                lang_group = list(fav_lang_per_agent)
-                model_conversation(lang_group, bilingual=True, long=False)
+                lang_group = fav_lang_per_agent
+                conv_params.update({'lang_group': lang_group, 'bilingual':True, 'long':False})
 
             elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
                 # There are real L1 monolinguals in the group
@@ -337,7 +340,7 @@ class Simple_Language_Agent:
                     lang_group = 0
                 else:
                     lang_group, mute_type = 1, 0
-                model_conversation(lang_group, mute_type=mute_type, long=False)
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
 
             elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
                 # There are real L2 monolinguals in the group
@@ -349,7 +352,7 @@ class Simple_Language_Agent:
                     lang_group = 1
                 else:
                     lang_group, mute_type = 0, 2
-                model_conversation(lang_group, mute_type=mute_type, long=False)
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
 
             else:
                 # There are agents on both lang sides unable to follow other's speech.
@@ -372,72 +375,20 @@ class Simple_Language_Agent:
                     # init agent is monolang
                     lang_group = fav_lang_per_agent[0]
                     mute_type = 2 if lang_group == 0 else 0
-                model_conversation(lang_group, mute_type=mute_type, long=False)
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
+
+        # run conversation
+        if not conv_params['bilingual']:
+            lang_group = itertools.repeat(conv_params['lang_group'], num_ags)
+        for ix, (ag, lang) in enumerate(zip(ags, lang_group)):
+            if ag.language != conv_params['mute_type']:
+                ag.vocab_choice_model(lang, ags[:ix] + ags[ix + 1:], long=conv_params['long'])
 
         if ret_results:
             try:
-                return lang_group, mute_type
+                return conv_params['lang_group'], conv_params['mute_type']
             except:
-                return lang_group, None
-
-
-    def get_group_conversation_lang_OLD(self, initiator, rest_of_group):
-        """ Method that allows to
-            Initiator of conversation is separated from rest_of_group
-        """
-        ags_lang_profile = [(ag.language, ag.lang_freq['cat_pct_s'], ag) for ag in rest_of_group]
-
-        ags_lang_profile = sorted(ags_lang_profile, key=lambda elem: (elem[0], elem[1]))
-        rest_of_group = [tup[2] for tup in ags_lang_profile]
-
-        # map init lang profile
-        def fun_map_init(x):
-            if x <= 0.2:
-                return 0
-            elif 0.2 < x <= 0.5:
-                return 1
-            elif 0.5 < x <= 0.8:
-                return 2
-            elif x > 0.8:
-                return 3
-
-        # define inputs to group_lang_map_dict
-        init = fun_map_init(initiator.lang_freq['cat_pct_s'])
-        group_lang_min = rest_of_group[0].language
-        group_lang_max = rest_of_group[-1].language
-        # call group_lang_map_dict model method to get conversat layout
-        init_lang, common_lang = self.model.group_lang_map_dict[(init,
-                                                                 group_lang_min,
-                                                                 group_lang_max)]
-        if common_lang: # only one group conversation lang
-            langs_list = [init_lang] + [init_lang for ag in rest_of_group]
-            self.update_lang_counter([initiator] + rest_of_group, langs_list)
-        else: # cases wherein group conversat lang is not unique
-            langs_list = []
-            if (init, group_lang_min, group_lang_max) in [(0, 0, 2), (1, 0, 2)] :
-                for ag in [initiator] + rest_of_group:
-                    if ag.language == 2:
-                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
-                                0.5 * (ag.lang_freq['cat_pct_h']))
-                        langs_list.append(np.random.binomial(1, p_ag))
-                    else:
-                        langs_list.append(0)
-            elif (init, group_lang_min, group_lang_max) == (3, 0, 0):
-                langs_list.append(1)
-                for ag in rest_of_group:
-                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
-                                0.5 * (ag.lang_freq['cat_pct_h']))
-                        langs_list.append(np.random.binomial(1, p_ag))
-            elif (init, group_lang_min, group_lang_max) in [(2, 0, 2), (3, 0, 1), (3, 0, 2)]:
-                for ag in [initiator] + rest_of_group:
-                    if ag.language == 0:
-                        p_ag = (0.5 * (ag.lang_freq['cat_pct_s']) +
-                                0.5 * (ag.lang_freq['cat_pct_h']))
-                        langs_list.append(np.random.binomial(1, p_ag))
-                    else:
-                        langs_list.append(1)
-
-            self.update_lang_counter([initiator] + rest_of_group, langs_list)
+                return conv_params['lang_group'], None
 
 
     def study_lang(self, lang):
@@ -536,7 +487,7 @@ class Simple_Language_Agent:
 
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
-                * listeners: list of agent instances self is talking to
+                * listeners: list of agent instances 'self' agent is talking to
                 * long: boolean that defines conversation length
                 * return_values : boolean. If true, chosen words are returned
         """
