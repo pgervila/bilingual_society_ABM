@@ -69,9 +69,9 @@ class StagedActivation_modif(StagedActivation):
 
 class Simple_Language_Model(Model):
     ic_pct_keys = [10, 25, 50, 75, 90]
-    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250), width=100, height=100, max_people_factor=5,
-                 init_lang_distrib=[0.25, 0.65, 0.1], num_cities=10, max_run_steps=1000, lang_ags_sorted_by_dist=True,
-                 lang_ags_sorted_in_clust=True):
+    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250), width=100, height=100,
+                 max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
+                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
         self.num_people = num_people
         if spoken_only:
             self.vocab_red = 500
@@ -82,7 +82,7 @@ class Simple_Language_Model(Model):
         self.grid_height = height
         self.max_people_factor = max_people_factor
         self.init_lang_distrib = init_lang_distrib
-        self.num_cities = num_cities
+        self.num_clusters = num_clusters
         self.max_run_steps = max_run_steps
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
@@ -169,7 +169,7 @@ class Simple_Language_Model(Model):
         s1.remove(p)
         # Ensure min distance btwn clusters
         # Iterate over available points until all requested centers are found
-        for _ in range(self.num_cities - 1):
+        for _ in range(self.num_clusters - 1):
             # Before picking new point, remove all points too-close to existing centers
             # from availability set
             # Iterate over copy of original set since elements are being removed during iteration
@@ -181,7 +181,7 @@ class Simple_Language_Model(Model):
             try:
                 p = random.sample(s1, 1)[0]
             except ValueError:
-                print('INPUT ERROR: Reduce either number of cities or minimum distance '
+                print('INPUT ERROR: Reduce either number of clusters or minimum distance '
                       'in order to meet distance constraint')
                 raise
             # Add new center to return list and remove it from availability set
@@ -203,7 +203,7 @@ class Simple_Language_Model(Model):
                 * list of integers representing cluster sizes
 
         """
-        p = np.random.pareto(1.25, size=self.num_cities)
+        p = np.random.pareto(1.25, size=self.num_clusters)
         pcts = p / p.sum()
         self.cluster_sizes = np.random.multinomial(self.num_people, pcts)
         tot_sub_val = 0
@@ -211,7 +211,9 @@ class Simple_Language_Model(Model):
             tot_sub_val += min_size - self.cluster_sizes[idx]
             self.cluster_sizes[idx] = min_size
         self.cluster_sizes[np.argmax(self.cluster_sizes)] -= tot_sub_val
-
+        if np.min(self.cluster_sizes) < min_size:
+            raise ValueError('INPUT ERROR: Impossible to build all clusters within minimum size. Make sure ratio '
+                          'num_people/num_clusters >= min_size')
 
     def generate_cluster_points_coords(self, pcts_grid, clust_size):
         """ Using binomial distribution, this method generates initial coordinates
@@ -269,6 +271,7 @@ class Simple_Language_Model(Model):
 
     def map_jobs(self, min_places=2, max_places=200):
         """ Generates job centers coordinates and num places per center
+            Instantiates job objects
         Args:
             * min_places: integer. Minimum number of places for each job center
             * max_places: integer. Maximum number of places for each job center
@@ -365,7 +368,7 @@ class Simple_Language_Model(Model):
         return langs_per_clust
 
     def map_lang_agents(self):
-        """ Method to instantiate all agents according to requested linguistic order"""
+        """ Method to instantiate all agents according to requested linguistic order """
         # get lang distribution for each cluster
         langs_per_clust = self.generate_lang_distrib()
         # set agents ids
@@ -776,6 +779,7 @@ class Simple_Language_Model(Model):
             pbar.update()
 
     def create_agents_attrs_data(self, ag_attr, plot=False):
+        """ Get value of specific attribute for all lang agents in model """
         ag_and_coords = [(getattr(ag, ag_attr), ag.pos[0], ag.pos[1])
                          for ag in self.schedule.agents]
         ag_and_coords = np.array(ag_and_coords)
@@ -928,7 +932,7 @@ class Simple_Language_Model(Model):
                 return line10, line11, line12, line2, line3, dots, time_text
 
         # generate persistent animation object
-        ani = animation.FuncAnimation(fig, run_and_update,init_func=init_show,
+        ani = animation.FuncAnimation(fig, run_and_update, init_func=init_show,
                                       frames=steps, interval=100, blit=True, repeat=False)
         #plt.tight_layout()
         plt.show()
@@ -940,7 +944,7 @@ class Simple_Language_Model(Model):
                                                  'grid_width': self.grid_width,
                                                  'grid_height': self.grid_height,
                                                  'init_lang_distrib': self.init_lang_distrib,
-                                                 'num_cities': self.num_cities,
+                                                 'num_clusters': self.num_clusters,
                                                  'sort_by_dist': self.lang_ags_sorted_by_dist,
                                                  'sort_within_clust': self.lang_ags_sorted_in_clust},
                            'model_results': self.datacollector.get_model_vars_dataframe(),
