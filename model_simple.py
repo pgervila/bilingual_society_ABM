@@ -50,6 +50,7 @@ class StagedActivation_modif(StagedActivation):
                 # set current lang knowledge
                 agent.lang_stats[lang]['pct'][agent.age] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                             agent.model.vocab_red)
+                # reset day mask
                 agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
             # Update lang switch
             agent.update_lang_switch()
@@ -151,7 +152,7 @@ class Simple_Language_Model(Model):
         """ Generate 2D coordinates for all cluster (towns/villages) centers
             Args:
                 * min_dist: float. Minimum distance between cluster centers
-                            expressed as percentage of square grid side dimension
+                            expressed as percentage of square grid AVAILABLE side dimension
 
             Returns:
                 * A numpy array with 2D coordinates of cluster centers
@@ -160,33 +161,33 @@ class Simple_Language_Model(Model):
         # Define available points as pct of squared grid length
         grid_side_pcts = np.linspace(min_grid_pct_val, max_grid_pct_val, 100) # avoid edges
         # Define a set of all available gridpoints coordinates
-        s1 = set(product(grid_side_pcts, grid_side_pcts))
-        # initiate list of cluster centers and append random point froms set
+        set_av_grid_pts = set(product(grid_side_pcts, grid_side_pcts))
+        # initiate list of cluster centers and append random point from set
         self.clust_centers = []
-        p = random.sample(s1, 1)[0]
+        p = random.sample(set_av_grid_pts, 1)[0]
         self.clust_centers.append(p)
         # remove picked point from availability list
-        s1.remove(p)
-        # Ensure min distance btwn clusters
+        set_av_grid_pts.remove(p)
+        # Ensure min distance btwn cluster centers
         # Iterate over available points until all requested centers are found
         for _ in range(self.num_clusters - 1):
             # Before picking new point, remove all points too-close to existing centers
             # from availability set
             # Iterate over copy of original set since elements are being removed during iteration
-            for point in set(s1):
+            for point in set(set_av_grid_pts):
                 if pdist([point, p]) < min_dist * (grid_side_pcts.max() - grid_side_pcts.min()):
                 # if pdist([point, p]) < min_dist:
-                    s1.remove(point)
+                    set_av_grid_pts.remove(point)
             # Try picking new center from availability set ( if it's not already empty...)
             try:
-                p = random.sample(s1, 1)[0]
+                p = random.sample(set_av_grid_pts, 1)[0]
             except ValueError:
                 print('INPUT ERROR: Reduce either number of clusters or minimum distance '
                       'in order to meet distance constraint')
                 raise
             # Add new center to return list and remove it from availability set
             self.clust_centers.append(p)
-            s1.remove(p)
+            set_av_grid_pts.remove(p)
         self.clust_centers = np.array(self.clust_centers)
         # If requested, sort cluster centers based on their distance to grid origin
         if self.lang_ags_sorted_by_dist:
@@ -579,12 +580,13 @@ class Simple_Language_Model(Model):
 
 
     def run_conversation(self, ag_init, others):
-        """ Models conversation between ag_init and others
+        """ Method that models conversation between ag_init and others
             Calls method to determine conversation parameters
-            Then makes each speaker speak and the rest listen
-            * ag_init : agent object instance .Agent that starts conversation
-            * others : list of agent object instances. Rest of agents that take part in conversation
-                       It can be a single agent object that will be automatically converted into a list
+            Then makes each speaker speak and the rest listen (loop through all involved agents)
+            Args:
+                * ag_init : agent object instance. Agent that starts conversation
+                * others : list of agent object instances. Rest of agents that take part in conversation
+                           It can be a single agent object that will be automatically converted into a list
         """
         ags, conv_params = self.get_conv_params(ag_init, others)
         num_ags = len(ags)
@@ -597,9 +599,9 @@ class Simple_Language_Model(Model):
     def get_conv_params(self, ag_init, others):
         """
         Method to find out parameters of conversation between 2 or more agents:
-            lang or lang for each speaker,
-            type(mono or bilingual),
-            mute agents (only listen),
+            conversation lang or lang spoken by each involved speaker,
+            conversation type(mono or bilingual),
+            mute agents (agents that only listen),
             conversation length.
         It implements MAXIMIN language rule from Van Parijs
         Args:
@@ -693,7 +695,6 @@ class Simple_Language_Model(Model):
             else:
                 # There are agents on both lang sides unable to follow other's speech.
                 # Initiator agent will speak with whom understands him, others will listen but understand nothing
-                # TODO: if possible, initiator will pick lang understood by majority. Otherwise his own
 
                 if ag_init.language == 1:
                     # init agent is bilingual
@@ -717,13 +718,11 @@ class Simple_Language_Model(Model):
         return ags, conv_params
 
 
-
-
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent
 
         Arguments:
-            * i : integer from [0,1,2] hat specifies agent lang type
+            * i : integer from [0,1,2] that specifies agent lang type
 
         Returns:
             * lang type count as percentage of total
@@ -955,7 +954,7 @@ class Simple_Language_Model(Model):
             dd.io.save('model_data.h5', self.model_data)
 
     def load_model_data(self, data_filename, key='/' ):
-        return dd.io.load(data_filename,key)
+        return dd.io.load(data_filename, key)
 
     def plot_family_networks(self):
         """PLOT NETWORK with lang colors and position"""
