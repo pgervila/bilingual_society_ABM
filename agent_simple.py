@@ -223,27 +223,6 @@ class Simple_Language_Agent:
             self.model.run_conversation(self, with_agents)
 
 
-    def listen(self):
-        """Listen to random agents placed on the same cell as calling agent"""
-        # get all agents currently placed on chosen cell
-        others = self.model.grid.get_cell_list_contents(self.pos)
-        others.remove(self)
-        ## if two or more agents in cell, conversation is possible
-        if len(others) >= 2:
-            ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-
-            # TODO : rework following lines of code to adapt output values from methods
-            l1, l2 = self.get_conv_params(ag_1, ag_2, return_values=True)
-
-            self.update_lang_arrays(l1, spoken_words, speak=False)
-            self.update_lang_arrays(l2, spoken_words, speak=False)
-
-    def read(self):
-        pass
-
-    def study_lang(self, lang):
-        pass
-
     def get_num_words_per_conv(self, long=True, age_1=14, age_2=65):
         """ Computes number of words spoken per conversation for a given age
             If conversation=False, computes average number of words per day,
@@ -267,8 +246,42 @@ class Simple_Language_Agent:
         else:
             return self.model.num_words_conv[0] / factor
 
+
+    def vocab_choice_model(self, lang, long=True):
+        """ Method that models word choice by self agent in a conversation
+            Word choice is governed by vocabulary knowledge constraints
+            Both self agent and listeners' lang arrays are updated according to the sampled words
+
+            Args:
+                * lang: integer in [0, 1] {0:'spa', 1:'cat'}
+                * listeners: list of agent instances 'self' agent is talking to
+                * long: boolean that defines conversation length
+                * return_values : boolean. If true, chosen words are returned
+        """
+
+        #TODO : model 'Grammatical foreigner talk' =>
+        #TODO : how word choice is adapted by native speakers when speaking to learners
+
+        # TODO: NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???
+
+        # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in TWO STEPS
+        # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
+        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10))
+        #TODO:FASTER ??? bcs = np.bincount(word_samples)
+        #TODO:FASTER ??? act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
+        act, act_c = np.unique(word_samples, return_counts=True)
+        # 2. Then assess which sampled words can be successfully retrieved from memory
+        # get mask for words successfully retrieved from memory
+        lang = 'L1' if lang == 0 else 'L2'
+        mask_R = np.random.rand(self.lang_stats[lang]['R'][act].shape[0]) <= self.lang_stats[lang]['R'][act]
+        # find spoken words
+        spoken_words = act[mask_R], act_c[mask_R]
+
+        return spoken_words
+
+
     def update_lang_arrays(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
-                           delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.2):
+                           delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * lang : integer in [0,1] {0:'spa', 1:'cat'}
@@ -299,18 +312,18 @@ class Simple_Language_Agent:
                   in 1 h we get ~ 16000 words
         """
 
-        act, act_c = sample_words
-
         # TODO: need to define similarity matrix btw language vocabularies?
         # TODO: cat-spa have dist mean ~ 2 and std ~ 1.6 ( better to normalize distance ???)
         # TODO for cat-spa np.random.choice(range(7), p=[0.05, 0.2, 0.45, 0.15, 0.1, 0.025,0.025], size=500)
         # TODO 50% of unknown words with edit distance == 1 can be understood, guessed
 
+        act, act_c = sample_words
+        lang = 'L1' if lang == 0 else 'L2'
+
         # UPDATE WORD COUNTING +  preprocessing for S, t, R UPDATE
-        # if words are from listening, they might be new to agent
+        # If words are from listening, they might be new to agent
         # ds_factor value will depend on action type (speaking or listening)
         if not speak:
-            # known words
             known_words = np.nonzero(self.lang_stats['L1']['R'] > pct_threshold_und)
             # boolean mask of known active words
             known_act_bool = np.in1d(act, known_words, assume_unique=True)
@@ -331,7 +344,7 @@ class Simple_Language_Agent:
                 self.lang_stats[lang]['wc'][act[known_act_bool]] += act_c[known_act_bool]
                 # get words available for S, t, R update
                 if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
-                    known_act_ixs = np.concatenate((np.nonzero(known_act_bool)[0], ix_most_freq_unk))
+                    known_act_ixs = np.concatenate((np.nonzero(known_act_bool)[0], [ix_most_freq_unk]))
                     act, act_c = act[known_act_ixs ], act_c[known_act_ixs ]
                 else:
                     act, act_c = act[known_act_bool], act_c[known_act_bool]
@@ -362,41 +375,29 @@ class Simple_Language_Agent:
             self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                       self.model.vocab_red)
 
-    def vocab_choice_model(self, lang, listeners, long=True, return_values=False):
-        """ Method that models word choice by self agent in a conversation
-            Word choice is governed by vocabulary knowledge constraints
-            Both self agent and listeners' lang arrays are updated according to the sampled words
 
-            Args:
-                * lang: integer in [0, 1] {0:'spa', 1:'cat'}
-                * listeners: list of agent instances 'self' agent is talking to
-                * long: boolean that defines conversation length
-                * return_values : boolean. If true, chosen words are returned
-        """
 
-        #TODO : model 'Grammatical foreigner talk' =>
-        #TODO : how word choice is adapted by native speakers when speaking to learners
 
-        # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in TWO STEPS
-        # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
-        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10))
-        #TODO:FASTER ??? bcs = np.bincount(word_samples)
-        #TODO:FASTER ??? act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
-        act, act_c = np.unique(word_samples, return_counts=True)
-        # 2. Then assess which sampled words can be successfully retrieved from memory
-        # get mask for words successfully retrieved from memory
-        lang = 'L1' if lang == 0 else 'L2'
-        mask_R = np.random.rand(self.lang_stats[lang]['R'][act].shape[0]) <= self.lang_stats[lang]['R'][act]
-        # find spoken words
-        spoken_words = act[mask_R], act_c[mask_R]
-        # call 'self' agent update
-        self.update_lang_arrays(lang, spoken_words)
-        # call listeners' updates
-        for ag in listeners:
-            ag.update_lang_arrays(lang, spoken_words, speak=False)
-        # TODO: NOW NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???
-        if return_values:
-            return spoken_words
+    def listen(self):
+        """Listen to random agents placed on the same cell as calling agent"""
+        # get all agents currently placed on chosen cell
+        others = self.model.grid.get_cell_list_contents(self.pos)
+        others.remove(self)
+        ## if two or more agents in cell, conversation is possible
+        if len(others) >= 2:
+            ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+
+            # TODO : rework following lines of code to adapt output values from methods
+            l1, l2 = self.get_conv_params(ag_1, ag_2, return_values=True)
+
+            self.update_lang_arrays(l1, spoken_words, speak=False)
+            self.update_lang_arrays(l2, spoken_words, speak=False)
+
+    def read(self):
+        pass
+
+    def study_lang(self, lang):
+        pass
 
     def update_lang_switch(self, switch_threshold=0.1):
         """Switch to a new linguistic regime when threshold is reached

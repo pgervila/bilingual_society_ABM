@@ -29,6 +29,8 @@ import pyprind
 
 # IMPORT FROM simp_agent.py
 from agent_simple import Simple_Language_Agent, Home, School, Job
+# import from clusters.py
+from clusters import BuildClusters
 
 # IMPORT MESA LIBRARIES
 from mesa import Model
@@ -43,6 +45,7 @@ class StagedActivation_modif(StagedActivation):
         """ Executes all the stages for all agents. """
         for agent in self.agents[:]:
             agent.age += 1
+            # simulate chance to reproduce
             agent.reproduce()
             for lang in ['L1', 'L2']:
                 # update last-time word use vector
@@ -106,6 +109,8 @@ class Simple_Language_Model(Model):
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
         self.set_clusters_info()
+        # TODO : clusters = BuildClusters(self)
+
 
         #define container for available ids
         self.set_available_ids = set(range(num_people,
@@ -594,7 +599,13 @@ class Simple_Language_Model(Model):
             conv_params['lang_group'] = itertools.repeat(conv_params['lang_group'], num_ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.language != conv_params['mute_type']:
-                ag.vocab_choice_model(lang, ags[:ix] + ags[ix + 1:], long=conv_params['long'])
+                spoken_words = ag.vocab_choice_model(lang, long=conv_params['long'])
+                # call 'self' agent update
+                ag.update_lang_arrays(lang, spoken_words)
+                # call listeners' updates
+                listeners = ags[:ix] + ags[ix + 1:]
+                for listener in listeners:
+                    listener.update_lang_arrays(lang, spoken_words, speak=False)
 
     def get_conv_params(self, ag_init, others):
         """
@@ -966,10 +977,3 @@ class Simple_Language_Model(Model):
         people_color = [elem.language for elem in self.family_network]
         nx.draw(self.family_network, pos=people_pos_dict, node_color=people_color)
 
-
-
-
-
-
-
-        

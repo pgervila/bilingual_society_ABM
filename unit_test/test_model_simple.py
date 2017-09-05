@@ -48,20 +48,20 @@ test_data_get_conv_params = [
 test_data_run_conversation = [([1, 1, 1, 2, 2], True)]
 
 
-@pytest.mark.parametrize("num_clusters, min_dist", test_data_comp_cl_centers)
-def test_compute_cluster_centers(min_dist, num_clusters):
-    max_pts_per_side = (int(0.8 / min_dist) + 1)
-    with patch('model_simple.Simple_Language_Model') as mock_class:
-        if num_clusters >= max_pts_per_side**2:
-            with pytest.raises(ValueError):
-                mock_class.num_clusters = num_clusters
-                Simple_Language_Model.compute_cluster_centers(mock_class, min_dist=min_dist)
-        else:
-            mock_class.num_clusters = num_clusters
-            Simple_Language_Model.compute_cluster_centers(mock_class, min_dist=min_dist)
-            assert mock_class.num_clusters == len(mock_class.clust_centers)
-            # check min distance
-            assert np.min(pdist(mock_class.clust_centers)) > min_dist * 0.8
+# @pytest.mark.parametrize("num_clusters, min_dist", test_data_comp_cl_centers)
+# def test_compute_cluster_centers(min_dist, num_clusters):
+#     max_pts_per_side = (int(0.8 / min_dist) + 1)
+#     with patch('model_simple.Simple_Language_Model') as mock_class:
+#         if num_clusters >= max_pts_per_side**2:
+#             with pytest.raises(ValueError):
+#                 mock_class.num_clusters = num_clusters
+#                 Simple_Language_Model.compute_cluster_centers(mock_class, min_dist=min_dist)
+#         else:
+#             mock_class.num_clusters = num_clusters
+#             Simple_Language_Model.compute_cluster_centers(mock_class, min_dist=min_dist)
+#             assert mock_class.num_clusters == len(mock_class.clust_centers)
+#             # check min distance
+#             assert np.min(pdist(mock_class.clust_centers)) > min_dist * 0.8
         
 
 # def test_compute_cluster_sizes(model_param):
@@ -69,12 +69,28 @@ def test_compute_cluster_centers(min_dist, num_clusters):
 #         for size in model_param.cluster_sizes:
 #             assert size >= 20
 #         assert np.sum(model_param.cluster_sizes) == model_param.num_people
-    
+
 # def test_generate_cluster_points_coords():
+#     pass
+
+# def test_set_clusters_info:
+#     pass
+
+# def test_sort_coords_in_clust():
 #     pass
 
 # def test_map_jobs():
 #     pass
+
+# def test_map_schools():
+#     pass
+
+# def test_map_homes():
+#     pass
+    
+# def test_generate_lang_distrib():
+#     pass
+
 
 # def test_job_school_home_assignment(model):
 #     agents = model.schedule.agents
@@ -108,23 +124,22 @@ def test_compute_cluster_centers(min_dist, num_clusters):
 #     assert np.all(expected == (params['lang_group'], params['mute_type']))
 #     assert agents == ags
 
-# @pytest.mark.parametrize("langs, delete_edges", test_data_run_conversation)
-# def test_run_conversation(model, langs, delete_edges):
-#     agents = model.schedule.agents[:len(langs)]
-#     for idx, agent in enumerate(agents):
-#         agent.language = langs[idx]
-#     if delete_edges:
-#         model.known_people_network.remove_edges_from(model.known_people_network.edges())
-#     with patch('model_simple.Simple_Language_Model.get_conv_params') as mock_method:
-#         mock_method.return_value = (agents, {'lang_group': 1, 
-#                                              'mute_type': None, 
-#                                              'long': True,
-#                                              'bilingual': False}
-#                                    )
-#         with patch('agent_simple.Simple_Language_Agent.vocab_choice_model') as mock_call:
-#             model.run_conversation(agents[0], agents[1:])
-#             # mock_method.return_value[1]['lang_group']
-#             for ix, lang in enumerate(mock_method.return_value[1]['lang_group']):
-#                 mock_call.assert_any_call(lang, 
-#                                           agents[:ix] + agents[ix + 1:], 
-#                                           long=mock_method.return_value[1]['long'])
+@pytest.mark.parametrize("langs, delete_edges", test_data_run_conversation)
+def test_run_conversation(model, langs, delete_edges):
+    agents = model.schedule.agents[:len(langs)]
+    for idx, agent in enumerate(agents):
+        agent.language = langs[idx]
+    if delete_edges:
+        model.known_people_network.remove_edges_from(model.known_people_network.edges())
+    with patch('model_simple.Simple_Language_Model.get_conv_params') as mock_method1:
+        mock_method1.return_value = (agents, {'lang_group': 1, 
+                                             'mute_type': None, 
+                                             'long': True,
+                                             'bilingual': False}
+                                     )
+        with patch('agent_simple.Simple_Language_Agent.vocab_choice_model') as mock_method2:
+            mock_method2.return_value = (np.array([0, 1, 34, 435]), np.array([3, 2, 1, 1]))
+            with patch('agent_simple.Simple_Language_Agent.update_lang_arrays') as mock_call:
+                model.run_conversation(agents[0], agents[1:])
+                for ix, lang in enumerate(mock_method1.return_value[1]['lang_group']):
+                    mock_call.assert_any_call(lang, speak=False)                
