@@ -606,6 +606,14 @@ class Simple_Language_Model(Model):
                 listeners = ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
                     listener.update_lang_arrays(lang, spoken_words, speak=False)
+        # TODO : add option 'return ALL spoken words' so that bystanders can get words too ( agent 'listen' method)
+        # need to split in 2 lang arrays
+        # all_spoken_words = np.zeros(self.vocab_red, dtype=np.int64) # check new 1.11 numpy to set output type
+        # if ret_spoken_words:
+        #     all_spoken_words[spoken_words[0]] += spoken_words[1]  # list_words[act] += act_c
+        # if ret_spoken_words:
+        #     return all_spoken_words
+
 
     def get_conv_params(self, ag_init, others):
         """

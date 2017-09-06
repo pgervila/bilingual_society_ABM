@@ -2,8 +2,6 @@
 import random
 import numpy as np
 import networkx as nx
-import bisect
-import itertools
 from scipy.spatial.distance import pdist
 from collections import defaultdict
 
@@ -119,15 +117,15 @@ class Simple_Language_Agent:
         chosen_cell = random.choice(possible_steps)
         self.model.grid.move_agent(self, chosen_cell)
 
-    def reproduce(self, age_1=20, age_2=40):
-        """ Method to generate a new agent out of self agent under specific age conditions
+    def reproduce(self, age_1=20, age_2=40, repr_prob_per_step=0.005):
+        """ Method to generate a new agent out of self agent under certain age conditions
             Args:
                 * age_1: integer. Lower age bound of reproduction period
                 * age_2: integer. Higher age bound of reproduction period
         """
-
         age_1, age_2 = age_1 * 36, age_2 * 36
-        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() < 5/(age_2 - age_1)):
+        # check reproduction conditions
+        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() < repr_prob_per_step):
             id_ = self.model.set_available_ids.pop()
             lang = self.language
             # find closest school to parent home
@@ -135,13 +133,15 @@ class Simple_Language_Agent:
             clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
-            # instantiate agent
+            # instantiate new agent
             a = Simple_Language_Agent(self.model, id_, lang, ag_home=self.loc_info['home'],
                                       ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
                                       ag_job=None,
                                       city_idx=self.loc_info['city_idx'])
             # Add agent to model
             self.model.add_agent_to_grid_sched_networks(a)
+            # add newborn agent to home presence list
+            a.loc_info['home'].agents_in.add(a)
             # Update num of children
             self.num_children += 1
 
@@ -375,9 +375,6 @@ class Simple_Language_Agent:
             self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                       self.model.vocab_red)
 
-
-
-
     def listen(self):
         """Listen to random agents placed on the same cell as calling agent"""
         # get all agents currently placed on chosen cell
@@ -388,10 +385,12 @@ class Simple_Language_Agent:
             ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
 
             # TODO : rework following lines of code to adapt output values from methods
-            l1, l2 = self.get_conv_params(ag_1, ag_2, return_values=True)
 
-            self.update_lang_arrays(l1, spoken_words, speak=False)
-            self.update_lang_arrays(l2, spoken_words, speak=False)
+            # self.model.run_conversation # TODO add output
+            #
+            # self.model.get_conv_params(ag_1, ag_2)
+            #
+            # self.update_lang_arrays(l1, sample_words, speak=False)
 
     def read(self):
         pass
