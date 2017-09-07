@@ -470,24 +470,28 @@ class Simple_Language_Agent:
         return 'Lang_Agent_{0.unique_id!r}'.format(self)
 
 
-
 class Home:
     def __init__(self, pos):
+        self.occupants = set()
         self.pos=pos
         self.agents_in = set()
     def __repr__(self):
         return 'Home_{0.pos!r}'.format(self)
 
+
 class School:
     def __init__(self, pos, num_places):
+        self.students = set()
         self.pos=pos
         self.num_free=num_places
         self.agents_in = set()
     def __repr__(self):
         return 'School_{0.pos!r}'.format(self)
 
+
 class Job:
     def __init__(self, pos, num_places, skill_level=0):
+        self.employees = set()
         self.pos=pos
         self.num_places=num_places
         self.skill_level = skill_level

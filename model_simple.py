@@ -72,7 +72,10 @@ class StagedActivation_modif(StagedActivation):
 
 
 class Simple_Language_Model(Model):
+
     ic_pct_keys = [10, 25, 50, 75, 90]
+    family_size = 4
+
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250), width=100, height=100,
                  max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
@@ -139,6 +142,7 @@ class Simple_Language_Model(Model):
         self.map_homes()
         self.map_lang_agents()
         self.define_family_networks()
+        self.define_friendship_networks()
 
 
         # DATA COLLECTOR
@@ -380,9 +384,8 @@ class Simple_Language_Model(Model):
         # set agents ids
         ids = set(range(self.num_people))
 
-        family_size = 4
         for clust_idx, clust_info in self.clusters_info.items():
-            for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * family_size)):
+            for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.family_size)):
                 # instantiate 2 adults with neither job nor home assigned
                 ag1 = Simple_Language_Agent(self, ids.pop(), family_langs[0], city_idx=clust_idx)
                 ag2 = Simple_Language_Agent(self, ids.pop(), family_langs[1], city_idx=clust_idx)
@@ -397,9 +400,9 @@ class Simple_Language_Model(Model):
 
             # set up agents left out of family partition of cluster
             len_clust = clust_info['num_agents']
-            num_left_agents = len_clust%family_size
+            num_left_agents = len_clust % self.family_size
             if num_left_agents:
-                for lang in clust_info['agents'][-num_left_agents:]:
+                for lang in langs_per_clust[clust_idx][-num_left_agents:]:
                     ag = Simple_Language_Agent(self, ids.pop(), lang, city_idx=clust_idx)
                     clust_info['agents'].append(ag)
                     self.add_agent_to_grid_sched_networks(ag)
@@ -425,13 +428,17 @@ class Simple_Language_Model(Model):
         self.friendship_network.add_nodes_from(agents)
         self.family_network.add_nodes_from(agents)
 
+    def _assign_home_to_agent(self, agent, home):
+        agent.loc_info['home'] = home
+        home.occupants.add(agent)
+        home.agents_in.add(agent)
+
+
     def define_family_networks(self):
         # Method to define families and also adds relatives to known_people_network
         # marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
-        family_size = 4
-
         for clust_idx, clust_info in self.clusters_info.items():
-            for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * family_size)):
+            for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.family_size)):
                 # set ages of family members
                 steps_per_year = 36
                 min_age, max_age = 40 * steps_per_year, 50 * steps_per_year
@@ -465,8 +472,7 @@ class Simple_Language_Model(Model):
                                 bisect.bisect_left(self.ic_pct_keys, key, hi=len(self.ic_pct_keys)-1)
                             ]
                             member.set_lang_ics(biling_key=key)
-                        member.loc_info['home'] = home
-                        home.agents_in.add(member)
+                        self._assign_home_to_agent(member, home)
                 else: # monolingual parents
                     # check if children are bilingual
                     if 1 in [family[2].language, family[3].language]:
@@ -479,13 +485,13 @@ class Simple_Language_Model(Model):
                                     member.set_lang_ics(biling_key=90)
                                 else:
                                     member.set_lang_ics()
-                            member.loc_info['home'] = home
-                            home.agents_in.add(member)
+                            self._assign_home_to_agent(member, home)
                     else:
                         for member in family:
                             member.set_lang_ics()
-                            member.loc_info['home'] = home
-                            home.agents_in.add(member)
+                            self._assign_home_to_agent(member, home)
+
+
                 # assign job to parents
                 for parent in family[:2]:
                     while True:
@@ -493,6 +499,7 @@ class Simple_Language_Model(Model):
                         if job.num_places:
                             job.num_places -= 1
                             parent.loc_info['job'] = job
+                            job.employees.add(parent)
                             break
                 # assign school to children
                 # find closest school
@@ -501,6 +508,7 @@ class Simple_Language_Model(Model):
                 school = clust_info['schools'][idx_school]
                 for child in family[2:]:
                     child.loc_info['school'] = school
+                    school.students.add(child)
                 # find out lang of interaction btw family members
                 # consorts
                 pct11 = family[0].lang_stats['L1']['pct'][family[0].age]
@@ -554,7 +562,7 @@ class Simple_Language_Model(Model):
 
             # set up agents left out of family partition of cluster
             len_clust = len(clust_info['agents'])
-            num_left_agents = len_clust%family_size
+            num_left_agents = len_clust % self.family_size
             if num_left_agents:
                 for ag in clust_info['agents'][-num_left_agents:]:
                     min_age, max_age = 40 * steps_per_year, 60 * steps_per_year
@@ -570,18 +578,39 @@ class Simple_Language_Model(Model):
                             ag.loc_info['job'] = job
                             break
 
-    def define_friendship_networks(self):
+    def define_friendship_networks(self, num_init_friends=2):
         graph_friends = self.friendship_network
+        for ag in graph_friends.nodes():
+            if ag.loc_info['job'] and len(graph_friends[ag]) < num_init_friends:
+                # assign job friends
+                for coll in ag.loc_info['job'].employees:
+                    #check colleague lang conditions
+                    if abs(coll.language - ag.language) <= 1:
+                        graph_friends.add_edge(ag, coll)
+                    if len(graph_friends[ag]) > num_init_friends - 1:
+                        break
+            elif ag.loc_info['school'] and len(graph_friends[ag]) < num_init_friends:
+                # assign school friends
+                for mate in ag.loc_info['school'].students:
+                    if abs(mate.language - ag.language) <= 1:
+                        graph_friends.add_edge(ag, mate)
+                    if len(graph_friends[ag]) > num_init_friends - 1:
+                        break
 
-        # Apply small world graph to relevant nodes using networkx
+        for clust_idx, clust_info in self.clusters_info.items():
+            pass
 
-        # how many friends per agent originally ??
-        # Let's start with 2
+            # TODO :
+            # Apply small world graph to relevant nodes using networkx
 
+            # how many friends per agent originally ??
+            # Let's start with 2
 
-        # Simple idea:
-        # parents - > pick friends from job
-        # children -> pick friends from school
+            # Simple idea:
+            # parents - > pick friends from job
+            # children -> pick friends from school
+
+            # TODO : what condition to become a friend ??
 
 
     def run_conversation(self, ag_init, others):
