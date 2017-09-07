@@ -424,15 +424,36 @@ class Simple_Language_Model(Model):
             else:
                 self.grid.place_agent(a, (0, 0))
         ## add agent node to all networks
-        self.known_people_network.add_nodes_from(agents)
-        self.friendship_network.add_nodes_from(agents)
-        self.family_network.add_nodes_from(agents)
+        for nw in [self.known_people_network, self.friendship_network, self.family_network]:
+            nw.add_nodes_from(agents)
 
     def _assign_home_to_agent(self, agent, home):
         agent.loc_info['home'] = home
         home.occupants.add(agent)
         home.agents_in.add(agent)
 
+    def define_lang_interaction(self, ag1, ag2, ret_pcts=False):
+        # find out lang of interaction btw family members
+        # consorts
+        pct11 = ag1.lang_stats['L1']['pct'][ag1.age]
+        pct12 = ag1.lang_stats['L2']['pct'][ag1.age]
+        pct21 = ag2.lang_stats['L1']['pct'][ag2.age]
+        pct22 = ag2.lang_stats['L2']['pct'][ag2.age]
+        if (ag1.language, ag2.language) in [(0, 0), (0, 1), (1, 0)]:
+            lang = 0
+        elif (ag1.language, ag2.language) in [(2, 1), (1, 2), (2, 2)]:
+            lang = 1
+        elif (ag1.language, ag2.language) == (1, 1):
+            # Find weakest combination lang-agent, pick other language as common one
+            idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
+            if idx_weakest in [0, 2]:
+                lang = 1
+            else:
+                lang = 0
+        if ret_pcts:
+            return lang, [pct11, pct12, pct21, pct22]
+        else:
+            return lang
 
     def define_family_networks(self):
         # Method to define families and also adds relatives to known_people_network
@@ -491,7 +512,6 @@ class Simple_Language_Model(Model):
                             member.set_lang_ics()
                             self._assign_home_to_agent(member, home)
 
-
                 # assign job to parents
                 for parent in family[:2]:
                     while True:
@@ -511,24 +531,10 @@ class Simple_Language_Model(Model):
                     school.students.add(child)
                 # find out lang of interaction btw family members
                 # consorts
-                pct11 = family[0].lang_stats['L1']['pct'][family[0].age]
-                pct12 = family[0].lang_stats['L2']['pct'][family[0].age]
-                pct21 = family[1].lang_stats['L1']['pct'][family[1].age]
-                pct22 = family[1].lang_stats['L2']['pct'][family[1].age]
-                if (family[0].language, family[1].language) in [(0, 0), (0, 1), (1, 0)]:
-                    lang_consorts = 0
-                elif (family[0].language, family[1].language) in [(2, 1), (1, 2), (2, 2)]:
-                    lang_consorts = 1
-                elif (family[0].language, family[1].language) == (1, 1):
-                    # Find weakest combination lang-agent, pick other language as common
-                    idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-                    if idx_weakest in [0, 2]:
-                        lang_consorts = 1
-                    else:
-                        lang_consorts = 0
-                # language with father, mother
-                lang_with_father = np.argmax([pct11, pct12])
-                lang_with_mother = np.argmax([pct21, pct22])
+                lang_consorts, pcts = self.define_lang_interaction(family[0], family[1], ret_pcts=True)
+                # language of children with father, mother
+                lang_with_father = np.argmax(pcts[:2])
+                lang_with_mother = np.argmax(pcts[2:])
                 # siblings
                 avg_lang = (lang_with_father + lang_with_mother) / 2
                 if avg_lang == 0:
@@ -536,16 +542,19 @@ class Simple_Language_Model(Model):
                 elif avg_lang == 1:
                     lang_siblings = 1
                 else:
-                    # find weakest, pick opposite
-                    pct11 = family[2].lang_stats['L1']['pct'][family[2].age]
-                    pct12 = family[2].lang_stats['L2']['pct'][family[2].age]
-                    pct21 = family[3].lang_stats['L1']['pct'][family[3].age]
-                    pct22 = family[3].lang_stats['L2']['pct'][family[3].age]
-                    idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-                    if idx_weakest in [0, 2]:
-                        lang_siblings = 1
-                    else:
-                        lang_siblings = 0
+                    lang_siblings = self.define_lang_interaction(family[2], family[3])
+
+                    # find weakest, pick opposite PREVIOUS implem
+                    # pct11 = family[2].lang_stats['L1']['pct'][family[2].age]
+                    # pct12 = family[2].lang_stats['L2']['pct'][family[2].age]
+                    # pct21 = family[3].lang_stats['L1']['pct'][family[3].age]
+                    # pct22 = family[3].lang_stats['L2']['pct'][family[3].age]
+                    # idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
+                    # if idx_weakest in [0, 2]:
+                    #     lang_siblings = 1
+                    # else:
+                    #     lang_siblings = 0
+
                 # add family edges in family and known_people networks
                 for (i, j) in [(0, 1), (1, 0)]:
                     self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
@@ -578,27 +587,36 @@ class Simple_Language_Model(Model):
                             ag.loc_info['job'] = job
                             break
 
-    def define_friendship_networks(self, num_init_friends=2):
+    def define_friendship_networks(self):
         graph_friends = self.friendship_network
-        for ag in graph_friends.nodes():
-            if ag.loc_info['job'] and len(graph_friends[ag]) < num_init_friends:
-                # assign job friends
-                for coll in ag.loc_info['job'].employees:
-                    #check colleague lang conditions
-                    if abs(coll.language - ag.language) <= 1:
-                        graph_friends.add_edge(ag, coll)
-                    if len(graph_friends[ag]) > num_init_friends - 1:
+        friends_per_agent = np.random.randint(1, 5, size=self.num_people)
+        for ag, num_friends in zip(self.schedule.agents, friends_per_agent):
+            if ag.loc_info['job'] and len(graph_friends[ag]) < num_friends:
+                # assign friends from job -> Iterate over all employees but himself
+                for coll in ag.loc_info['job'].employees.difference({ag}):
+                    #check colleague lang and frienship conditions
+                    if (abs(coll.language - ag.language) <= 1 and
+                    len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
+                    coll not in self.friendship_network[ag] and
+                    coll not in self.family_network[ag]):
+                        lang = self.define_lang_interaction(ag, coll)
+                        graph_friends.add_edge(ag, coll, lang=lang)
+                        self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
+                    if len(graph_friends[ag]) > num_friends - 1:
                         break
-            elif ag.loc_info['school'] and len(graph_friends[ag]) < num_init_friends:
+            elif ag.loc_info['school'] and len(graph_friends[ag]) < num_friends:
                 # assign school friends
-                for mate in ag.loc_info['school'].students:
-                    if abs(mate.language - ag.language) <= 1:
+                for mate in ag.loc_info['school'].students.difference({ag}):
+                    # check mate and friendship conditions
+                    if (abs(mate.language - ag.language) <= 1 and
+                    len(self.friendship_network[mate]) < friends_per_agent[mate.unique_id] and
+                    mate not in self.friendship_network[ag] and
+                    mate not in self.family_network[ag]):
+                        lang = self.define_lang_interaction(ag, mate)
                         graph_friends.add_edge(ag, mate)
-                    if len(graph_friends[ag]) > num_init_friends - 1:
+                        self.known_people_network.add_edge(ag, mate, friends=True, lang=lang)
+                    if len(graph_friends[ag]) > num_friends - 1:
                         break
-
-        for clust_idx, clust_info in self.clusters_info.items():
-            pass
 
             # TODO :
             # Apply small world graph to relevant nodes using networkx
@@ -657,6 +675,7 @@ class Simple_Language_Model(Model):
             * others : list of agent object instances. Rest of agents that take part in conversation
                        It can be a single agent object that will be automatically converted into a list
         Returns:
+            * ags: list of all agents involved in conversation
             * lang: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
             * mute_type: integer. agent lang type that is unable to speak in conversation
         """

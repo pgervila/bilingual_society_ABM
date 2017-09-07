@@ -110,6 +110,15 @@ test_data_run_conversation = [([1, 1, 1, 2, 2], True)]
 # def test_define_family_networks(model):
 #     pass
 
+def test_define_friendship_networks(model):
+    agents = model.schedule.agents
+    for ag in agents:
+        assert ag not in model.friendship_network[ag]
+        # check relatives are not friends
+        for relat in model.family_network[ag]:
+            assert relat not in model.friendship_network[ag]
+
+
 # @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", test_data_get_conv_params)
 # def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected): 
 #     agents = model.schedule.agents[:len(langs)]
@@ -142,4 +151,4 @@ def test_run_conversation(model, langs, delete_edges):
             with patch('agent_simple.Simple_Language_Agent.update_lang_arrays') as mock_call:
                 model.run_conversation(agents[0], agents[1:])
                 for ix, lang in enumerate(mock_method1.return_value[1]['lang_group']):
-                    mock_call.assert_any_call(lang, speak=False)                
+                    mock_call.assert_any_call(lang, speak=False)

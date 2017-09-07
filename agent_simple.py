@@ -67,8 +67,8 @@ class Simple_Language_Agent:
                * S_0: float. Initial value of memory stability
                * t_0: integer. Initial value of time-elapsed ( in days) from last time words were encountered
         """
-        self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0)
-        self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0)
+        self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0, dtype=np.float)
+        self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0, dtype=np.float)
         self.lang_stats[lang]['R'] = np.exp(- self.k *
                                             self.lang_stats[lang]['t'] /
                                             self.lang_stats[lang]['S']
@@ -192,7 +192,16 @@ class Simple_Language_Agent:
             if job_c.num_places:
                 job_c.num_places -= 1
                 self.loc_info['job'] = job_c
+                job_c.employees.add(self)
+                job_c.agents_in.add(self)
                 break
+
+    def make_acquaintance(self):
+        """ add edges to known_people network when meeting for first time"""
+        pass
+
+    def make_friendship(self):
+        pass
 
     def speak(self, with_agents=None, num_other_agents=1):
         """ Method that starts a conversation. Pick either a list of known agents or a list of random lang_agent
@@ -376,7 +385,7 @@ class Simple_Language_Agent:
                                                       self.model.vocab_red)
 
     def listen(self):
-        """Listen to random agents placed on the same cell as calling agent"""
+        """ Listen to random agents placed on the same cell as calling agent """
         # get all agents currently placed on chosen cell
         others = self.model.grid.get_cell_list_contents(self.pos)
         others.remove(self)
@@ -429,14 +438,15 @@ class Simple_Language_Agent:
         if self.age < 720:
             self.model.grid.move_agent(self, self.loc_info['school'].pos)
             self.loc_info['school'].agents_in.add(self)
+            # TODO : DEFINE GROUP CONVERSATIONS !
             self.study_lang(0)
             self.study_lang(1)
-            self.speak()
+            self.speak() # WITH FRIENDS, IN GROUPS
         else:
             if self.loc_info['job']:
                 self.model.grid.move_agent(self, self.loc_info['job'].pos)
                 self.loc_info['job'].agents_in.add(self)
-                # TODO speak to people in job !!!
+                # TODO speak to people in job !!! DEFINE GROUP CONVERSATIONS !
                 self.speak()
                 self.speak()
             else:
@@ -444,8 +454,15 @@ class Simple_Language_Agent:
                 self.speak()
 
     def stage_4(self):
+        if self.age < 720:
+            self.loc_info['school'].agents_in.remove(self)
+        elif self.loc_info['job']:
+            self.loc_info['job'].agents_in.remove(self)
         self.move_random()
         self.speak()
+        if random.random() > 0.5 and self.model.friendship_network[self]:
+            picked_friend = np.random.choice(self.model.friendship_network.neighbors(self))
+            self.speak(with_agents=picked_friend)
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
         self.loc_info['home'].agents_in.add(self)
         try:
@@ -490,11 +507,19 @@ class School:
 
 
 class Job:
-    def __init__(self, pos, num_places, skill_level=0):
+    """ class that defines a Job object.
+        Args:
+            * lang_policy: requested languages in order to work at this site
+                0 -> only L1 (so both 0, 1 agents may work here)
+                1 -> both L1 and L2 ( only 1 agents may work here )
+                2 -> only L2 (so both 1, 2 agents may work here)
+    """
+    def __init__(self, pos, num_places, skill_level=0, lang_policy = 1):
         self.employees = set()
         self.pos=pos
         self.num_places=num_places
         self.skill_level = skill_level
         self.agents_in = set()
+        self.lang_policy = lang_policy
     def __repr__(self):
         return 'Job{0.pos!r}'.format(self)
