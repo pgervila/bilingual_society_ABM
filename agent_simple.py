@@ -196,18 +196,22 @@ class Simple_Language_Agent:
                 job_c.agents_in.add(self)
                 break
 
-    def make_acquaintance(self):
-        """ add edges to known_people network when meeting for first time"""
-        pass
+    def update_acquaintances(self, other, lang):
+        """ Add edges to known_people network when meeting for first time """
+        if other not in self.model.known_people_network[self]:
+            self.model.known_people_network.add_edge(self, other)
+            self.model.known_people_network[self][other].update({'num_meet': 1, 'lang': lang})
+        elif (other not in self.model.family_network[self]) and (other not in self.model.friendship_network[self]):
+            self.model.known_people_network[self][other]['num_meet'] += 1
+
 
     def make_friendship(self):
+        """ Check num_meet in known people network to filter candidates """
         pass
 
     def speak(self, with_agents=None, num_other_agents=1):
-        """ Method that starts a conversation. Pick either a list of known agents or a list of random lang_agent
-            from current cell and start a conversation with them.
-            It updates heard words in order to shape future vocab.
-            Language of the conversation is determined by MAXIMIN principle
+        """ Method that starts a conversation. It picks either a list of known agents or
+            a list of random agents from current cell and starts a conversation with them.
             This method can also simulate distance contact e.g.
             phone, messaging, etc ... by specifying an agent through 'with_agents' variable
 
@@ -231,17 +235,14 @@ class Simple_Language_Agent:
         else:
             self.model.run_conversation(self, with_agents)
 
-
-    def get_num_words_per_conv(self, long=True, age_1=14, age_2=65):
+    def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, real_spoken_words_per_day = 16000):
         """ Computes number of words spoken per conversation for a given age
             If conversation=False, computes average number of words per day,
             assuming 16000 tokens per adult per day as average """
         # TODO : define 3 types of conv: short, average and long ( with close friends??)
         age_1, age_2 = 36 * age_1, 36 * age_2
         real_vocab_size = 40 * self.model.vocab_red
-        real_spoken_words_per_day = 16000
         f = real_vocab_size / real_spoken_words_per_day
-
         if self.age < age_1:
             delta = 0.0001
             decay = -np.log(delta / 100) / (age_1)
@@ -267,7 +268,6 @@ class Simple_Language_Agent:
                 * long: boolean that defines conversation length
                 * return_values : boolean. If true, chosen words are returned
         """
-
         #TODO : model 'Grammatical foreigner talk' =>
         #TODO : how word choice is adapted by native speakers when speaking to learners
 

@@ -110,45 +110,44 @@ test_data_run_conversation = [([1, 1, 1, 2, 2], True)]
 # def test_define_family_networks(model):
 #     pass
 
-def test_define_friendship_networks(model):
-    agents = model.schedule.agents
-    for ag in agents:
-        assert ag not in model.friendship_network[ag]
-        # check relatives are not friends
-        for relat in model.family_network[ag]:
-            assert relat not in model.friendship_network[ag]
+# def test_define_friendship_networks(model):
+#     agents = model.schedule.agents
+#     for ag in agents:
+#         assert ag not in model.friendship_network[ag]
+#         # check relatives are not friends
+#         for relat in model.family_network[ag]:
+#             assert relat not in model.friendship_network[ag]
 
 
-# @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", test_data_get_conv_params)
-# def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected): 
-#     agents = model.schedule.agents[:len(langs)]
-#     for idx, agent in enumerate(agents):
-#         agent.language = langs[idx]
-#         agent.lang_stats['L1']['pct'][agent.age] = pcts_1[idx]
-#         agent.lang_stats['L2']['pct'][agent.age] = pcts_2[idx]
-#     if delete_edges:
-#         model.known_people_network.remove_edges_from(model.known_people_network.edges())
-#     ags, params = model.get_conv_params(agents[0], agents[1:])
-    
-#     assert np.all(expected == (params['lang_group'], params['mute_type']))
-#     assert agents == ags
-
-@pytest.mark.parametrize("langs, delete_edges", test_data_run_conversation)
-def test_run_conversation(model, langs, delete_edges):
+@pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", test_data_get_conv_params)
+def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected): 
     agents = model.schedule.agents[:len(langs)]
     for idx, agent in enumerate(agents):
         agent.language = langs[idx]
+        agent.lang_stats['L1']['pct'][agent.age] = pcts_1[idx]
+        agent.lang_stats['L2']['pct'][agent.age] = pcts_2[idx]
     if delete_edges:
         model.known_people_network.remove_edges_from(model.known_people_network.edges())
-    with patch('model_simple.Simple_Language_Model.get_conv_params') as mock_method1:
-        mock_method1.return_value = (agents, {'lang_group': 1, 
-                                             'mute_type': None, 
-                                             'long': True,
-                                             'bilingual': False}
-                                     )
-        with patch('agent_simple.Simple_Language_Agent.vocab_choice_model') as mock_method2:
-            mock_method2.return_value = (np.array([0, 1, 34, 435]), np.array([3, 2, 1, 1]))
-            with patch('agent_simple.Simple_Language_Agent.update_lang_arrays') as mock_call:
-                model.run_conversation(agents[0], agents[1:])
-                for ix, lang in enumerate(mock_method1.return_value[1]['lang_group']):
-                    mock_call.assert_any_call(lang, speak=False)
+    params = model.get_conv_params(agents)
+    
+    assert np.all(expected == (params['lang_group'], params['mute_type']))
+
+# @pytest.mark.parametrize("langs, delete_edges", test_data_run_conversation)
+# def test_run_conversation(model, langs, delete_edges):
+#     agents = model.schedule.agents[:len(langs)]
+#     for idx, agent in enumerate(agents):
+#         agent.language = langs[idx]
+#     if delete_edges:
+#         model.known_people_network.remove_edges_from(model.known_people_network.edges())
+#     with patch('model_simple.Simple_Language_Model.get_conv_params') as mock_method1:
+#         mock_method1.return_value = (agents, {'lang_group': 1, 
+#                                              'mute_type': None, 
+#                                              'long': True,
+#                                              'bilingual': False}
+#                                      )
+#         with patch('agent_simple.Simple_Language_Agent.vocab_choice_model') as mock_method2:
+#             mock_method2.return_value = (np.array([0, 1, 34, 435]), np.array([3, 2, 1, 1]))
+#             with patch('agent_simple.Simple_Language_Agent.update_lang_arrays') as mock_call:
+#                 model.run_conversation(agents[0], agents[1:])
+#                 for ix, lang in enumerate(mock_method1.return_value[1]['lang_group']):
+#                     mock_call.assert_any_call(lang, speak=False)

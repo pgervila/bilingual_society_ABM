@@ -555,7 +555,7 @@ class Simple_Language_Model(Model):
                     # else:
                     #     lang_siblings = 0
 
-                # add family edges in family and known_people networks
+                # add family edges in family and known_people networks ( both are DIRECTED networks ! )
                 for (i, j) in [(0, 1), (1, 0)]:
                     self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
                     self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_consorts)
@@ -588,48 +588,31 @@ class Simple_Language_Model(Model):
                             break
 
     def define_friendship_networks(self):
-        graph_friends = self.friendship_network
+        # TODO :
+        # Apply small world graph to relevant nodes using networkx
         friends_per_agent = np.random.randint(1, 5, size=self.num_people)
         for ag, num_friends in zip(self.schedule.agents, friends_per_agent):
-            if ag.loc_info['job'] and len(graph_friends[ag]) < num_friends:
-                # assign friends from job -> Iterate over all employees but himself
-                for coll in ag.loc_info['job'].employees.difference({ag}):
-                    #check colleague lang and frienship conditions
-                    if (abs(coll.language - ag.language) <= 1 and
-                    len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
-                    coll not in self.friendship_network[ag] and
-                    coll not in self.family_network[ag]):
-                        lang = self.define_lang_interaction(ag, coll)
-                        graph_friends.add_edge(ag, coll, lang=lang)
-                        self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
-                    if len(graph_friends[ag]) > num_friends - 1:
-                        break
-            elif ag.loc_info['school'] and len(graph_friends[ag]) < num_friends:
-                # assign school friends
-                for mate in ag.loc_info['school'].students.difference({ag}):
-                    # check mate and friendship conditions
-                    if (abs(mate.language - ag.language) <= 1 and
-                    len(self.friendship_network[mate]) < friends_per_agent[mate.unique_id] and
-                    mate not in self.friendship_network[ag] and
-                    mate not in self.family_network[ag]):
-                        lang = self.define_lang_interaction(ag, mate)
-                        graph_friends.add_edge(ag, mate)
-                        self.known_people_network.add_edge(ag, mate, friends=True, lang=lang)
-                    if len(graph_friends[ag]) > num_friends - 1:
-                        break
-
-            # TODO :
-            # Apply small world graph to relevant nodes using networkx
-
-            # how many friends per agent originally ??
-            # Let's start with 2
-
-            # Simple idea:
-            # parents - > pick friends from job
-            # children -> pick friends from school
-
-            # TODO : what condition to become a friend ??
-
+            if ag.loc_info['job'] and len(self.friendship_network[ag]) < num_friends:
+                ag_occupation = ag.loc_info['job']
+                colleagues = 'employees'
+            elif ag.loc_info['school'] and len(self.friendship_network[ag]) < num_friends:
+                ag_occupation = ag.loc_info['school']
+                colleagues = 'students'
+            else:
+                continue
+            for coll in getattr(ag_occupation, colleagues).difference({ag}):
+                #check colleague lang distance and all frienship conditions
+                if (abs(coll.language - ag.language) <= 1 and
+                len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
+                coll not in self.friendship_network[ag] and
+                coll not in self.family_network[ag]):
+                    lang = self.define_lang_interaction(ag, coll)
+                    self.friendship_network.add_edge(ag, coll, lang=lang)
+                    # kpnetwork is directed graph !
+                    self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
+                    self.known_people_network.add_edge(coll, ag, friends=True, lang=lang)
+                if len(self.friendship_network[ag]) > num_friends - 1:
+                    break
 
     def run_conversation(self, ag_init, others):
         """ Method that models conversation between ag_init and others
@@ -640,10 +623,11 @@ class Simple_Language_Model(Model):
                 * others : list of agent object instances. Rest of agents that take part in conversation
                            It can be a single agent object that will be automatically converted into a list
         """
-        ags, conv_params = self.get_conv_params(ag_init, others)
-        num_ags = len(ags)
-        if not conv_params['bilingual']:
-            conv_params['lang_group'] = itertools.repeat(conv_params['lang_group'], num_ags)
+        # define list of all agents involved
+        ags = [ag_init]
+        ags.extend(others) if (type(others) is list) else ags.append(others)
+        # get all parameters of conversation
+        conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.language != conv_params['mute_type']:
                 spoken_words = ag.vocab_choice_model(lang, long=conv_params['long'])
@@ -653,6 +637,17 @@ class Simple_Language_Model(Model):
                 listeners = ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
                     listener.update_lang_arrays(lang, spoken_words, speak=False)
+        # update acquaintances
+        if type(others) is list:
+            for ix, ag in enumerate(others):
+                if ag.language != conv_params['mute_type']:
+                    ag_init.update_acquaintances(ag, conv_params['lang_group'][0])
+                    ag.update_acquaintances(ag_init, conv_params['lang_group'][ix])
+        else:
+            if others.language != conv_params['mute_type']:
+                ag_init.update_acquaintances(others, conv_params['lang_group'][0])
+                others.update_acquaintances(ag_init, conv_params['lang_group'][1])
+
         # TODO : add option 'return ALL spoken words' so that bystanders can get words too ( agent 'listen' method)
         # need to split in 2 lang arrays
         # all_spoken_words = np.zeros(self.vocab_red, dtype=np.int64) # check new 1.11 numpy to set output type
@@ -661,8 +656,7 @@ class Simple_Language_Model(Model):
         # if ret_spoken_words:
         #     return all_spoken_words
 
-
-    def get_conv_params(self, ag_init, others):
+    def get_conv_params(self, ags):
         """
         Method to find out parameters of conversation between 2 or more agents:
             conversation lang or lang spoken by each involved speaker,
@@ -675,32 +669,31 @@ class Simple_Language_Model(Model):
             * others : list of agent object instances. Rest of agents that take part in conversation
                        It can be a single agent object that will be automatically converted into a list
         Returns:
-            * ags: list of all agents involved in conversation
-            * lang: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
-            * mute_type: integer. agent lang type that is unable to speak in conversation
+            * conv_params dict with following keys:
+                * lang: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
+                * mute_type: integer. agent lang type that is unable to speak in conversation
+                * bilingual:
+                * long:
         """
 
-        # define list with all agents involved in conversation
-        ags = [ag_init]
-        try:
-            iter(others)
-        except TypeError:
-            others = [others]
-        ags.extend(others)
-        num_ags = len(ags)
-        conv_params = dict(bilingual=False, mute_type=None, long=True)
+        # redefine separate agents for readability
+        ag_init = ags[0]
+        others = ags[1:]
+
+        # set output default parameters
+        conv_params = dict(multilingual=False, mute_type=None, long=True)
         # define lists with agent competences and preferences in each language
         l1_pcts = [ag.lang_stats['L1']['pct'][ag.age] for ag in ags]
         l2_pcts = [ag.lang_stats['L2']['pct'][ag.age] for ag in ags]
+        # get lists of favorite language per agent and set of language types involved
         fav_lang_per_agent = list(np.argmax([l1_pcts, l2_pcts], axis=0))
-        ag_langs = set([ag.language for ag in ags])
+        ags_lang_types = set([ag.language for ag in ags])
 
         # define current case
-        if ag_langs in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
+        if ags_lang_types in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
             lang_group = 0
-            conv_params.update({'lang_group':0})
-            #run_conversation(lang_group)
-        elif ag_langs == {1}:
+            conv_params.update({'lang_group':lang_group})
+        elif ags_lang_types == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
             # who starts conversation matters, but also average lang spoken with already known agents
@@ -708,20 +701,18 @@ class Simple_Language_Model(Model):
                 lang_init = 1 if random.random() > 0.5 else 0
             else:
                 lang_init = np.argmax([l1_pcts[0], l2_pcts[0]])
+            # TODO : why known agents only checked for this option ??????????????
             langs_with_known_agents = [self.known_people_network[ag_init][ag]['lang']
                                        for ag in others
                                        if ag in self.known_people_network[ag_init]]
             if langs_with_known_agents:
-                av_k_lang = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
-                lang_group = av_k_lang
+                lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
             else:
                 lang_group = lang_init
             conv_params.update({'lang_group': lang_group})
-            #run_conversation(lang_group)
-        elif ag_langs in [{1, 2}, {2}]:
+        elif ags_lang_types in [{1, 2}, {2}]:
             lang_group = 1
             conv_params.update({'lang_group': lang_group})
-            #run_conversation(lang_group)
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
@@ -733,7 +724,7 @@ class Simple_Language_Model(Model):
                 # All agents partially understand each other langs, but some can't speak l1 and some can't speak l2
                 # Conversation is possible when each agent picks their favorite lang
                 lang_group = fav_lang_per_agent
-                conv_params.update({'lang_group': lang_group, 'bilingual':True, 'long':False})
+                conv_params.update({'lang_group': lang_group, 'multilingual':True, 'long':False})
 
             elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
                 # There are real L1 monolinguals in the group
@@ -781,8 +772,10 @@ class Simple_Language_Model(Model):
                     mute_type = 2 if lang_group == 0 else 0
                 conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
 
+        if not conv_params['multilingual']:
+            conv_params['lang_group'] = [conv_params['lang_group']] * len(ags)
 
-        return ags, conv_params
+        return conv_params
 
 
     def get_lang_stats(self, i):
