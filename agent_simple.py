@@ -292,7 +292,7 @@ class Simple_Language_Agent:
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
         # These are the thoughts that speaker tries to convey
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
-        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10))
+        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10)) #TODO: check the 10 !!!
         #TODO:FASTER ??? bcs = np.bincount(word_samples)
         #TODO:FASTER ??? act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
         act, act_c = np.unique(word_samples, return_counts=True)
@@ -315,20 +315,17 @@ class Simple_Language_Agent:
                 # mask_L21 = rand_info_access[2] <= self.lang_stats['L21']['R'][act]
                 # mask_L2 = rand_info_access[3] <= self.lang_stats['L2']['R'][act]
 
-
         # 2. Given a lang, pick variant that is most familiar to agent
         lang = 'L1' if lang == 0 else 'L2'
         if lang == 'L1':
-            pct1, pct2 = self.lang_stats['L1']['pct'][self.age - 1] , self.lang_stats['L12']['pct'][self.age - 1]
+            pct1, pct2 = self.lang_stats['L1']['pct'][self.age] , self.lang_stats['L12']['pct'][self.age]
             lang = 'L1' if pct1 >= pct2 else 'L12'
         elif lang == 'L2':
-            pct1, pct2 = self.lang_stats['L2']['pct'][self.age - 1], self.lang_stats['L21']['pct'][self.age - 1]
+            pct1, pct2 = self.lang_stats['L2']['pct'][self.age], self.lang_stats['L21']['pct'][self.age]
             lang = 'L2' if pct1 >= pct2 else 'L21'
-
 
         # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
         # get mask for words successfully retrieved from memory
-
         mask_R = np.random.rand(len(act)) <= self.lang_stats[lang]['R'][act]
         spoken_words = {lang:[act[mask_R], act_c[mask_R]]}
         # if there are missing words-concepts, they might be found in the other known language(s)
@@ -346,15 +343,16 @@ class Simple_Language_Agent:
                 rem_words = act[~mask_R][~mask_R2]
                 mask_R3 = np.random.rand(len(rem_words)) <= self.lang_stats[lang3]['R'][rem_words]
                 if rem_words[mask_R3].size:
-                    # VERY IMP: add to transition language instead of 'pure' one. This is the process of adaption/translation
+                    # VERY IMP: add to transition language instead of 'pure' one.
+                    # This is the process of creation/adaption/translation
                     tr_lang = max([lang, lang2], key=len)
                     spoken_words.update({lang2: [rem_words[mask_R3], act_c[~mask_R][~mask_R2][mask_R3]]})
 
         return spoken_words
 
 
-    def update_lang_arrays(self, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2, delta_s_factor=0.25,
-                           min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
+    def update_lang_arrays(self, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
+                           delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * lang : integer in [0,1] {0:'spa', 1:'cat'}
@@ -395,7 +393,7 @@ class Simple_Language_Agent:
             # If words are from listening, they might be new to agent
             # ds_factor value will depend on action type (speaking or listening)
             if not speak:
-                known_words = np.nonzero(self.lang_stats['L1']['R'] > pct_threshold_und)
+                known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
                 # boolean mask of known active words
                 known_act_bool = np.in1d(act, known_words, assume_unique=True)
                 if np.all(known_act_bool):
