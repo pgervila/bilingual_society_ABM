@@ -212,6 +212,10 @@ class Simple_Language_Agent:
 
     def make_friendship(self):
         """ Check num_meet in known people network to filter candidates """
+
+        # TODO : check similar age
+        # TODO : check lang profile not too distant
+        # TODO : check residence in same cluster or  close one
         pass
 
     def start_conversation(self, with_agents=None, num_other_agents=1):
@@ -279,7 +283,7 @@ class Simple_Language_Agent:
                 he/she is certain interlocutor will understand
         """
 
-        # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
+        # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting ease of retrieval
 
         #TODO : model 'Grammatical foreigner talk' =>
         #TODO : how word choice is adapted by native speakers when speaking to learners
