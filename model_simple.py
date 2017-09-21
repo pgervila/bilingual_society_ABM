@@ -630,13 +630,13 @@ class Simple_Language_Model(Model):
         conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.language != conv_params['mute_type']:
-                spoken_words = ag.vocab_choice_model(lang, long=conv_params['long'])
+                spoken_words = ag.pick_vocab(lang, long=conv_params['long'])
                 # call 'self' agent update
-                ag.update_lang_arrays(lang, spoken_words)
+                ag.update_lang_arrays(spoken_words)
                 # call listeners' updates
                 listeners = ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
-                    listener.update_lang_arrays(lang, spoken_words, speak=False)
+                    listener.update_lang_arrays(spoken_words, speak=False)
         # update acquaintances
         if type(others) is list:
             for ix, ag in enumerate(others):

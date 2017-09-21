@@ -28,12 +28,13 @@ class Simple_Language_Agent:
         # Need three key levels to entirely define lang branch ->
         # Language {'L1', 'L2'}, mode{'a','p'}, attribute{'R','t','S','pct'}
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
-        self.day_mask = {'L1':np.zeros(self.model.vocab_red, dtype=np.bool),
-                         'L2':np.zeros(self.model.vocab_red, dtype=np.bool)}
+        self.day_mask = {l:np.zeros(self.model.vocab_red, dtype=np.bool)
+                         for l in ['L1', 'L12', 'L21', 'L2']}
         if import_IC:
             self.set_lang_ics()
         else:
-            for lang in ['L1', 'L2']:
+            # set null knowledge in all possible langs
+            for lang in ['L1', 'L12', 'L21', 'L2']:
                 self._set_null_lang_attrs(lang)
 
     def _set_lang_attrs(self, lang, pct_key):
@@ -60,8 +61,8 @@ class Simple_Language_Agent:
                                                   self.model.vocab_red)
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
-        """Private method that sets null agent linguistic status, i.e. without knowledge
-           of the specified language
+        """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
+           at all of it
            Args:
                * lang: string. It can take two different values: 'L1' or 'L2'
                * S_0: float. Initial value of memory stability
@@ -99,6 +100,10 @@ class Simple_Language_Agent:
             L2_key = str(100 - biling_key) + '_pct'
             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
                 self._set_lang_attrs(lang, key)
+        # always null conditions for transition languages
+        self._set_null_lang_attrs('L12', S_0, t_0)
+        self._set_null_lang_attrs('L21', S_0, t_0)
+
 
     def move_random(self):
         """ Take a random step into any surrounding cell
@@ -209,7 +214,7 @@ class Simple_Language_Agent:
         """ Check num_meet in known people network to filter candidates """
         pass
 
-    def speak(self, with_agents=None, num_other_agents=1):
+    def start_conversation(self, with_agents=None, num_other_agents=1):
         """ Method that starts a conversation. It picks either a list of known agents or
             a list of random agents from current cell and starts a conversation with them.
             This method can also simulate distance contact e.g.
@@ -235,14 +240,22 @@ class Simple_Language_Agent:
         else:
             self.model.run_conversation(self, with_agents)
 
-    def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, real_spoken_words_per_day = 16000):
+    def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
+                               real_spoken_tokens_per_day=16000):
         """ Computes number of words spoken per conversation for a given age
-            If conversation=False, computes average number of words per day,
-            assuming 16000 tokens per adult per day as average """
+            drawing from a 'num_words vs age' curve
+            It assumes a compression scale of 40 in SIMULATED vocabulary and
+            16000 tokens per adult per day as REAL number of spoken words on average
+            Args:
+                * long: boolean. Describes conversation length
+                * age_1, age_2: integers. Describe key ages for slope change in num_words vs age curve
+                * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
+                * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day"""
         # TODO : define 3 types of conv: short, average and long ( with close friends??)
         age_1, age_2 = 36 * age_1, 36 * age_2
-        real_vocab_size = 40 * self.model.vocab_red
-        f = real_vocab_size / real_spoken_words_per_day
+        real_vocab_size = scale_f * self.model.vocab_red
+        # define factor total_words/avg_words_per_day
+        f = real_vocab_size / real_spoken_tokens_per_day
         if self.age < age_1:
             delta = 0.0001
             decay = -np.log(delta / 100) / (age_1)
@@ -256,40 +269,89 @@ class Simple_Language_Agent:
         else:
             return self.model.num_words_conv[0] / factor
 
-
-    def vocab_choice_model(self, lang, long=True):
+    def pick_vocab(self, lang, long=True, biling_interloc=False):
         """ Method that models word choice by self agent in a conversation
             Word choice is governed by vocabulary knowledge constraints
-            Both self agent and listeners' lang arrays are updated according to the sampled words
-
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
-                * listeners: list of agent instances 'self' agent is talking to
                 * long: boolean that defines conversation length
-                * return_values : boolean. If true, chosen words are returned
+                * biling_interloc : boolean. If True, speaker word choice might be mixed, since
+                he/she is certain interlocutor will understand
         """
+
+        # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
+
         #TODO : model 'Grammatical foreigner talk' =>
         #TODO : how word choice is adapted by native speakers when speaking to learners
+        #TODO : or more importantly, by adults to children
 
-        # TODO: NEED MODEL of how to deal with missed words = > L3, emergent lang with mixed vocab ???
+        #TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
 
-        # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in TWO STEPS
+        # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in following STEPS
+
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
-        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10))
+        # These are the thoughts that speaker tries to convey
+        # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
+        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10)) #TODO: check the 10 !!!
         #TODO:FASTER ??? bcs = np.bincount(word_samples)
         #TODO:FASTER ??? act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
         act, act_c = np.unique(word_samples, return_counts=True)
-        # 2. Then assess which sampled words can be successfully retrieved from memory
-        # get mask for words successfully retrieved from memory
+
+        # check if conversation is btw bilinguals and therefore lang switch is possible
+        # TODO : key is that most biling agents will not express surprise to lang mixing or switch
+        # TODO : whereas monolinguals will. Feedback for correction
+        # if biling_interloc:
+        #     if lang == 'L1':
+        #         # find all words among 'act' words where L2 retrievability is higher than L1 retrievability
+        #         # Then fill L12 container with a % of those words ( their knowledge is known at first time of course)
+        #
+        #         self.lang_stats['L1']['R'][act] <= self.lang_stats['L2']['R'][act]
+        #         L2_strongest = self.lang_stats['L2']['R'][act] == 1.
+                #act[L2_strongest]
+
+                # rand_info_access = np.random.rand(4, len(act))
+                # mask_L1 = rand_info_access[0] <= self.lang_stats['L1']['R'][act]
+                # mask_L12 = rand_info_access[1] <= self.lang_stats['L12']['R'][act]
+                # mask_L21 = rand_info_access[2] <= self.lang_stats['L21']['R'][act]
+                # mask_L2 = rand_info_access[3] <= self.lang_stats['L2']['R'][act]
+
+        # 2. Given a lang, pick variant that is most familiar to agent
         lang = 'L1' if lang == 0 else 'L2'
-        mask_R = np.random.rand(self.lang_stats[lang]['R'][act].shape[0]) <= self.lang_stats[lang]['R'][act]
-        # find spoken words
-        spoken_words = act[mask_R], act_c[mask_R]
+        if lang == 'L1':
+            pct1, pct2 = self.lang_stats['L1']['pct'][self.age] , self.lang_stats['L12']['pct'][self.age]
+            lang = 'L1' if pct1 >= pct2 else 'L12'
+        elif lang == 'L2':
+            pct1, pct2 = self.lang_stats['L2']['pct'][self.age], self.lang_stats['L21']['pct'][self.age]
+            lang = 'L2' if pct1 >= pct2 else 'L21'
+
+        # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
+        # get mask for words successfully retrieved from memory
+        mask_R = np.random.rand(len(act)) <= self.lang_stats[lang]['R'][act]
+        spoken_words = {lang:[act[mask_R], act_c[mask_R]]}
+        # if there are missing words-concepts, they might be found in the other known language(s)
+        if np.count_nonzero(mask_R) < len(act):
+            if lang in ['L1', 'L12']:
+                lang2 = 'L12' if lang == 'L1' else 'L1'
+            elif lang in ['L2', 'L21']:
+                lang2 = 'L21' if lang == 'L2' else 'L2'
+            mask_R2 = np.random.rand(len(act[~mask_R])) <= self.lang_stats[lang2]['R'][act[~mask_R]]
+            if act[~mask_R][mask_R2].size:
+                spoken_words.update({lang2:[act[~mask_R][mask_R2], act_c[~mask_R][mask_R2]]})
+            # if still missing words, check in last lang available
+            if (act[mask_R].size + act[~mask_R][mask_R2].size) < len(act):
+                lang3 = 'L2' if lang2 in ['L12', 'L1'] else 'L1'
+                rem_words = act[~mask_R][~mask_R2]
+                mask_R3 = np.random.rand(len(rem_words)) <= self.lang_stats[lang3]['R'][rem_words]
+                if rem_words[mask_R3].size:
+                    # VERY IMP: add to transition language instead of 'pure' one.
+                    # This is the process of creation/adaption/translation
+                    tr_lang = max([lang, lang2], key=len)
+                    spoken_words.update({lang2: [rem_words[mask_R3], act_c[~mask_R][~mask_R2][mask_R3]]})
 
         return spoken_words
 
 
-    def update_lang_arrays(self, lang, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
+    def update_lang_arrays(self, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
                            delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
@@ -326,63 +388,65 @@ class Simple_Language_Agent:
         # TODO for cat-spa np.random.choice(range(7), p=[0.05, 0.2, 0.45, 0.15, 0.1, 0.025,0.025], size=500)
         # TODO 50% of unknown words with edit distance == 1 can be understood, guessed
 
-        act, act_c = sample_words
-        lang = 'L1' if lang == 0 else 'L2'
-
-        # UPDATE WORD COUNTING +  preprocessing for S, t, R UPDATE
-        # If words are from listening, they might be new to agent
-        # ds_factor value will depend on action type (speaking or listening)
-        if not speak:
-            known_words = np.nonzero(self.lang_stats['L1']['R'] > pct_threshold_und)
-            # boolean mask of known active words
-            known_act_bool = np.in1d(act, known_words, assume_unique=True)
-            if np.all(known_act_bool):
-                # all active words in conversation are known
-                # update all active words
-                self.lang_stats[lang]['wc'][act] += act_c
-            else:
-                # some heard words are unknown. Find them in 'act' words vector base
-                unknown_act_bool = np.invert(known_act_bool)
-                unknown_act , unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
-                # Select most frequent unknown word
-                ix_most_freq_unk = np.argmax(unknown_act_c)
-                most_freq_unknown = unknown_act[ix_most_freq_unk]
-                # update most active unknown word's count (the only one actually grasped)
-                self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
-                # update known active words count
-                self.lang_stats[lang]['wc'][act[known_act_bool]] += act_c[known_act_bool]
-                # get words available for S, t, R update
-                if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
-                    known_act_ixs = np.concatenate((np.nonzero(known_act_bool)[0], [ix_most_freq_unk]))
-                    act, act_c = act[known_act_ixs ], act_c[known_act_ixs ]
+        for lang, (act, act_c) in sample_words.items():
+            # UPDATE WORD COUNTING +  preprocessing for S, t, R UPDATE
+            # If words are from listening, they might be new to agent
+            # ds_factor value will depend on action type (speaking or listening)
+            if not speak:
+                known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
+                # boolean mask of known active words
+                known_act_bool = np.in1d(act, known_words, assume_unique=True)
+                if np.all(known_act_bool):
+                    # all active words in conversation are known
+                    # update all active words
+                    self.lang_stats[lang]['wc'][act] += act_c
                 else:
-                    act, act_c = act[known_act_bool], act_c[known_act_bool]
-            ds_factor = delta_s_factor
-        else:
-            # update word counter with newly active words
-            self.lang_stats[lang]['wc'][act] += act_c
-            ds_factor = 1
-        # check if there are any words for S, t, R update
-        if act.size:
-            # compute increase in memory stability S due to (re)activation
-            # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
-            delta_S = ds_factor * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d)
-            # update memory stability value
-            self.lang_stats[lang]['S'][act] += delta_S
-            # discount one to counts
-            act_c -= 1
-            # Simplification with good approx : we apply delta_S without iteration !!
-            delta_S = ds_factor * (act_c * (a * (self.lang_stats[lang]['S'][act] ** (-b)) * np.exp(c * 100 * self.lang_stats[lang]['R'][act]) + d))
-            # update
-            self.lang_stats[lang]['S'][act] += delta_S
-            # update daily boolean mask to update elapsed-steps array t
-            self.day_mask[lang][act] = True
-            # set last activation time counter to zero if word act
-            self.lang_stats[lang]['t'][self.day_mask[lang]] = 0
-            # compute new memory retrievability R and current lang_knowledge from t, S values
-            self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
-            self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
-                                                      self.model.vocab_red)
+                    # some heard words are unknown. Find them in 'act' words vector base
+                    unknown_act_bool = np.invert(known_act_bool)
+                    unknown_act , unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
+                    # Select most frequent unknown word
+                    ix_most_freq_unk = np.argmax(unknown_act_c)
+                    most_freq_unknown = unknown_act[ix_most_freq_unk]
+                    # update most active unknown word's count (the only one actually grasped)
+                    self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
+                    # update known active words count
+                    self.lang_stats[lang]['wc'][act[known_act_bool]] += act_c[known_act_bool]
+                    # get words available for S, t, R update
+                    if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
+                        known_act_ixs = np.concatenate((np.nonzero(known_act_bool)[0], [ix_most_freq_unk]))
+                        act, act_c = act[known_act_ixs ], act_c[known_act_ixs ]
+                    else:
+                        act, act_c = act[known_act_bool], act_c[known_act_bool]
+                ds_factor = delta_s_factor
+            else:
+                # update word counter with newly active words
+                self.lang_stats[lang]['wc'][act] += act_c
+                ds_factor = 1
+            # check if there are any words for S, t, R update
+            if act.size:
+                # compute increase in memory stability S due to (re)activation
+                # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
+                S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+                R_act = self.lang_stats[lang]['R'][act]
+                delta_S = ds_factor * (a * S_act_b * np.exp(c * 100 * R_act) + d)
+                # update memory stability value
+                self.lang_stats[lang]['S'][act] += delta_S
+                # discount one to counts
+                act_c -= 1
+                # Simplification with good approx : we apply delta_S without iteration !!
+                S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+                R_act = self.lang_stats[lang]['R'][act]
+                delta_S = ds_factor * (act_c * (a * S_act_b * np.exp(c * 100 * R_act) + d))
+                # update
+                self.lang_stats[lang]['S'][act] += delta_S
+                # update daily boolean mask to update elapsed-steps array t
+                self.day_mask[lang][act] = True
+                # set last activation time counter to zero if word act
+                self.lang_stats[lang]['t'][self.day_mask[lang]] = 0
+                # compute new memory retrievability R and current lang_knowledge from t, S values
+                self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
+                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
+                                                          self.model.vocab_red)
 
     def listen(self):
         """ Listen to random agents placed on the same cell as calling agent """
@@ -425,12 +489,12 @@ class Simple_Language_Agent:
                 self.language == 0
 
     def stage_1(self):
-        self.speak()
+        self.start_conversation()
 
     def stage_2(self):
         self.loc_info['home'].agents_in.remove(self)
         self.move_random()
-        self.speak()
+        self.start_conversation()
         self.move_random()
         #self.listen()
 
@@ -441,17 +505,17 @@ class Simple_Language_Agent:
             # TODO : DEFINE GROUP CONVERSATIONS !
             self.study_lang(0)
             self.study_lang(1)
-            self.speak() # WITH FRIENDS, IN GROUPS
+            self.start_conversation() # WITH FRIENDS, IN GROUPS
         else:
             if self.loc_info['job']:
                 self.model.grid.move_agent(self, self.loc_info['job'].pos)
                 self.loc_info['job'].agents_in.add(self)
                 # TODO speak to people in job !!! DEFINE GROUP CONVERSATIONS !
-                self.speak()
-                self.speak()
+                self.start_conversation()
+                self.start_conversation()
             else:
                 self.look_for_job()
-                self.speak()
+                self.start_conversation()
 
     def stage_4(self):
         if self.age < 720:
@@ -459,17 +523,17 @@ class Simple_Language_Agent:
         elif self.loc_info['job']:
             self.loc_info['job'].agents_in.remove(self)
         self.move_random()
-        self.speak()
+        self.start_conversation()
         if random.random() > 0.5 and self.model.friendship_network[self]:
             picked_friend = np.random.choice(self.model.friendship_network.neighbors(self))
-            self.speak(with_agents=picked_friend)
+            self.start_conversation(with_agents=picked_friend)
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
         self.loc_info['home'].agents_in.add(self)
         try:
             for key in self.model.family_network[self]:
                 if key.pos == self.loc_info['home'].pos:
                     lang = self.model.family_network[self][key]['lang']
-                    self.speak(with_agents=key, lang=lang)
+                    self.start_conversation(with_agents=key, lang=lang)
         except:
             pass
         # memory becomes ever shakier after turning 65...

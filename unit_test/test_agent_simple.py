@@ -42,7 +42,7 @@ def test_update_lang_arrays(model, lang, sample_words, speak):
     S_init = agent.lang_stats['L1']['S'][sample_words[0]].copy()
     wc_init = agent.lang_stats['L1']['wc'][sample_words[0]].copy()
     # call method to test
-    agent.update_lang_arrays(lang, sample_words, speak)
+    agent.update_lang_arrays(sample_words, speak)
     if not speak:
         assert np.all(agent.lang_stats['L1']['S'][[0, 1, 10]] > S_init[[0, 1, 2]])
         assert agent.lang_stats['L1']['S'][490] == S_init[5]
@@ -54,6 +54,6 @@ def test_update_lang_arrays(model, lang, sample_words, speak):
 def test_vocab_choice_model(model, long):
     agent = model.schedule.agents[0]
     lang = 0 if agent.language == 0 else 1
-    act, act_c = agent.vocab_choice_model(lang, long)
+    act, act_c = agent.pick_vocab(lang, long)
     assert len(act) > 0
         
