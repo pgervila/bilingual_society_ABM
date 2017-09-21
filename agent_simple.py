@@ -214,7 +214,7 @@ class Simple_Language_Agent:
         """ Check num_meet in known people network to filter candidates """
         pass
 
-    def speak(self, with_agents=None, num_other_agents=1):
+    def start_conversation(self, with_agents=None, num_other_agents=1):
         """ Method that starts a conversation. It picks either a list of known agents or
             a list of random agents from current cell and starts a conversation with them.
             This method can also simulate distance contact e.g.
@@ -489,12 +489,12 @@ class Simple_Language_Agent:
                 self.language == 0
 
     def stage_1(self):
-        self.speak()
+        self.start_conversation()
 
     def stage_2(self):
         self.loc_info['home'].agents_in.remove(self)
         self.move_random()
-        self.speak()
+        self.start_conversation()
         self.move_random()
         #self.listen()
 
@@ -505,17 +505,17 @@ class Simple_Language_Agent:
             # TODO : DEFINE GROUP CONVERSATIONS !
             self.study_lang(0)
             self.study_lang(1)
-            self.speak() # WITH FRIENDS, IN GROUPS
+            self.start_conversation() # WITH FRIENDS, IN GROUPS
         else:
             if self.loc_info['job']:
                 self.model.grid.move_agent(self, self.loc_info['job'].pos)
                 self.loc_info['job'].agents_in.add(self)
                 # TODO speak to people in job !!! DEFINE GROUP CONVERSATIONS !
-                self.speak()
-                self.speak()
+                self.start_conversation()
+                self.start_conversation()
             else:
                 self.look_for_job()
-                self.speak()
+                self.start_conversation()
 
     def stage_4(self):
         if self.age < 720:
@@ -523,17 +523,17 @@ class Simple_Language_Agent:
         elif self.loc_info['job']:
             self.loc_info['job'].agents_in.remove(self)
         self.move_random()
-        self.speak()
+        self.start_conversation()
         if random.random() > 0.5 and self.model.friendship_network[self]:
             picked_friend = np.random.choice(self.model.friendship_network.neighbors(self))
-            self.speak(with_agents=picked_friend)
+            self.start_conversation(with_agents=picked_friend)
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
         self.loc_info['home'].agents_in.add(self)
         try:
             for key in self.model.family_network[self]:
                 if key.pos == self.loc_info['home'].pos:
                     lang = self.model.family_network[self][key]['lang']
-                    self.speak(with_agents=key, lang=lang)
+                    self.start_conversation(with_agents=key, lang=lang)
         except:
             pass
         # memory becomes ever shakier after turning 65...
