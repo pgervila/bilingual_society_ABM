@@ -178,11 +178,13 @@ class BaseAgent:
             except nx.NetworkXError:
                 pass
         # remove agent from all locations where it might be
-        for loc in [self.loc_info['home'], self.loc_info['job'], self.loc_info['school']]:
+        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
+                             ['occupants','employees','students']) :
             try:
+                getattr(loc, attr).remove(self)
                 loc.agents_in.remove(self)
             except:
-                pass
+                continue
         # remove agent from city
         self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
 
@@ -206,7 +208,7 @@ class Baby(BaseAgent): # from 0 to 2
         pass
 
     def set_baby_family_links(self, father, mother):
-        lang_with_father =
+        #lang_with_father =
         self.model.family_network.add_edge(father, self, fam_link='child', lang=lang_with_father)
         self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_father)
         self.model.family_network.add_edge(mother, self, fam_link='child', lang=lang_with_mother)
@@ -600,8 +602,12 @@ class Simple_Language_Agent:
             self.remove_after_death()
 
     def remove_after_death(self):
-        """ call this method if death conditions
-        for agent are verified """
+        """ Removes agent object from all places where it belongs.
+            It makes sure no references to agent object are left aftr removal,
+            so that garbage collector can free memory
+            Call this function if death conditions for agent are verified
+        """
+        # Remove agent from all networks
         for network in [self.model.family_network,
                         self.model.known_people_network,
                         self.model.friendship_network]:
@@ -609,13 +615,23 @@ class Simple_Language_Agent:
                 network.remove_node(self)
             except nx.NetworkXError:
                 pass
-        # find agent coordinates
-        x, y = self.pos
+        # remove agent from all locations where it might be
+        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
+                             ['occupants','employees','students']) :
+            try:
+                getattr(loc, attr).remove(self)
+                loc.agents_in.remove(self)
+            except:
+                continue
+        # remove agent from city
+        self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
+
+        # remove agent from grid and schedule
+        self.model.grid._remove_agent(self.pos, self)
+        self.model.schedule.remove(self)
+
         # make id from deceased agent available
         self.model.set_available_ids.add(self.unique_id)
-        # remove agent from grid and schedule
-        self.model.grid._remove_agent((x,y), self)
-        self.model.schedule.remove(self)
 
     def look_for_job(self):
         """ Method for agent to look for a job """
