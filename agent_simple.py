@@ -10,8 +10,9 @@ from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
 
 
 class BaseAgent:
+    """ Main agent class that contains methods common to all lang agents subclasses"""
 
-    #define memory retrievability constant
+    # define memory retrievability constant
     k = np.log(10 / 9)
 
     def __init__(self, model, unique_id, language, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
@@ -24,20 +25,18 @@ class BaseAgent:
         self.loc_info = {'home': ag_home, 'city_idx': city_idx}
 
         # define container for languages' tracking and statistics
-        # Need three key levels to entirely define lang branch ->
-        # Language {'L1', 'L2'}, mode{'a','p'}, attribute{'R','t','S','pct'}
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
-        self.day_mask = {'L1':np.zeros(self.model.vocab_red, dtype=np.bool),
-                         'L2':np.zeros(self.model.vocab_red, dtype=np.bool)}
-
+        self.day_mask = {l: np.zeros(self.model.vocab_red, dtype=np.bool)
+                         for l in ['L1', 'L12', 'L21', 'L2']}
         if import_IC:
             self.set_lang_ics()
         else:
-            for lang in ['L1', 'L2']:
+            # set null knowledge in all possible langs
+            for lang in ['L1', 'L12', 'L21', 'L2']:
                 self._set_null_lang_attrs(lang)
 
     def _set_lang_attrs(self, lang, pct_key):
-        """ Private method that sets agent linguistic status for a given age
+        """ Private method that sets agent linguistic status for a GIVEN AGE
             Args:
                 * lang: string. It can take two different values: 'L1' or 'L2'
                 * pct_key: string. It must be of the form '%_pct' with % an integer
@@ -60,15 +59,15 @@ class BaseAgent:
                                                   self.model.vocab_red)
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
-        """Private method that sets null agent linguistic status, i.e. without knowledge
-           of the specified language
+        """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
+           at all of it
            Args:
                * lang: string. It can take two different values: 'L1' or 'L2'
                * S_0: float. Initial value of memory stability
                * t_0: integer. Initial value of time-elapsed ( in days) from last time words were encountered
         """
-        self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0)
-        self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0)
+        self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0, dtype=np.float)
+        self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0, dtype=np.float)
         self.lang_stats[lang]['R'] = np.exp(- self.k *
                                             self.lang_stats[lang]['t'] /
                                             self.lang_stats[lang]['S']
@@ -79,11 +78,11 @@ class BaseAgent:
                                                   self.model.vocab_red)
 
     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
-        """ set agent's linguistic Initial Conditions
+        """ set agent's linguistic Initial Conditions by calling set up methods
         Args:
             * S_0: float <= 1. Initial memory intensity
             * t_0: last-activation days counter
-            * biling_key: integer from [10,25,50,75,90,100]. Specify only if
+            * biling_key: integer from [10, 25, 50, 75, 90, 100]. Specify only if
               specific bilingual level is needed as input
         """
         if self.language == 0:
@@ -94,11 +93,14 @@ class BaseAgent:
             self._set_lang_attrs('L2', '100_pct')
         else: # BILINGUAL
             if not biling_key:
-                biling_key = np.random.choice([10, 25, 50, 75, 90])
+                biling_key = np.random.choice(self.model.ic_pct_keys)
             L1_key = str(biling_key) + '_pct'
             L2_key = str(100 - biling_key) + '_pct'
             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
                 self._set_lang_attrs(lang, key)
+        # always null conditions for transition languages
+        self._set_null_lang_attrs('L12', S_0, t_0)
+        self._set_null_lang_attrs('L21', S_0, t_0)
 
     def listen(self):
         # TODO : incomplete method
@@ -122,7 +124,7 @@ class BaseAgent:
             It removes instance from all networks, lists, sets in model and adds new instance
             to them """
         new_agent = new_class(self.model, self.unique_id, self.language, self.age)
-        # copy all Baby instance attributes to new_child instance
+        # copy all current instance attributes to new_child instance
         for key, val in self.__dict__.items():
             setattr(new_agent, key, val)
         map_new = {self: new_agent}
@@ -133,14 +135,17 @@ class BaseAgent:
                 nx.relabel_nodes(network, map_new, copy=False)
             except nx.NetworkXError:
                 pass
-        # remove agent from all locations where it might have been
-        for loc in [self.loc_info['home'], self.loc_info['job'], self.loc_info['school']]:
+        # remove agent from all locations where it belongs to
+        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
+                             ['occupants', 'employees', 'students']):
             try:
+                getattr(loc, attr).remove(self)
+                getattr(loc, attr).add(new_agent)
                 loc.agents_in.remove(self)
                 loc.agents_in.add(new_agent)
             except:
-                pass
-        # remove agent from city
+                continue
+        # remove old instance and add new one to city
         self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
         self.model.clusters_info[self.loc_info['city_idx']]['agents'].add(new_agent)
         # remove agent from grid and schedule
@@ -452,13 +457,11 @@ class Simple_Language_Agent:
         self.age = age
         self.num_children = num_children # TODO : group marital/parental info in dict ??
 
-        self.loc_info = {'home':ag_home, 'school':ag_school, 'job':ag_job, 'city_idx':city_idx}
+        self.loc_info = {'home': ag_home, 'school': ag_school, 'job': ag_job, 'city_idx': city_idx}
 
         # define container for languages' tracking and statistics
-        # Need three key levels to entirely define lang branch ->
-        # Language {'L1', 'L2'}, mode{'a','p'}, attribute{'R','t','S','pct'}
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
-        self.day_mask = {l:np.zeros(self.model.vocab_red, dtype=np.bool)
+        self.day_mask = {l: np.zeros(self.model.vocab_red, dtype=np.bool)
                          for l in ['L1', 'L12', 'L21', 'L2']}
         if import_IC:
             self.set_lang_ics()
