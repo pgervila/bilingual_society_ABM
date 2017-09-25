@@ -102,39 +102,42 @@ class BaseAgent:
         self._set_null_lang_attrs('L12', S_0, t_0)
         self._set_null_lang_attrs('L21', S_0, t_0)
 
-    def listen(self):
-        # TODO : incomplete method
-        """Listen to random agents placed on the same cell as calling agent"""
-        pos = [self.pos]
-        # get all agents currently placed on chosen cell
-        others = self.model.grid.get_cell_list_contents(pos)
-        others.remove(self)
-        ## if two or more agents in cell, conversation is possible
-        if len(others) >= 2:
-            ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-            l1, l2 = self.get_conversation_lang(ag_1, ag_2, return_values=True)
-            k1, k2 = 'L' + str(l1), 'L' + str(l2)
-
-            self.update_lang_arrays(l1, spoken_words, speak=False)
-            self.update_lang_arrays(l2, spoken_words, speak=False)
-
+    def listen(self, conversation=True):
+        """ Method to listen to conversations, media, etc... and update corresponding vocabulary
+            Args:
+                * conversation: Boolean. If True, agent will listen to potential conversation taking place
+                on its current cell.If False, agent will listen to media"""
+        if conversation:
+            # get all agents currently placed on chosen cell
+            others = self.model.grid.get_cell_list_contents(self.pos)
+            others.remove(self)
+            # if two or more agents in cell, conversation is possible
+            if len(others) >= 2:
+                ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+                # call run conversation with bystander
+                self.model.run_conversation(ag_1, ag_2, bystander=self)
+        # TODO : implement 'listen to media' option
 
     def replace_agent(self, new_class):
-        """ It replaces current agent with a new agent class once a certain age is reached.
-            It removes instance from all networks, lists, sets in model and adds new instance
-            to them """
+        """ It replaces current agent with a new agent class instance.
+            It removes current instance from all networks, lists, sets in model and adds new instance
+            to them.
+            Args:
+                * new_class: class. Agent class that will replace the current one
+        """
         new_agent = new_class(self.model, self.unique_id, self.language, self.age)
-        # copy all current instance attributes to new_child instance
+        # copy all current instance attributes to new agent instance
         for key, val in self.__dict__.items():
             setattr(new_agent, key, val)
-        map_new = {self: new_agent}
+        # relabel network nodes
+        relabel_key = {self: new_agent}
         for network in [self.model.family_network,
                         self.model.known_people_network,
                         self.model.friendship_network]:
             try:
-                nx.relabel_nodes(network, map_new, copy=False)
+                nx.relabel_nodes(network, relabel_key, copy=False)
             except nx.NetworkXError:
-                pass
+                continue
         # remove agent from all locations where it belongs to
         for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
                              ['occupants', 'employees', 'students']):
@@ -155,7 +158,15 @@ class BaseAgent:
         self.model.grid.place_agent(new_agent, self.pos)
         self.model.schedule.add(new_agent)
 
-    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):  ##
+    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):
+        """ Method that may randomly kill self agent at each step. Agent death likelihood varies with age
+            Args:
+                * age_1: integer. Minimum age for death to be possible
+                * age_2: integer.
+                * age_3: integer
+                * prob_1: death probability in first period
+                * prob_2: death probability in second period
+        """
         # transform ages to steps
         age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
         # define stochastic probability of agent death as function of age
@@ -163,7 +174,7 @@ class BaseAgent:
             if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
                 self.remove_after_death()
         elif (self.age > age_2) and (self.age < age_3):
-            if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
+            if random.random() < prob_2 / (age_3 - age_2):  # 70% pop will die through this period
                 self.remove_after_death()
         elif self.age >= age_3:
             self.remove_after_death()
@@ -181,7 +192,7 @@ class BaseAgent:
             try:
                 network.remove_node(self)
             except nx.NetworkXError:
-                pass
+                continue
         # remove agent from all locations where it might be
         for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
                              ['occupants','employees','students']) :
@@ -192,11 +203,9 @@ class BaseAgent:
                 continue
         # remove agent from city
         self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
-
         # remove agent from grid and schedule
         self.model.grid._remove_agent(self.pos, self)
         self.model.schedule.remove(self)
-
         # make id from deceased agent available
         self.model.set_available_ids.add(self.unique_id)
 
@@ -221,8 +230,6 @@ class Baby(BaseAgent): # from 0 to 2
 
         for parent in [father, mother]:
             self.model.family_network[father]
-
-
 
 
     def define_newborn_family_links(self, parent_agent, child):
@@ -683,9 +690,9 @@ class Simple_Language_Agent:
             # linguistic model of encounter with another random agent
             if len(others) >= num_other_agents:
                 others = random.sample(others, num_other_agents)
-                self.model.run_conversation(self, others)
+                self.model.run_conversation(self, others, False)
         else:
-            self.model.run_conversation(self, with_agents)
+            self.model.run_conversation(self, with_agents, False)
 
     def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
                                real_spoken_tokens_per_day=16000):
@@ -723,7 +730,10 @@ class Simple_Language_Agent:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
                 * long: boolean that defines conversation length
                 * biling_interloc : boolean. If True, speaker word choice might be mixed, since
-                he/she is certain interlocutor will understand
+                    he/she is certain interlocutor will understand
+            Output:
+                * spoken words: dict where keys are lang labels and values are lists with words spoken
+                    in lang key and corresponding counts
         """
 
         # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
@@ -740,9 +750,10 @@ class Simple_Language_Agent:
         # These are the thoughts that speaker tries to convey
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
         word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10)) #TODO: check the 10 !!!
-        #TODO:FASTER ??? bcs = np.bincount(word_samples)
-        #TODO:FASTER ??? act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
-        act, act_c = np.unique(word_samples, return_counts=True)
+        # get unique words and counts
+        bcs = np.bincount(word_samples)
+        act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
+        # SLOWER BUT CLEANER APPROACH =>  act, act_c = np.unique(word_samples, return_counts=True)
 
         # check if conversation is btw bilinguals and therefore lang switch is possible
         # TODO : key is that most biling agents will not express surprise to lang mixing or switch
@@ -762,7 +773,7 @@ class Simple_Language_Agent:
                 # mask_L21 = rand_info_access[2] <= self.lang_stats['L21']['R'][act]
                 # mask_L2 = rand_info_access[3] <= self.lang_stats['L2']['R'][act]
 
-        # 2. Given a lang, pick variant that is most familiar to agent
+        # 2. Given a lang, pick the variant that is most familiar to agent
         lang = 'L1' if lang == 0 else 'L2'
         if lang == 'L1':
             pct1, pct2 = self.lang_stats['L1']['pct'][self.age] , self.lang_stats['L12']['pct'][self.age]
@@ -803,8 +814,9 @@ class Simple_Language_Agent:
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * lang : integer in [0,1] {0:'spa', 1:'cat'}
-                * sample_words: tuple of 2 numpy arrays of integers.
-                    First array is of conversation-active word indices, second of conv word counts
+                * sample_words: dict where keys are lang labels and values are tuples of
+                    2 NumPy integer arrays. First array is of conversation-active unique word indices,
+                    second is of corresponding counts of those words
                 * speak: boolean. Defines whether agent is speaking or listening
                 * a, b, c, d: float parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
                 * delta_s_factor: positive float < 1.
@@ -895,22 +907,23 @@ class Simple_Language_Agent:
                 self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                           self.model.vocab_red)
 
-    def listen(self):
-        """ Listen to random agents placed on the same cell as calling agent """
+    def listen(self, conversation=True):
+        """ Method to listen to conversations, media, etc... and update corresponding vocabulary
+            Args:
+                * conversation: Boolean. If True, agent will listen to potential conversation taking place
+                on its current cell.If False, agent will listen to media"""
         # get all agents currently placed on chosen cell
-        others = self.model.grid.get_cell_list_contents(self.pos)
-        others.remove(self)
-        ## if two or more agents in cell, conversation is possible
-        if len(others) >= 2:
-            ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+        if conversation:
+            others = self.model.grid.get_cell_list_contents(self.pos)
+            others.remove(self)
+            # if two or more agents in cell, conversation is possible
+            if len(others) >= 2:
+                ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+                # call run conversation with bystander
+                self.model.run_conversation(ag_1, ag_2, bystander=self)
 
-            # TODO : rework following lines of code to adapt output values from methods
+        # TODO : implement 'listen to media' option
 
-            # self.model.run_conversation # TODO add output
-            #
-            # self.model.get_conv_params(ag_1, ag_2)
-            #
-            # self.update_lang_arrays(l1, sample_words, speak=False)
 
     def read(self):
         pass

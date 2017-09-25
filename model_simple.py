@@ -436,8 +436,7 @@ class Simple_Language_Model(Model):
         home.agents_in.add(agent)
 
     def define_lang_interaction(self, ag1, ag2, ret_pcts=False):
-        # find out lang of interaction btw family members
-        # consorts
+        """find out lang of interaction btw family members, consorts"""
         pct11 = ag1.lang_stats['L1']['pct'][ag1.age]
         pct12 = ag1.lang_stats['L2']['pct'][ag1.age]
         pct21 = ag2.lang_stats['L1']['pct'][ag2.age]
@@ -617,7 +616,7 @@ class Simple_Language_Model(Model):
                 if len(self.friendship_network[ag]) > num_friends - 1:
                     break
 
-    def run_conversation(self, ag_init, others):
+    def run_conversation(self, ag_init, others, bystander=None):
         """ Method that models conversation between ag_init and others
             Calls method to determine conversation parameters
             Then makes each speaker speak and the rest listen (loop through all involved agents)
@@ -625,6 +624,8 @@ class Simple_Language_Model(Model):
                 * ag_init : agent object instance. Agent that starts conversation
                 * others : list of agent object instances. Rest of agents that take part in conversation
                            It can be a single agent object that will be automatically converted into a list
+                * bystander: extra agent that may listen to conversation words without actually being involved.
+                    Agent vocabulary gets correspondingly updated if bystander agent is specified
         """
         # define list of all agents involved
         ags = [ag_init]
@@ -636,8 +637,8 @@ class Simple_Language_Model(Model):
                 spoken_words = ag.pick_vocab(lang, long=conv_params['long'])
                 # call 'self' agent update
                 ag.update_lang_arrays(spoken_words)
-                # call listeners' updates
-                listeners = ags[:ix] + ags[ix + 1:]
+                # call listeners' updates ( check if there is a bystander)
+                listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
                     listener.update_lang_arrays(spoken_words, speak=False)
         # update acquaintances
@@ -651,13 +652,6 @@ class Simple_Language_Model(Model):
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])
                 others.update_acquaintances(ag_init, conv_params['lang_group'][1])
 
-        # TODO : add option 'return ALL spoken words' so that bystanders can get words too ( agent 'listen' method)
-        # need to split in 2 lang arrays
-        # all_spoken_words = np.zeros(self.vocab_red, dtype=np.int64) # check new 1.11 numpy to set output type
-        # if ret_spoken_words:
-        #     all_spoken_words[spoken_words[0]] += spoken_words[1]  # list_words[act] += act_c
-        # if ret_spoken_words:
-        #     return all_spoken_words
 
     def get_conv_params(self, ags):
         """
