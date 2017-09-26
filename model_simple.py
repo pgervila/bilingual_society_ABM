@@ -71,6 +71,36 @@ class StagedActivation_modif(StagedActivation):
         self.steps += 1
 
 
+class SetUpGeo:
+    def __init__(self, model):
+        self.model = model
+
+
+class MapEntities:
+    def __init__(self, model):
+        self.model = model
+
+
+class SetUpNetworks:
+    def __init__(self, model):
+        self.model = model
+
+
+class VizModel:
+    def __init__(self, model):
+        self.model = model
+
+
+class Model:  # Container and Controller
+    ic_pct_keys = [10, 25, 50, 75, 90]
+    family_size = 4
+
+    def __init__(self, num_people):
+        self.num_people = num_people
+
+
+
+
 class Simple_Language_Model(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
