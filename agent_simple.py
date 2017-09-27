@@ -8,7 +8,7 @@ from collections import defaultdict
 #import private library to model lang zipf CDF
 from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
 
-class Simple_Language_Agent:
+class Language_Agent:
 
     #define memory retrievability constant
     k = np.log(10 / 9)
@@ -139,10 +139,10 @@ class Simple_Language_Agent:
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate new agent
-            a = Simple_Language_Agent(self.model, id_, lang, ag_home=self.loc_info['home'],
-                                      ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
-                                      ag_job=None,
-                                      city_idx=self.loc_info['city_idx'])
+            a = Language_Agent(self.model, id_, lang, ag_home=self.loc_info['home'],
+                               ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
+                               ag_job=None,
+                               city_idx=self.loc_info['city_idx'])
             # Add agent to model
             self.model.add_agent_to_grid_sched_networks(a)
             # add newborn agent to home presence list

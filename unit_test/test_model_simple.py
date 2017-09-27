@@ -10,16 +10,16 @@ import agent_simple
 import model_simple
 reload(agent_simple)
 reload(model_simple)
-from agent_simple import Simple_Language_Agent
-from model_simple import Simple_Language_Model
+from agent_simple import Language_Agent
+from model_simple import Language_Model
 
 @pytest.fixture(scope="module")
 def model():
-    return Simple_Language_Model(50, num_clusters=2)
+    return Language_Model(50, num_clusters=2)
 
 @pytest.fixture(scope="module", params=[(50, 3), (50, 2), (197, 5), (1000, 15)])
 def model_param(request):
-    return Simple_Language_Model(request.param[0], num_clusters=request.param[1])
+    return Language_Model(request.param[0], num_clusters=request.param[1])
 
 # define cases to test => Inputs and optionally expected results
 

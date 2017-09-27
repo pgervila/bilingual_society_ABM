@@ -9,12 +9,12 @@ import agent_simple
 import model_simple
 reload(agent_simple)
 reload(model_simple)
-from agent_simple import Simple_Language_Agent
-from model_simple import Simple_Language_Model
+from agent_simple import Language_Agent
+from model_simple import Language_Model
 
 @pytest.fixture(scope="module")
 def model():
-    return Simple_Language_Model(20, num_clusters=1)
+    return Language_Model(20, num_clusters=1)
 
 
 test_data_update_lang_arrays = [(0, [np.array([0, 1, 10, 450, 470, 490]), np.array([3, 2, 1, 2, 1, 3])], False), 

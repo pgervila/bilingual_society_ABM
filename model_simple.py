@@ -16,27 +16,31 @@ import matplotlib.animation as animation
 from scipy.spatial.distance import pdist
 import networkx as nx
 
+# IMPORT MESA LIBRARIES
+from mesa import Model
+from mesa.time import RandomActivation, StagedActivation
+from mesa.space import MultiGrid
+from mesa.datacollection import DataCollector
+
+# IMPORT MODEL LIBRARIES
+from geomap import GeoMap
+
 #import library to save any python data type to HDF5
 import deepdish as dd
 
 #import private library to model lang zipf CDF
 from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
 
-
 # import progress bar
 import pyprind
 
 
 # IMPORT FROM simp_agent.py
-from agent_simple import Simple_Language_Agent, Home, School, Job
-# import from clusters.py
-from clusters import BuildClusters
+from agent_simple import Language_Agent, Home, School, Job
+# import from geomap.py
+from geomap import GeoMap
 
-# IMPORT MESA LIBRARIES
-from mesa import Model
-from mesa.time import RandomActivation, StagedActivation
-from mesa.space import MultiGrid
-from mesa.datacollection import DataCollector
+
 
 
 class StagedActivation_modif(StagedActivation):
@@ -71,14 +75,7 @@ class StagedActivation_modif(StagedActivation):
         self.steps += 1
 
 
-class SetUpGeo:
-    def __init__(self, model):
-        self.model = model
 
-
-class MapEntities:
-    def __init__(self, model):
-        self.model = model
 
 
 class SetUpNetworks:
@@ -86,22 +83,25 @@ class SetUpNetworks:
         self.model = model
 
 
-class VizModel:
+class DataViz:
     def __init__(self, model):
         self.model = model
 
 
-class Model:  # Container and Controller
+class LanguageModel(Model):  # Container and Controller
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
 
     def __init__(self, num_people):
         self.num_people = num_people
+        GM = GeoMap()
+        GM.setup_GeoMap()
 
 
 
 
-class Simple_Language_Model(Model):
+
+class Language_Model(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
@@ -126,6 +126,10 @@ class Simple_Language_Model(Model):
         self.clust_centers = None
         self.cluster_sizes = None
 
+        #TODO
+        self.clusters = {'num':num_clusters, 'centers':None, 'sizes':None}
+        ####
+
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
         self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_spoken_ics_vs_step.h5'))
         self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_cdfs_vs_step.h5'))
@@ -142,7 +146,6 @@ class Simple_Language_Model(Model):
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
         self.set_clusters_info()
-        # TODO : clusters = BuildClusters(self)
 
 
         #define container for available ids
@@ -171,6 +174,7 @@ class Simple_Language_Model(Model):
         self.map_schools()
         self.map_homes()
         self.map_lang_agents()
+
         self.define_family_networks()
         self.define_friendship_networks()
 
@@ -417,12 +421,12 @@ class Simple_Language_Model(Model):
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.family_size)):
                 # instantiate 2 adults with neither job nor home assigned
-                ag1 = Simple_Language_Agent(self, ids.pop(), family_langs[0], city_idx=clust_idx)
-                ag2 = Simple_Language_Agent(self, ids.pop(), family_langs[1], city_idx=clust_idx)
+                ag1 = Language_Agent(self, ids.pop(), family_langs[0], city_idx=clust_idx)
+                ag2 = Language_Agent(self, ids.pop(), family_langs[1], city_idx=clust_idx)
 
                 # instantiate 2 adolescents with neither school nor home assigned
-                ag3 = Simple_Language_Agent(self, ids.pop(), family_langs[2], city_idx=clust_idx)
-                ag4 = Simple_Language_Agent(self, ids.pop(), family_langs[3], city_idx=clust_idx)
+                ag3 = Language_Agent(self, ids.pop(), family_langs[2], city_idx=clust_idx)
+                ag4 = Language_Agent(self, ids.pop(), family_langs[3], city_idx=clust_idx)
 
                 # add agents to clust_info, schedule, grid and networks
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
@@ -433,7 +437,7 @@ class Simple_Language_Model(Model):
             num_left_agents = len_clust % self.family_size
             if num_left_agents:
                 for lang in langs_per_clust[clust_idx][-num_left_agents:]:
-                    ag = Simple_Language_Agent(self, ids.pop(), lang, city_idx=clust_idx)
+                    ag = Language_Agent(self, ids.pop(), lang, city_idx=clust_idx)
                     clust_info['agents'].append(ag)
                     self.add_agent_to_grid_sched_networks(ag)
 
