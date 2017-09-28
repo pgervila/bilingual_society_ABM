@@ -10,7 +10,7 @@ import agent_simple
 import model_simple
 reload(agent_simple)
 reload(model_simple)
-from agent_simple import Language_Agent
+from agent_simple import LanguageAgent
 from model_simple import Language_Model
 
 @pytest.fixture(scope="module")

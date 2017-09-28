@@ -1,38 +1,50 @@
+import numpy as np
+from scipy.spatial.distance import pdist
 import networkx as nx
+import bisect
+
 
 class Networks:
-    """ Class to deal with evrything that has to do with networks in model"""
+    """ Class to deal with everything that has to do with networks in model"""
 
     def __init__(self, model):
         self.model = model
+        # setup
+        self.create_networks()
+        self.add_ags_to_networks(self.model.schedule.agents)
+        self.define_family_networks()
+        self.define_friendship_networks()
 
-    def define_lang_interaction(self, ag1, ag2, ret_pcts=False):
-        # find out lang of interaction btw family members
-        # consorts
-        pct11 = ag1.lang_stats['L1']['pct'][ag1.age]
-        pct12 = ag1.lang_stats['L2']['pct'][ag1.age]
-        pct21 = ag2.lang_stats['L1']['pct'][ag2.age]
-        pct22 = ag2.lang_stats['L2']['pct'][ag2.age]
-        if (ag1.language, ag2.language) in [(0, 0), (0, 1), (1, 0)]:
-            lang = 0
-        elif (ag1.language, ag2.language) in [(2, 1), (1, 2), (2, 2)]:
-            lang = 1
-        elif (ag1.language, ag2.language) == (1, 1):
-            # Find weakest combination lang-agent, pick other language as common one
-            idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-            if idx_weakest in [0, 2]:
-                lang = 1
-            else:
-                lang = 0
-        if ret_pcts:
-            return lang, [pct11, pct12, pct21, pct22]
-        else:
-            return lang
+    def create_networks(self):
+        # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
+        self.known_people_network = nx.DiGraph()
+        # self.known_people_network.add_edge('A','B', lang_spoken = 'cat')
+        # self.known_people_network.add_edge('A','C', lang_spoken = 'spa')
+        # self.known_people_network['A']['C']['lang_spoken']
+        # self.known_people_network['B']['A'] = 'cat'
+        # INITIALIZE FRIENDSHIP NETWORK
+        self.friendship_network = nx.Graph()  # sort by friendship intensity
+        #       sorted(self.friendship_network[n_1].items(),
+        #                    key=lambda edge: edge[1]['link_strength'],
+        #                    reverse = True)
+        # INITIALIZE FAMILY NETWORK
+        self.family_network = nx.DiGraph()
+
+    def add_ags_to_networks(self, ags, *more_ags):
+        """Method that adds agents to all networks in model
+           Args:
+               * ags: single agent instance or list of agents instances
+        """
+        ags = [ags] if type(ags) != list else ags
+        for nw in [self.known_people_network,
+                   self.friendship_network,
+                   self.family_network]:
+            nw.add_nodes_from(ags)
 
     def define_family_networks(self):
         # Method to define families and also adds relatives to known_people_network
         # marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
-        for clust_idx, clust_info in self.model.clusters_info.items():
+        for clust_idx, clust_info in self.model.gm.clusters_info.items():
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
                 # set ages of family members
                 steps_per_year = 36
@@ -117,31 +129,19 @@ class Networks:
                     lang_siblings = 1
                 else:
                     lang_siblings = self.model.define_lang_interaction(family[2], family[3])
-
-                    # find weakest, pick opposite PREVIOUS implem
-                    # pct11 = family[2].lang_stats['L1']['pct'][family[2].age]
-                    # pct12 = family[2].lang_stats['L2']['pct'][family[2].age]
-                    # pct21 = family[3].lang_stats['L1']['pct'][family[3].age]
-                    # pct22 = family[3].lang_stats['L2']['pct'][family[3].age]
-                    # idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-                    # if idx_weakest in [0, 2]:
-                    #     lang_siblings = 1
-                    # else:
-                    #     lang_siblings = 0
-
                 # add family edges in family and known_people networks ( both are DIRECTED networks ! )
                 for (i, j) in [(0, 1), (1, 0)]:
-                    self.model.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
-                    self.model.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_consorts)
+                    self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_consorts)
                 for (i, j, link) in [(0, 2, 'child'), (2, 0, 'father'), (0, 3, 'child'), (3, 0, 'father')]:
-                    self.model.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_father)
-                    self.model.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_father)
+                    self.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_father)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_father)
                 for (i, j, link) in [(1, 2, 'child'), (2, 1, 'mother'), (1,3, 'child'), (3,1,'mother')]:
-                    self.model.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_mother)
-                    self.model.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_mother)
+                    self.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_mother)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_mother)
                 for (i, j) in [(2, 3), (3, 2)]:
-                    self.model.family_network.add_edge(family[i], family[j], fam_link='sibling', lang=lang_siblings)
-                    self.model.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_siblings)
+                    self.family_network.add_edge(family[i], family[j], fam_link='sibling', lang=lang_siblings)
+                    self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_siblings)
 
             # set up agents left out of family partition of cluster
             len_clust = len(clust_info['agents'])
@@ -166,10 +166,10 @@ class Networks:
         # Apply small world graph to relevant nodes using networkx
         friends_per_agent = np.random.randint(1, 5, size=self.model.num_people)
         for ag, num_friends in zip(self.model.schedule.agents, friends_per_agent):
-            if ag.loc_info['job'] and len(self.model.friendship_network[ag]) < num_friends:
+            if ag.loc_info['job'] and len(self.friendship_network[ag]) < num_friends:
                 ag_occupation = ag.loc_info['job']
                 colleagues = 'employees'
-            elif ag.loc_info['school'] and len(self.model.friendship_network[ag]) < num_friends:
+            elif ag.loc_info['school'] and len(self.friendship_network[ag]) < num_friends:
                 ag_occupation = ag.loc_info['school']
                 colleagues = 'students'
             else:
@@ -177,14 +177,25 @@ class Networks:
             for coll in getattr(ag_occupation, colleagues).difference({ag}):
                 #check colleague lang distance and all frienship conditions
                 if (abs(coll.language - ag.language) <= 1 and
-                len(self.model.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
-                coll not in self.model.friendship_network[ag] and
-                coll not in self.model.family_network[ag]):
+                len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
+                coll not in self.friendship_network[ag] and
+                coll not in self.family_network[ag]):
                     lang = self.model.define_lang_interaction(ag, coll)
-                    self.model.friendship_network.add_edge(ag, coll, lang=lang)
+                    self.friendship_network.add_edge(ag, coll, lang=lang)
                     # kpnetwork is directed graph !
-                    self.model.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
-                    self.model.known_people_network.add_edge(coll, ag, friends=True, lang=lang)
-                if len(self.model.friendship_network[ag]) > num_friends - 1:
+                    self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
+                    self.known_people_network.add_edge(coll, ag, friends=True, lang=lang)
+                if len(self.friendship_network[ag]) > num_friends - 1:
                     break
+
+    def plot_family_networks(self):
+        """PLOT NETWORK with lang colors and position"""
+        #        people_pos = [elem.pos for elem in self.schedule.agents if elem.agent_type == 'language']
+        #        # Following works because lang agents are added before other agent types
+        #        people_pos_dict= dict(zip(self.schedule.agents, people_pos))
+        people_pos_dict = {elem: elem.pos
+                           for elem in self.model.schedule.agents}
+        people_color = [elem.language for elem in self.family_network]
+        nx.draw(self.family_network, pos=people_pos_dict, node_color=people_color)
+
 

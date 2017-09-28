@@ -6,10 +6,10 @@ from scipy.spatial.distance import pdist
 from collections import defaultdict
 
 #import private library to model lang zipf CDF
-from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
+from zipf_generator import randZipf
 
-class Language_Agent:
 
+class LanguageAgent:
     #define memory retrievability constant
     k = np.log(10 / 9)
 
@@ -18,7 +18,7 @@ class Language_Agent:
         self.model = model
         self.unique_id = unique_id
         self.language = language # 0, 1, 2 => spa, bil, cat
-        self.lang_thresholds = {'speak':lang_act_thresh, 'understand':lang_passive_thresh}
+        self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
         self.age = age
         self.num_children = num_children # TODO : group marital/parental info in dict ??
 
@@ -27,8 +27,8 @@ class Language_Agent:
         # define container for languages' tracking and statistics
         # Need three key levels to entirely define lang branch ->
         # Language {'L1', 'L2'}, mode{'a','p'}, attribute{'R','t','S','pct'}
-        self.lang_stats = defaultdict(lambda:defaultdict(dict))
-        self.day_mask = {l:np.zeros(self.model.vocab_red, dtype=np.bool)
+        self.lang_stats = defaultdict(lambda: defaultdict(dict))
+        self.day_mask = {l: np.zeros(self.model.vocab_red, dtype=np.bool)
                          for l in ['L1', 'L12', 'L21', 'L2']}
         if import_IC:
             self.set_lang_ics()
@@ -139,12 +139,12 @@ class Language_Agent:
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate new agent
-            a = Language_Agent(self.model, id_, lang, ag_home=self.loc_info['home'],
-                               ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
-                               ag_job=None,
-                               city_idx=self.loc_info['city_idx'])
+            a = LanguageAgent(self.model, id_, lang, ag_home=self.loc_info['home'],
+                              ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
+                              ag_job=None,
+                              city_idx=self.loc_info['city_idx'])
             # Add agent to model
-            self.model.add_agent_to_grid_sched_networks(a)
+            self.model.add_agents_to_grid_and_schedule(a)
             # add newborn agent to home presence list
             a.loc_info['home'].agents_in.add(a)
             # Update num of children
