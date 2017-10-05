@@ -774,6 +774,62 @@ class Simple_Language_Model(Model):
 
         return conv_params
 
+    def remove_after_death(self, agent):
+        """ Removes agent object from all places where it belongs.
+            It makes sure no references to agent object are left aftr removal,
+            so that garbage collector can free memory
+            Call this function if death conditions for agent are verified
+        """
+        # Remove agent from all networks
+        for network in [self.family_network,
+                        self.known_people_network,
+                        self.friendship_network]:
+            try:
+                network.remove_node(agent)
+            except nx.NetworkXError:
+                continue
+        # remove agent from all locations where it might be
+        for loc, attr in zip([agent.loc_info['home'], agent.loc_info['job'], agent.loc_info['school']],
+                             ['occupants','employees','students']) :
+            try:
+                getattr(loc, attr).remove(agent)
+                loc.agents_in.remove(agent)
+            except:
+                continue
+        # remove agent from city
+        self.clusters_info[agent.loc_info['city_idx']]['agents'].remove(agent)
+        # remove agent from grid and schedule
+        self.grid._remove_agent(agent.pos, agent)
+        self.schedule.remove(agent)
+        # make id from deceased agent available
+        self.set_available_ids.add(agent.unique_id)
+
+
+
+    def step(self):
+        self.datacollector.collect(self)
+        self.schedule.step()
+
+    def run_model(self, steps, recording_steps_period=None, save_dir=''):
+        """ Run model and save frames if required
+            Args
+                * steps: integer. Total steps to run
+                * recording_steps_period : integer. Save frames every specified number of steps
+                * save_dir : string. It specifies directory where frames will be saved
+        """
+        pbar = pyprind.ProgBar(steps)
+        self.save_dir = save_dir
+        if recording_steps_period:
+            script_dir = os.path.dirname(__file__)
+            results_dir = os.path.join(script_dir, save_dir)
+            if not os.path.isdir(results_dir):
+                os.makedirs(results_dir)
+        for _ in range(steps):
+            self.step()
+            if recording_steps_period:
+                if not self.schedule.steps%recording_steps_period:
+                    self.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
+            pbar.update()
 
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent
@@ -808,31 +864,6 @@ class Simple_Language_Model(Model):
             else:
                 return 0
 
-    def step(self):
-        self.datacollector.collect(self)
-        self.schedule.step()
-
-    def run_model(self, steps, recording_steps_period=None, save_dir=''):
-        """ Run model and save frames if required
-            Args
-                * steps: integer. Total steps to run
-                * recording_steps_period : integer. Save frames every specified number of steps
-                * save_dir : string. It specifies directory where frames will be saved
-        """
-        pbar = pyprind.ProgBar(steps)
-        self.save_dir = save_dir
-        if recording_steps_period:
-            script_dir = os.path.dirname(__file__)
-            results_dir = os.path.join(script_dir, save_dir)
-            if not os.path.isdir(results_dir):
-                os.makedirs(results_dir)
-        for _ in range(steps):
-            self.step()
-            if recording_steps_period:
-                if not self.schedule.steps%recording_steps_period:
-                    self.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
-            pbar.update()
-
     def create_agents_attrs_data(self, ag_attr, plot=False):
         """ Get value of specific attribute for all lang agents in model """
         ag_and_coords = [(getattr(ag, ag_attr), ag.pos[0], ag.pos[1])
@@ -842,7 +873,6 @@ class Simple_Language_Model(Model):
                                  'x': ag_and_coords[:, 1],
                                  'y': ag_and_coords[:, 2]})
         self.df_attrs_avg = df_attrs.groupby(['x', 'y']).mean()
-
         if plot:
             s = plt.scatter(self.df_attrs_avg.reset_index()['x'],
                             self.df_attrs_avg.reset_index()['y'],

@@ -22,7 +22,7 @@ class BaseAgent:
         self.language = language # 0, 1, 2 => spa, bil, cat
         self.age = age
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
-        self.loc_info = {'home': ag_home, 'city_idx': city_idx}
+        self.loc_info = {'home': ag_home, 'city_idx': city_idx, 'school': ag_school, 'job': ag_job}
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
@@ -118,19 +118,19 @@ class BaseAgent:
                 self.model.run_conversation(ag_1, ag_2, bystander=self)
         # TODO : implement 'listen to media' option
 
-    def replace_agent(self, new_class):
-        """ It replaces current agent with a new agent class instance.
+    def grow(self, new_class):
+        """ It replaces current agent with a new agent subclass instance.
             It removes current instance from all networks, lists, sets in model and adds new instance
-            to them.
+            to them instead.
             Args:
                 * new_class: class. Agent class that will replace the current one
         """
-        new_agent = new_class(self.model, self.unique_id, self.language, self.age)
+        grown_agent = new_class(self.model, self.unique_id, self.language, self.age)
         # copy all current instance attributes to new agent instance
         for key, val in self.__dict__.items():
-            setattr(new_agent, key, val)
+            setattr(grown_agent, key, val)
         # relabel network nodes
-        relabel_key = {self: new_agent}
+        relabel_key = {self: grown_agent}
         for network in [self.model.family_network,
                         self.model.known_people_network,
                         self.model.friendship_network]:
@@ -143,72 +143,31 @@ class BaseAgent:
                              ['occupants', 'employees', 'students']):
             try:
                 getattr(loc, attr).remove(self)
-                getattr(loc, attr).add(new_agent)
+                getattr(loc, attr).add(grown_agent)
                 loc.agents_in.remove(self)
-                loc.agents_in.add(new_agent)
+                loc.agents_in.add(grown_agent)
             except:
                 continue
         # remove old instance and add new one to city
         self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
-        self.model.clusters_info[self.loc_info['city_idx']]['agents'].add(new_agent)
+        self.model.clusters_info[self.loc_info['city_idx']]['agents'].add(grown_agent)
         # remove agent from grid and schedule
         self.model.grid._remove_agent(self.pos, self)
         self.model.schedule.remove(self)
         # add new_agent to grid and schedule
-        self.model.grid.place_agent(new_agent, self.pos)
-        self.model.schedule.add(new_agent)
+        self.model.grid.place_agent(grown_agent, self.pos)
+        self.model.schedule.add(grown_agent)
 
-    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):
-        """ Method that may randomly kill self agent at each step. Agent death likelihood varies with age
-            Args:
-                * age_1: integer. Minimum age for death to be possible
-                * age_2: integer.
-                * age_3: integer
-                * prob_1: death probability in first period
-                * prob_2: death probability in second period
+    def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
+        """ Method to randomly determine agent death or survival at each step
+            The fitted function provides the death likelihood for a given rounded age
+            In order to get the death-probability per step we divide by number of steps in a year (36)
+            Fitting parameters are from https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
+            Smoothing and projecting age-specific probabilities of death by TOPALS by Joop de Beer
+            Resulting life expectancy is 77 years and std is ~ 15 years
         """
-        # transform ages to steps
-        age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
-        # define stochastic probability of agent death as function of age
-        if (self.age > age_1) and (self.age <= age_2):
-            if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
-                self.remove_after_death()
-        elif (self.age > age_2) and (self.age < age_3):
-            if random.random() < prob_2 / (age_3 - age_2):  # 70% pop will die through this period
-                self.remove_after_death()
-        elif self.age >= age_3:
-            self.remove_after_death()
-
-    def remove_after_death(self):
-        """ Removes agent object from all places where it belongs.
-            It makes sure no references to agent object are left aftr removal,
-            so that garbage collector can free memory
-            Call this function if death conditions for agent are verified
-        """
-        # Remove agent from all networks
-        for network in [self.model.family_network,
-                        self.model.known_people_network,
-                        self.model.friendship_network]:
-            try:
-                network.remove_node(self)
-            except nx.NetworkXError:
-                continue
-        # remove agent from all locations where it might be
-        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
-                             ['occupants','employees','students']) :
-            try:
-                getattr(loc, attr).remove(self)
-                loc.agents_in.remove(self)
-            except:
-                continue
-        # remove agent from city
-        self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
-        # remove agent from grid and schedule
-        self.model.grid._remove_agent(self.pos, self)
-        self.model.schedule.remove(self)
-        # make id from deceased agent available
-        self.model.set_available_ids.add(self.unique_id)
-
+        if random.random() < a * (np.exp(b * self.age) + c) / 36:
+            self.model.remove_after_death(self)
 
 
 class Baby(BaseAgent): # from 0 to 2
@@ -226,7 +185,7 @@ class Baby(BaseAgent): # from 0 to 2
         self.model.family_network.add_edge(father, self, fam_link='child', lang=lang_with_father)
         self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_father)
         self.model.family_network.add_edge(mother, self, fam_link='child', lang=lang_with_mother)
-        self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_mother)
+        self.model.family_network.add_edge(self, father, fam_link='mother', lang=lang_with_mother)
 
         for parent in [father, mother]:
             self.model.family_network[father]
@@ -285,7 +244,7 @@ class Baby(BaseAgent): # from 0 to 2
 
     def stage_4(self):
         if self.age == 36 * 2:
-            self.replace_agent(Child)
+            self.grow(Child)
 
 class Child(Baby): #from 2 to 10
 
@@ -305,7 +264,7 @@ class Child(Baby): #from 2 to 10
 
     def stage_4(self):
         if self.age == 36 * 10:
-            self.replace_agent(Adolescent)
+            self.grow(Adolescent)
 
 class Adolescent(Child): # from 10 to 18
 
@@ -337,7 +296,7 @@ class Adolescent(Child): # from 10 to 18
 
     def stage_4(self):
         if self.age == 36 * 18:
-            self.replace_agent(Young)
+            self.grow(Young)
 
 
 class Young(Adolescent): # from 18 to 30
@@ -421,7 +380,7 @@ class Young(Adolescent): # from 18 to 30
 
     def stage_4(self):
         if self.age == 36 * 30:
-            self.replace_agent(Adult)
+            self.grow(Adult)
 
 class Adult(Young): # from 30 to 65
     def stage_1(self):
@@ -435,7 +394,7 @@ class Adult(Young): # from 30 to 65
 
     def stage_4(self):
         if self.age == 36 * 65:
-            self.replace_agent(Pensioner)
+            self.grow(Pensioner)
 
 class Pensioner(Adult): # from 65 to death
     def stage_1(self):
