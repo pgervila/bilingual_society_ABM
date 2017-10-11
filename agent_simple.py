@@ -307,10 +307,8 @@ class Young(Adolescent): # from 18 to 30
         self.loc_info['job'] = ag_job
         self.num_children = num_children
 
-
-    def reproduce(self, age_1=20, age_2=40):
-        age_1, age_2 = age_1 * 36, age_2 * 36
-        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() < 5/(age_2 - age_1)):
+    def reproduce(self, day_prob=0.001):
+        if (self.num_children < 4) and (random.random() < day_prob):
             id_ = self.model.set_available_ids.pop()
             lang = self.language
             # find closest school to parent home
@@ -383,6 +381,11 @@ class Young(Adolescent): # from 18 to 30
             self.grow(Adult)
 
 class Adult(Young): # from 30 to 65
+
+    def reproduce(self, day_prob=0.005):
+        if self.age < 40 * 36:
+            pass  # try chance
+
     def stage_1(self):
         pass
 
