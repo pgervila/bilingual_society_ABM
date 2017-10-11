@@ -15,12 +15,12 @@ class BaseAgent:
     # define memory retrievability constant
     k = np.log(10 / 9)
 
-    def __init__(self, model, unique_id, language, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
+    def __init__(self, model, unique_id, language, sex, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
                  ag_home=None, ag_school=None, ag_job=None, city_idx=None, import_IC=False):
+        """ language => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
-        self.language = language # 0, 1, 2 => spa, bil, cat
-        self.age = age
+        self.info = {'age': age, 'married': False, 'language': language, 'sex': sex, 'num_children': 0}
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
         self.loc_info = {'home': ag_home, 'city_idx': city_idx, 'school': ag_school, 'job': ag_job}
 
@@ -43,19 +43,19 @@ class BaseAgent:
                   from following list [10,25,50,75,90,100]. ICs are not available for every single level
         """
         # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
-        self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.age])
+        self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.info['age']])
         # S: numpy array(shape=vocab_size) that measures memory stability for each word
-        self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.age])
+        self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.info['age']])
         # compute R from t, S (R defines retrievability of each word)
         self.lang_stats[lang]['R'] = np.exp(- self.k *
                                                   self.lang_stats[lang]['t'] /
                                                   self.lang_stats[lang]['S']
                                                   ).astype(np.float64)
         # word counter
-        self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.age])
+        self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.info['age']])
         # vocab pct
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+        self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                   self.model.vocab_red)
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
@@ -74,7 +74,7 @@ class BaseAgent:
                                             ).astype(np.float32)
         self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+        self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                   self.model.vocab_red)
 
     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
@@ -85,10 +85,10 @@ class BaseAgent:
             * biling_key: integer from [10, 25, 50, 75, 90, 100]. Specify only if
               specific bilingual level is needed as input
         """
-        if self.language == 0:
+        if self.info['language'] == 0:
             self._set_lang_attrs('L1', '100_pct')
             self._set_null_lang_attrs('L2', S_0, t_0)
-        elif self.language == 2:
+        elif self.info['language'] == 2:
             self._set_null_lang_attrs('L1', S_0, t_0)
             self._set_lang_attrs('L2', '100_pct')
         else: # BILINGUAL
@@ -125,7 +125,7 @@ class BaseAgent:
             Args:
                 * new_class: class. Agent class that will replace the current one
         """
-        grown_agent = new_class(self.model, self.unique_id, self.language, self.age)
+        grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['age'])
         # copy all current instance attributes to new agent instance
         for key, val in self.__dict__.items():
             setattr(grown_agent, key, val)
@@ -163,10 +163,10 @@ class BaseAgent:
             The fitted function provides the death likelihood for a given rounded age
             In order to get the death-probability per step we divide by number of steps in a year (36)
             Fitting parameters are from https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
-            Smoothing and projecting age-specific probabilities of death by TOPALS by Joop de Beer
+            'Smoothing and projecting age-specific probabilities of death by TOPALS' by Joop de Beer
             Resulting life expectancy is 77 years and std is ~ 15 years
         """
-        if random.random() < a * (np.exp(b * self.age) + c) / 36:
+        if random.random() < a * (np.exp(b * self.info['age']) + c) / 36:
             self.model.remove_after_death(self)
 
 
@@ -180,61 +180,47 @@ class Baby(BaseAgent): # from 0 to 2
         """ Adapt to baby exceptions"""
         pass
 
-    def set_baby_family_links(self, father, mother):
-        #lang_with_father =
+    def set_baby_family_links(self, father, mother, lang_with_father, lang_with_mother):
+        """ Method to define family links and interaction language of newborn baby """
         self.model.family_network.add_edge(father, self, fam_link='child', lang=lang_with_father)
         self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_father)
         self.model.family_network.add_edge(mother, self, fam_link='child', lang=lang_with_mother)
         self.model.family_network.add_edge(self, father, fam_link='mother', lang=lang_with_mother)
-
-        for parent in [father, mother]:
-            self.model.family_network[father]
-
-
-    def define_newborn_family_links(self, parent_agent, child):
-        self.model.family_network.add_edge(parent_agent, child,
-                                      fam_link = 'child',
-                                      link_strength = 9 )
-        self.model.family_network.add_edge(child, parent_agent,
-                                      fam_link = 'parent',
-                                      link_strength = 9 )
-        for agent, labels in self.model.family_network[parent_agent].items():
-            if labels["fam_link"] == 'parent':
-                self.family_networks.add_edge(child, agent,
-                                              fam_link = 'grandparent',
-                                              link_strength = 7 )
-                self.family_networks.add_edge(agent, child,
-                                              fam_link = 'grandchild',
-                                              link_strength = 7 )
-            if labels["fam_link"] == 'sibling':
-                self.family_networks.add_edge(child, agent,
-                                               fam_link = 'uncle',
-                                               link_strength = 6 )
-                self.family_networks.add_edge(agent, child,
-                                               fam_link = 'nephew',
-                                               link_strength = 6 )
-                uncle_consort = [key for key,value
-                                 in self.family_networks[parent_agent].items()
-                                 if value['fam_link'] == 'consort']
-                if uncle_consort:
-                    self.family_networks.add_edge(child, uncle_consort[0],
-                                                  fam_link = 'uncle',
-                                                  link_strength = 6 )
-                    self.family_networks.add_edge(uncle_consort[0], child,
-                                                  fam_link = 'nephew',
-                                                  link_strength = 6 )
-            if labels["fam_link"] == 'nephew':
-                self.family_networks.add_edge(child, agent,
-                                               fam_link = 'cousin',
-                                               link_strength = 8 )
-                self.family_networks.add_edge(agent, child,
-                                               fam_link = 'cousin',
-                                               link_strength = 8 )
-
-
+        # rest of family will if possible speak same language with baby as their link agent to the baby
+        for elder, lang in zip([father, mother], [lang_with_father, lang_with_mother]):
+            for agent, labels in self.model.family_network[elder].items():
+                lang_labels = ['L1', 'L12'] if lang == 0 else ['L2', 'L21']
+                if True in [agent.lang_stats[l]['pct'][agent.info['age']] > agent.lang_act_thresh
+                            for l in lang_labels]:
+                    com_lang = lang
+                else:
+                    com_lang = 1 if lang == 0 else 0
+                if labels["fam_link"] == 'father':
+                    self.family_networks.add_edge(self, agent, fam_link='grandfather',
+                                                  lang=com_lang )
+                    self.family_networks.add_edge(agent, self, fam_link='grandchild',
+                                                  lang=com_lang)
+                elif labels["fam_link"] == 'mother':
+                    self.family_networks.add_edge(self, agent, fam_link='grandmother', lang=com_lang)
+                    self.family_networks.add_edge(agent, self, fam_link='grandchild', lang=com_lang)
+                elif labels["fam_link"] == 'sibling':
+                    self.family_networks.add_edge(self, agent,
+                                                  fam_link='uncle' if agent.info['sex'] == 'M' else 'aunt',
+                                                  lang=com_lang)
+                    self.family_networks.add_edge(agent, self, fam_link='nephew', lang=com_lang)
+                    if agent.info['married']:
+                        consort = [key for key, value
+                                   in self.family_networks[agent].items()
+                                   if value['fam_link'] == 'consort'][0]
+                        self.family_networks.add_edge(self, consort,
+                                                      fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
+                        self.family_networks.add_edge(consort, self, fam_link='nephew', lang=com_lang)
+                elif labels["fam_link"] == 'nephew':
+                    self.family_networks.add_edge(self, agent, fam_link='cousin', lang=com_lang)
+                    self.family_networks.add_edge(agent, self, fam_link='cousin', lang=com_lang)
 
     def stage_1(self):
-        pass
+        self.listen()
 
     def stage_2(self):
         pass
@@ -243,14 +229,14 @@ class Baby(BaseAgent): # from 0 to 2
         pass
 
     def stage_4(self):
-        if self.age == 36 * 2:
+        if self.info['age'] == 36 * 2:
             self.grow(Child)
 
 class Child(Baby): #from 2 to 10
 
-    def __init__(self, model, unique_id, language, age=0, ag_home=None, ag_school=None,
-                 city_idx=None, import_IC=False):
-        super().__init__(model, unique_id, language, age, ag_home, city_idx, import_IC)
+    def __init__(self, model, unique_id, language, sex, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
+                 ag_home=None, ag_school=None, import_IC=False):
+        super().__init__(model, unique_id, language, None, age, ag_home, city_idx, import_IC)
         self.loc_info['school'] = ag_school
 
     def stage_1(self):
@@ -263,7 +249,7 @@ class Child(Baby): #from 2 to 10
         pass
 
     def stage_4(self):
-        if self.age == 36 * 10:
+        if self.info['age'] == 36 * 10:
             self.grow(Adolescent)
 
 class Adolescent(Child): # from 10 to 18
@@ -295,22 +281,41 @@ class Adolescent(Child): # from 10 to 18
         pass
 
     def stage_4(self):
-        if self.age == 36 * 18:
+        if self.info['age'] == 36 * 18:
             self.grow(Young)
 
 
 class Young(Adolescent): # from 18 to 30
 
-    def __init__(self, model, unique_id, language, age=0, ag_home=None, ag_school=None,
-                 ag_job=None, city_idx=None, import_IC=False, num_children=0):
-        super().__init__(model, unique_id, language, age, ag_home, ag_school, city_idx, import_IC)
+    def __init__(self, model, unique_id, language, sex, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
+                 ag_home=None, ag_school=None, ag_job=None, city_idx=None):
+        super().__init__(model, unique_id, language, sex, age, ag_home, ag_school, city_idx, import_IC=False)
         self.loc_info['job'] = ag_job
-        self.num_children = num_children
+        self.info['num_children'] = num_children
+
+    def get_partner(self):
+        """ Check lang distance is not > 1"""
+        pass
 
     def reproduce(self, day_prob=0.001):
-        if (self.num_children < 4) and (random.random() < day_prob):
+        if (self.info['num_children'] < 4) and (self.info['married']) and (random.random() < day_prob):
             id_ = self.model.set_available_ids.pop()
-            lang = self.language
+
+            consort = [agent for agent, labels in self.model.family_network[self].items()
+                       if labels["fam_link"] == 'consort'][0]
+            # find out baby-agent language
+            lang_consorts, pcts = self.model.define_lang_interaction(self, consort, ret_pcts=True)
+            l1, l2 = np.random.choice([0, 1], p=pcts[:2]), np.random.choice([0, 1], p=pcts[2:])
+            lang_with_father = l1 if self.info['sex'] == 'M' else l2
+            lang_with_mother = l2 if self.info['sex'] == 'M' else l1
+
+            if [lang_with_father, lang_with_mother] in [0, 0]:
+                lang = 0
+            elif [lang_with_father, lang_with_mother] in [[0, 1], [1, 0]]:
+                lang = 1
+            elif [lang_with_father, lang_with_mother] in [1, 1]:
+                lang = 2
+
             # find closest school to parent home
             city_idx = self.loc_info['city_idx']
             clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
@@ -318,13 +323,19 @@ class Young(Adolescent): # from 18 to 30
                                             for sc_coord in clust_schools_coords])
             # instantiate agent
             a = Baby(self.model, id_, lang, ag_home=self.loc_info['home'],
-                                      ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
-                                      ag_job=None,
-                                      city_idx=self.loc_info['city_idx'])
+                     ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
+                     city_idx=self.loc_info['city_idx'])
             # Add agent to model
             self.model.add_agent_to_grid_sched_networks(a)
-            # Update num of children
-            self.num_children += 1
+            # Update num of children for both self and consort
+            self.info['num_children'] += 1
+            consort.info['num_children'] += 1
+
+            # set up family links
+            if self.info['sex'] == 'M':
+                a.set_baby_family_links(self, consort, lang_with_father, lang_with_mother)
+            else:
+                a.set_baby_family_links(consort, self, lang_with_father, lang_with_mother)
 
     def remove_after_death(self):
         """ call this function if death conditions
@@ -349,13 +360,13 @@ class Young(Adolescent): # from 18 to 30
         # transform ages to steps
         age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
         # define stochastic probability of agent death as function of age
-        if (self.age > age_1) and (self.age <= age_2):
+        if (self.info['age'] > age_1) and (self.info['age'] <= age_2):
             if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
                 self.remove_after_death()
-        elif (self.age > age_2) and (self.age < age_3):
+        elif (self.info['age'] > age_2) and (self.info['age'] < age_3):
             if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
                 self.remove_after_death()
-        elif self.age >= age_3:
+        elif self.info['age'] >= age_3:
             self.remove_after_death()
 
     def look_for_job(self):
@@ -377,13 +388,13 @@ class Young(Adolescent): # from 18 to 30
         pass
 
     def stage_4(self):
-        if self.age == 36 * 30:
+        if self.info['age'] == 36 * 30:
             self.grow(Adult)
 
 class Adult(Young): # from 30 to 65
 
     def reproduce(self, day_prob=0.005):
-        if self.age < 40 * 36:
+        if self.info['age'] < 40 * 36:
             pass  # try chance
 
     def stage_1(self):
@@ -396,7 +407,7 @@ class Adult(Young): # from 30 to 65
         pass
 
     def stage_4(self):
-        if self.age == 36 * 65:
+        if self.info['age'] == 36 * 65:
             self.grow(Pensioner)
 
 class Pensioner(Adult): # from 65 to death
@@ -421,10 +432,10 @@ class Simple_Language_Agent:
                  num_children=0, ag_home=None, ag_school=None, ag_job=None, city_idx=None, import_IC=False):
         self.model = model
         self.unique_id = unique_id
-        self.language = language # 0, 1, 2 => spa, bil, cat
+        self.info['language'] = language # 0, 1, 2 => spa, bil, cat
         self.lang_thresholds = {'speak':lang_act_thresh, 'understand':lang_passive_thresh}
-        self.age = age
-        self.num_children = num_children # TODO : group marital/parental info in dict ??
+        self.info['age'] = age
+        self.info['num_children'] = num_children # TODO : group marital/parental info in dict ??
 
         self.loc_info = {'home': ag_home, 'school': ag_school, 'job': ag_job, 'city_idx': city_idx}
 
@@ -447,19 +458,19 @@ class Simple_Language_Agent:
                   from following list [10,25,50,75,90,100]. ICs are not available for every single level
         """
         # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
-        self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.age])
+        self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.info['age']])
         # S: numpy array(shape=vocab_size) that measures memory stability for each word
-        self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.age])
+        self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.info['age']])
         # compute R from t, S (R defines retrievability of each word)
         self.lang_stats[lang]['R'] = np.exp(- self.k *
                                                   self.lang_stats[lang]['t'] /
                                                   self.lang_stats[lang]['S']
                                                   ).astype(np.float64)
         # word counter
-        self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.age])
+        self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.info['age']])
         # vocab pct
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+        self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                   self.model.vocab_red)
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
@@ -478,7 +489,7 @@ class Simple_Language_Agent:
                                             ).astype(np.float32)
         self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-        self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+        self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                   self.model.vocab_red)
 
     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
@@ -489,10 +500,10 @@ class Simple_Language_Agent:
             * biling_key: integer from [10, 25, 50, 75, 90, 100]. Specify only if
               specific bilingual level is needed as input
         """
-        if self.language == 0:
+        if self.info['language'] == 0:
             self._set_lang_attrs('L1', '100_pct')
             self._set_null_lang_attrs('L2', S_0, t_0)
-        elif self.language == 2:
+        elif self.info['language'] == 2:
             self._set_null_lang_attrs('L1', S_0, t_0)
             self._set_lang_attrs('L2', '100_pct')
         else: # BILINGUAL
@@ -532,9 +543,9 @@ class Simple_Language_Agent:
         """
         age_1, age_2 = age_1 * 36, age_2 * 36
         # check reproduction conditions
-        if (age_1 <= self.age <= age_2) and (self.num_children < 1) and (random.random() < repr_prob_per_step):
+        if (age_1 <= self.info['age'] <= age_2) and (self.info['num_children'] < 1) and (random.random() < repr_prob_per_step):
             id_ = self.model.set_available_ids.pop()
-            lang = self.language
+            lang = self.info['language']
             # find closest school to parent home
             city_idx = self.loc_info['city_idx']
             clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
@@ -550,7 +561,7 @@ class Simple_Language_Agent:
             # add newborn agent to home presence list
             a.loc_info['home'].agents_in.add(a)
             # Update num of children
-            self.num_children += 1
+            self.info['num_children'] += 1
 
     def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):
         """ Method that may randomly kill self agent at each step. Agent death likelihood varies with age
@@ -564,13 +575,13 @@ class Simple_Language_Agent:
         # transform ages to steps
         age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
         # define stochastic probability of agent death as function of age
-        if (self.age > age_1) and (self.age <= age_2):
+        if (self.info['age'] > age_1) and (self.info['age'] <= age_2):
             if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
                 self.remove_after_death()
-        elif (self.age > age_2) and (self.age < age_3):
+        elif (self.info['age'] > age_2) and (self.info['age'] < age_3):
             if random.random() < prob_2 / (age_3 - age_2):  # 70% pop will die through this period
                 self.remove_after_death()
-        elif self.age >= age_3:
+        elif self.info['age'] >= age_3:
             self.remove_after_death()
 
     def remove_after_death(self):
@@ -672,14 +683,14 @@ class Simple_Language_Agent:
         real_vocab_size = scale_f * self.model.vocab_red
         # define factor total_words/avg_words_per_day
         f = real_vocab_size / real_spoken_tokens_per_day
-        if self.age < age_1:
+        if self.info['age'] < age_1:
             delta = 0.0001
             decay = -np.log(delta / 100) / (age_1)
-            factor =  f + 400 * np.exp(-decay * self.age)
-        elif age_1 <= self.age <= age_2:
+            factor =  f + 400 * np.exp(-decay * self.info['age'])
+        elif age_1 <= self.info['age'] <= age_2:
             factor = f
         else:
-            factor = f - 1 + np.exp(0.0005 * (self.age - age_2 ) )
+            factor = f - 1 + np.exp(0.0005 * (self.info['age'] - age_2 ) )
         if long:
             return self.model.num_words_conv[1] / factor
         else:
@@ -711,7 +722,8 @@ class Simple_Language_Agent:
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
         # These are the thoughts that speaker tries to convey
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
-        word_samples = randZipf(self.model.cdf_data['s'][self.age], int(self.get_num_words_per_conv(long) * 10)) #TODO: check the 10 !!!
+        word_samples = randZipf(self.model.cdf_data['s'][self.info['age']],
+                                int(self.get_num_words_per_conv(long) * 10)) #TODO: check the 10 !!!
         # get unique words and counts
         bcs = np.bincount(word_samples)
         act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
@@ -738,10 +750,10 @@ class Simple_Language_Agent:
         # 2. Given a lang, pick the variant that is most familiar to agent
         lang = 'L1' if lang == 0 else 'L2'
         if lang == 'L1':
-            pct1, pct2 = self.lang_stats['L1']['pct'][self.age] , self.lang_stats['L12']['pct'][self.age]
+            pct1, pct2 = self.lang_stats['L1']['pct'][self.info['age']] , self.lang_stats['L12']['pct'][self.info['age']]
             lang = 'L1' if pct1 >= pct2 else 'L12'
         elif lang == 'L2':
-            pct1, pct2 = self.lang_stats['L2']['pct'][self.age], self.lang_stats['L21']['pct'][self.age]
+            pct1, pct2 = self.lang_stats['L2']['pct'][self.info['age']], self.lang_stats['L21']['pct'][self.info['age']]
             lang = 'L2' if pct1 >= pct2 else 'L21'
 
         # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
@@ -866,7 +878,7 @@ class Simple_Language_Agent:
                 self.lang_stats[lang]['t'][self.day_mask[lang]] = 0
                 # compute new memory retrievability R and current lang_knowledge from t, S values
                 self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
-                self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
+                self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
                                                           self.model.vocab_red)
 
     def listen(self, conversation=True):
@@ -898,17 +910,17 @@ class Simple_Language_Agent:
            If language knowledge falls below switch_threshold value, agent
            becomes monolingual"""
 
-        if self.language == 0:
-            if self.lang_stats['L2']['pct'][self.age] >= switch_threshold:
-                self.language = 1
-        elif self.language == 2:
-            if self.lang_stats['L1']['pct'][self.age] >= switch_threshold:
-                self.language = 1
-        elif self.language == 1:
-            if self.lang_stats['L1']['pct'][self.age] < switch_threshold:
-                self.language == 2
-            elif self.lang_stats['L2']['pct'][self.age] < switch_threshold:
-                self.language == 0
+        if self.info['language'] == 0:
+            if self.lang_stats['L2']['pct'][self.info['age']] >= switch_threshold:
+                self.info['language'] = 1
+        elif self.info['language'] == 2:
+            if self.lang_stats['L1']['pct'][self.info['age']] >= switch_threshold:
+                self.info['language'] = 1
+        elif self.info['language'] == 1:
+            if self.lang_stats['L1']['pct'][self.info['age']] < switch_threshold:
+                self.info['language'] == 2
+            elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
+                self.info['language'] == 0
 
     def stage_1(self):
         self.start_conversation()
@@ -921,7 +933,7 @@ class Simple_Language_Agent:
         #self.listen()
 
     def stage_3(self):
-        if self.age < 720:
+        if self.info['age'] < 720:
             self.model.grid.move_agent(self, self.loc_info['school'].pos)
             self.loc_info['school'].agents_in.add(self)
             # TODO : DEFINE GROUP CONVERSATIONS !
@@ -940,7 +952,7 @@ class Simple_Language_Agent:
                 self.start_conversation()
 
     def stage_4(self):
-        if self.age < 720:
+        if self.info['age'] < 720:
             self.loc_info['school'].agents_in.remove(self)
         elif self.loc_info['job']:
             self.loc_info['job'].agents_in.remove(self)
@@ -959,14 +971,14 @@ class Simple_Language_Agent:
         except:
             pass
         # memory becomes ever shakier after turning 65...
-        if self.age > 65 * 36:
+        if self.info['age'] > 65 * 36:
             for lang in ['L1', 'L2']:
                 self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] >= 0.01,
                                                       self.lang_stats[lang]['S'] - 0.01,
                                                       0.000001)
         # Update at the end of each step
         # for lang in ['L1', 'L2']:
-        #     self.lang_stats[lang]['pct'][self.age] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+        #     self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
         #                                               self.model.vocab_red)
 
     def __repr__(self):

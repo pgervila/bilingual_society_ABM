@@ -44,14 +44,14 @@ class StagedActivation_modif(StagedActivation):
     def step(self):
         """ Executes all the stages for all agents. """
         for agent in self.agents[:]:
-            agent.age += 1
+            agent.info['age']+= 1
             # simulate chance to reproduce
             agent.reproduce()
             for lang in ['L1', 'L2']:
                 # update last-time word use vector
                 agent.lang_stats[lang]['t'][~agent.day_mask[lang]] += 1
                 # set current lang knowledge
-                agent.lang_stats[lang]['pct'][agent.age] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
+                agent.lang_stats[lang]['pct'][agent.info['age']] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                             agent.model.vocab_red)
                 # reset day mask
                 agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
@@ -153,8 +153,8 @@ class Simple_Language_Model(Model):
                              "total_num_agents": lambda m:len(m.schedule.agents),
                              "biling_evol": lambda m:m.get_bilingual_global_evol()
                              },
-            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_stats['L2']['pct'][a.age],
-                             "pct_spa_in_biling": lambda a:a.lang_stats['L1']['pct'][a.age]}
+            agent_reporters={"pct_cat_in_biling": lambda a:a.lang_stats['L2']['pct'][a.info['age']],
+                             "pct_spa_in_biling": lambda a:a.lang_stats['L1']['pct'][a.info['age']]}
         )
 
     def compute_cluster_centers(self, min_dist=0.20, min_grid_pct_val=0.1, max_grid_pct_val=0.9):
@@ -386,6 +386,8 @@ class Simple_Language_Model(Model):
 
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.family_size)):
+                # family sexes
+                family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
                 ag1 = Simple_Language_Agent(self, ids.pop(), family_langs[0], city_idx=clust_idx)
                 ag2 = Simple_Language_Agent(self, ids.pop(), family_langs[1], city_idx=clust_idx)
@@ -406,7 +408,8 @@ class Simple_Language_Model(Model):
             num_left_agents = len_clust % self.family_size
             if num_left_agents:
                 for lang in langs_per_clust[clust_idx][-num_left_agents:]:
-                    ag = Simple_Language_Agent(self, ids.pop(), lang, city_idx=clust_idx)
+                    sex = ['M' if random.random() < 0.5 else 'F']
+                    ag = Simple_Language_Agent(self, ids.pop(), lang, sex, city_idx=clust_idx)
                     clust_info['agents'].append(ag)
                     self.add_agent_to_grid_sched_networks(ag)
 
@@ -436,11 +439,11 @@ class Simple_Language_Model(Model):
         home.agents_in.add(agent)
 
     def define_lang_interaction(self, ag1, ag2, ret_pcts=False):
-        """find out lang of interaction btw family members, consorts"""
-        pct11 = ag1.lang_stats['L1']['pct'][ag1.age]
-        pct12 = ag1.lang_stats['L2']['pct'][ag1.age]
-        pct21 = ag2.lang_stats['L1']['pct'][ag2.age]
-        pct22 = ag2.lang_stats['L2']['pct'][ag2.age]
+        """ Method to find out lang of interaction between two agents """
+        pct11 = ag1.lang_stats['L1']['pct'][ag1.info['age']]
+        pct12 = ag1.lang_stats['L2']['pct'][ag1.info['age']]
+        pct21 = ag2.lang_stats['L1']['pct'][ag2.info['age']]
+        pct22 = ag2.lang_stats['L2']['pct'][ag2.info['age']]
         if (ag1.language, ag2.language) in [(0, 0), (0, 1), (1, 0)]:
             lang = 0
         elif (ag1.language, ag2.language) in [(2, 1), (1, 2), (2, 2)]:
@@ -458,17 +461,20 @@ class Simple_Language_Model(Model):
             return lang
 
     def define_family_networks(self):
-        # Method to define families and also adds relatives to known_people_network
-        # marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
+        """
+            Method to define family links between agents. It also adds relatives to known_people_network
+            It assumes distribution of languages in clusters has already been sorted at cluster level or
+            by groups of four to ensure linguistic affinity within families.
+            Marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
+        """
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.family_size)):
                 # set ages of family members
                 steps_per_year = 36
                 min_age, max_age = 40 * steps_per_year, 50 * steps_per_year
-                family[0].age, family[1].age = np.random.randint(min_age, max_age, size=2)
+                family[0].info['age'], family[1].info['age']= np.random.randint(min_age, max_age, size=2)
                 min_age, max_age = 10 * steps_per_year, 20 * steps_per_year
-                family[2].age, family[3].age = np.random.randint(min_age, max_age, size=2)
-
+                family[2].info['age'], family[3].info['age']= np.random.randint(min_age, max_age, size=2)
                 # assign same home to all family members
                 home = clust_info['homes'][idx]
                 # import ICs and assign home
@@ -476,7 +482,7 @@ class Simple_Language_Model(Model):
                 if 1 in [family[0].language, family[1].language]:
                     key_parents = [] # define list to store parents' percentage knowledge
                     for ix, member in enumerate(family):
-                        if ix <2 and member.language == 1:
+                        if ix < 2 and member.language == 1:
                             key = np.random.choice(self.ic_pct_keys)
                             key_parents.append(key)
                             member.set_lang_ics(biling_key=key)
@@ -545,18 +551,6 @@ class Simple_Language_Model(Model):
                     lang_siblings = 1
                 else:
                     lang_siblings = self.define_lang_interaction(family[2], family[3])
-
-                    # find weakest, pick opposite PREVIOUS implem
-                    # pct11 = family[2].lang_stats['L1']['pct'][family[2].age]
-                    # pct12 = family[2].lang_stats['L2']['pct'][family[2].age]
-                    # pct21 = family[3].lang_stats['L1']['pct'][family[3].age]
-                    # pct22 = family[3].lang_stats['L2']['pct'][family[3].age]
-                    # idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-                    # if idx_weakest in [0, 2]:
-                    #     lang_siblings = 1
-                    # else:
-                    #     lang_siblings = 0
-
                 # add family edges in family and known_people networks ( both are DIRECTED networks ! )
                 for (i, j) in [(0, 1), (1, 0)]:
                     self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
@@ -577,7 +571,7 @@ class Simple_Language_Model(Model):
             if num_left_agents:
                 for ag in clust_info['agents'][-num_left_agents:]:
                     min_age, max_age = 40 * steps_per_year, 60 * steps_per_year
-                    ag.age = np.random.randint(min_age, max_age)
+                    ag.info['age']= np.random.randint(min_age, max_age)
                     ag.set_lang_ics()
                     home = clust_info['homes'][idx + 1]
                     ag.loc_info['home'] = home
@@ -680,8 +674,8 @@ class Simple_Language_Model(Model):
         # set output default parameters
         conv_params = dict(multilingual=False, mute_type=None, long=True)
         # define lists with agent competences and preferences in each language
-        l1_pcts = [ag.lang_stats['L1']['pct'][ag.age] for ag in ags]
-        l2_pcts = [ag.lang_stats['L2']['pct'][ag.age] for ag in ags]
+        l1_pcts = [ag.lang_stats['L1']['pct'][ag.info['age']] for ag in ags]
+        l2_pcts = [ag.lang_stats['L2']['pct'][ag.info['age']] for ag in ags]
         # get lists of favorite language per agent and set of language types involved
         fav_lang_per_agent = list(np.argmax([l1_pcts, l2_pcts], axis=0))
         ags_lang_types = set([ag.language for ag in ags])
@@ -854,7 +848,7 @@ class Simple_Language_Model(Model):
              * float representing the AVERAGE percentage of Catalan in bilinguals
 
         """
-        list_biling = [ag.lang_stats['L2']['pct'][ag.age] for ag in self.schedule.agents
+        list_biling = [ag.lang_stats['L2']['pct'][ag.info['age']] for ag in self.schedule.agents
                        if ag.language == 1]
         if list_biling:
             return np.array(list_biling).mean()
