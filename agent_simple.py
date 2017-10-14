@@ -102,12 +102,13 @@ class BaseAgent:
         self._set_null_lang_attrs('L12', S_0, t_0)
         self._set_null_lang_attrs('L21', S_0, t_0)
 
-    def listen(self, conversation=True):
-        """ Method to listen to conversations, media, etc... and update corresponding vocabulary
+    def listen(self, to_agent=None):
+        """
+            Method to listen to conversations, media, etc... and update corresponding vocabulary
             Args:
-                * conversation: Boolean. If True, agent will listen to potential conversation taking place
-                on its current cell.If False, agent will listen to media"""
-        if conversation:
+                * to_agent: class instance. It can be either a language agent or a media agent
+        """
+        if not to_agent:
             # get all agents currently placed on chosen cell
             others = self.model.grid.get_cell_list_contents(self.pos)
             others.remove(self)
@@ -116,7 +117,119 @@ class BaseAgent:
                 ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
                 # call run conversation with bystander
                 self.model.run_conversation(ag_1, ag_2, bystander=self)
+        else:
+            # make other agent speak and 'self' agent get the listened vocab
+            if to_agent in self.model.known_people_network[self]:
+                lang = self.model.known_people_network[self][to_agent]['lang']
+            else:
+                lang = self.model.define_lang_interaction(self, to_agent)
+            words = to_agent.pick_vocab(lang, long=False)
+
+            for lang_key, lang_words in words:
+                words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
+                                                  lang_words, assume_unique=True)
+
+                self.update_lang_arrays(words, speak=False)
+
+
         # TODO : implement 'listen to media' option
+
+    def update_lang_arrays(self, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
+                           delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
+        """ Function to compute and update main arrays that define agent linguistic knowledge
+            Args:
+                * sample_words: dict where keys are lang labels and values are tuples of
+                    2 NumPy integer arrays. First array is of conversation-active unique word indices,
+                    second is of corresponding counts of those words
+                * speak: boolean. Defines whether agent is speaking or listening
+                * a, b, c, d: float parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
+                * delta_s_factor: positive float < 1.
+                    Defines increase of mem stability due to passive rehearsal
+                    as a fraction of that due to active rehearsal
+                * min_mem_times: positive integer. Minimum number of times to start remembering a word.
+                    It should be understood as average time it takes for a word meaning to be incorporated
+                    in memory
+                * pct_threshold: positive float < 1. Value to define lang knowledge in percentage.
+                    If retrievability R for a given word is higher than pct_threshold,
+                    the word is considered as well known. Otherwise, it is not
+                * pct_threshold_und : positive float < 1. If retrievability R for a given word
+                    is higher than pct_threshold, the word can be correctly understood.
+                    Otherwise, it cannot
+
+
+            MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
+
+            Assumptions ( see "HOW MANY WORDS DO WE KNOW ???" By Marc Brysbaert*,
+            Michaël Stevens, Paweł Mandera and Emmanuel Keuleers):
+                * ~16000 spoken tokens per day + 16000 heard tokens per day + TV, RADIO
+                * 1min reading -> 220-300 tokens with large individual differences, thus
+                  in 1 h we get ~ 16000 words
+        """
+
+        # TODO: need to define similarity matrix btw language vocabularies?
+        # TODO: cat-spa have dist mean ~ 2 and std ~ 1.6 ( better to normalize distance ???)
+        # TODO for cat-spa np.random.choice(range(7), p=[0.05, 0.2, 0.45, 0.15, 0.1, 0.025,0.025], size=500)
+        # TODO 50% of unknown words with edit distance == 1 can be understood, guessed
+
+        for lang, (act, act_c) in sample_words.items():
+            # UPDATE WORD COUNTING +  preprocessing for S, t, R UPDATE
+            # If words are from listening, they might be new to agent
+            # ds_factor value will depend on action type (speaking or listening)
+            if not speak:
+                known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
+                # boolean mask of known active words
+                known_act_bool = np.in1d(act, known_words, assume_unique=True)
+                if np.all(known_act_bool):
+                    # all active words in conversation are known
+                    # update all active words
+                    self.lang_stats[lang]['wc'][act] += act_c
+                else:
+                    # some heard words are unknown. Find them in 'act' words vector base
+                    unknown_act_bool = np.invert(known_act_bool)
+                    unknown_act , unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
+                    # Select most frequent unknown word
+                    ix_most_freq_unk = np.argmax(unknown_act_c)
+                    most_freq_unknown = unknown_act[ix_most_freq_unk]
+                    # update most active unknown word's count (the only one actually grasped)
+                    self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
+                    # update known active words count
+                    self.lang_stats[lang]['wc'][act[known_act_bool]] += act_c[known_act_bool]
+                    # get words available for S, t, R update
+                    if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
+                        known_act_ixs = np.concatenate((np.nonzero(known_act_bool)[0], [ix_most_freq_unk]))
+                        act, act_c = act[known_act_ixs ], act_c[known_act_ixs ]
+                    else:
+                        act, act_c = act[known_act_bool], act_c[known_act_bool]
+                ds_factor = delta_s_factor
+            else:
+                # update word counter with newly active words
+                self.lang_stats[lang]['wc'][act] += act_c
+                ds_factor = 1
+            # check if there are any words for S, t, R update
+            if act.size:
+                # compute increase in memory stability S due to (re)activation
+                # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
+                S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+                R_act = self.lang_stats[lang]['R'][act]
+                delta_S = ds_factor * (a * S_act_b * np.exp(c * 100 * R_act) + d)
+                # update memory stability value
+                self.lang_stats[lang]['S'][act] += delta_S
+                # discount one to counts
+                act_c -= 1
+                # Simplification with good approx : we apply delta_S without iteration !!
+                S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+                R_act = self.lang_stats[lang]['R'][act]
+                delta_S = ds_factor * (act_c * (a * S_act_b * np.exp(c * 100 * R_act) + d))
+                # update
+                self.lang_stats[lang]['S'][act] += delta_S
+                # update daily boolean mask to update elapsed-steps array t
+                self.day_mask[lang][act] = True
+                # set last activation time counter to zero if word act
+                self.lang_stats[lang]['t'][self.day_mask[lang]] = 0
+                # compute new memory retrievability R and current lang_knowledge from t, S values
+                self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
+                self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
+                                                          self.model.vocab_red)
 
     def grow(self, new_class):
         """ It replaces current agent with a new agent subclass instance.
@@ -172,8 +285,10 @@ class BaseAgent:
 
 class Baby(BaseAgent): # from 0 to 2
 
-    def listen(self):
-        """Listen to parents, siblings, family, friends of family """
+    def listen(self, to_agent=None):
+        """Listen to parents, siblings, family, friends of family
+        :param to_agent:
+        """
         pass
 
     def get_conversation_lang(self):
@@ -787,7 +902,6 @@ class Simple_Language_Agent:
                            delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
-                * lang : integer in [0,1] {0:'spa', 1:'cat'}
                 * sample_words: dict where keys are lang labels and values are tuples of
                     2 NumPy integer arrays. First array is of conversation-active unique word indices,
                     second is of corresponding counts of those words
