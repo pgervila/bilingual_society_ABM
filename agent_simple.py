@@ -295,7 +295,7 @@ class Baby(BaseAgent): # from 0 to 2
         """ Adapt to baby exceptions"""
         pass
 
-    def set_baby_family_links(self, father, mother, lang_with_father, lang_with_mother):
+    def set_family_links(self, father, mother, lang_with_father, lang_with_mother):
         """ Method to define family links and interaction language of newborn baby """
         self.model.family_network.add_edge(father, self, fam_link='child', lang=lang_with_father)
         self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_father)
@@ -353,6 +353,97 @@ class Child(Baby): #from 2 to 10
                  ag_home=None, ag_school=None, import_IC=False):
         super().__init__(model, unique_id, language, None, age, ag_home, city_idx, import_IC)
         self.loc_info['school'] = ag_school
+
+    def pick_vocab(self, lang, long=True, min_age_interlocs=None, biling_interloc=False):
+        """ Method that models word choice by self agent in a conversation
+            Word choice is governed by vocabulary knowledge constraints
+            Args:
+                * lang: integer in [0, 1] {0:'spa', 1:'cat'}
+                * long: boolean that defines conversation length
+                * min_age_interlocs: the youngest age among all interlocutors, EXPRESSED IN STEPS.
+                    It is used to modulate conversation vocabulary to younger agents
+                * biling_interloc : boolean. If True, speaker word choice might be mixed, since
+                    he/she is certain interlocutor will understand
+            Output:
+                * spoken words: dict where keys are lang labels and values are lists with words spoken
+                    in lang key and corresponding counts
+        """
+
+        # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
+
+        #TODO : model 'Grammatical foreigner talk' =>
+        #TODO : how word choice is adapted by native speakers when speaking to adult learners
+        #TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
+
+        # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in following STEPS
+
+        # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
+        # These are the thoughts that speaker tries to convey
+        # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
+        num_words = int(self.get_num_words_per_conv(long) * 10) #TODO: check the value 10 !!!
+        if min_age_interlocs:
+            word_samples = randZipf(self.model.cdf_data['s'][min_age_interlocs], num_words)
+        else:
+            word_samples = randZipf(self.model.cdf_data['s'][self.info['age']], num_words)
+
+        # get unique words and counts
+        bcs = np.bincount(word_samples)
+        act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
+        # SLOWER BUT CLEANER APPROACH =>  act, act_c = np.unique(word_samples, return_counts=True)
+
+        # check if conversation is btw bilinguals and therefore lang switch is possible
+        # TODO : key is that most biling agents will not express surprise to lang mixing or switch
+        # TODO : whereas monolinguals will. Feedback for correction
+        # if biling_interloc:
+        #     if lang == 'L1':
+        #         # find all words among 'act' words where L2 retrievability is higher than L1 retrievability
+        #         # Then fill L12 container with a % of those words ( their knowledge is known at first time of course)
+        #
+        #         self.lang_stats['L1']['R'][act] <= self.lang_stats['L2']['R'][act]
+        #         L2_strongest = self.lang_stats['L2']['R'][act] == 1.
+                #act[L2_strongest]
+
+                # rand_info_access = np.random.rand(4, len(act))
+                # mask_L1 = rand_info_access[0] <= self.lang_stats['L1']['R'][act]
+                # mask_L12 = rand_info_access[1] <= self.lang_stats['L12']['R'][act]
+                # mask_L21 = rand_info_access[2] <= self.lang_stats['L21']['R'][act]
+                # mask_L2 = rand_info_access[3] <= self.lang_stats['L2']['R'][act]
+
+        # 2. Given a lang, pick the variant that is most familiar to agent
+        lang = 'L1' if lang == 0 else 'L2'
+        if lang == 'L1':
+            pct1, pct2 = self.lang_stats['L1']['pct'][self.info['age']] , self.lang_stats['L12']['pct'][self.info['age']]
+            lang = 'L1' if pct1 >= pct2 else 'L12'
+        elif lang == 'L2':
+            pct1, pct2 = self.lang_stats['L2']['pct'][self.info['age']], self.lang_stats['L21']['pct'][self.info['age']]
+            lang = 'L2' if pct1 >= pct2 else 'L21'
+
+        # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
+        # get mask for words successfully retrieved from memory
+        mask_R = np.random.rand(len(act)) <= self.lang_stats[lang]['R'][act]
+        spoken_words = {lang:[act[mask_R], act_c[mask_R]]}
+        # if there are missing words-concepts, they might be found in the other known language(s)
+        if np.count_nonzero(mask_R) < len(act):
+            if lang in ['L1', 'L12']:
+                lang2 = 'L12' if lang == 'L1' else 'L1'
+            elif lang in ['L2', 'L21']:
+                lang2 = 'L21' if lang == 'L2' else 'L2'
+            mask_R2 = np.random.rand(len(act[~mask_R])) <= self.lang_stats[lang2]['R'][act[~mask_R]]
+            if act[~mask_R][mask_R2].size:
+                spoken_words.update({lang2:[act[~mask_R][mask_R2], act_c[~mask_R][mask_R2]]})
+            # if still missing words, check in last lang available
+            if (act[mask_R].size + act[~mask_R][mask_R2].size) < len(act):
+                lang3 = 'L2' if lang2 in ['L12', 'L1'] else 'L1'
+                rem_words = act[~mask_R][~mask_R2]
+                mask_R3 = np.random.rand(len(rem_words)) <= self.lang_stats[lang3]['R'][rem_words]
+                if rem_words[mask_R3].size:
+                    # VERY IMP: add to transition language instead of 'pure' one.
+                    # This is the process of creation/adaption/translation
+                    tr_lang = max([lang, lang2], key=len)
+                    spoken_words.update({lang2: [rem_words[mask_R3], act_c[~mask_R][~mask_R2][mask_R3]]})
+
+        return spoken_words
+
 
     def stage_1(self):
         pass
@@ -448,9 +539,9 @@ class Young(Adolescent): # from 18 to 30
 
             # set up family links
             if self.info['sex'] == 'M':
-                a.set_baby_family_links(self, consort, lang_with_father, lang_with_mother)
+                a.set_family_links(self, consort, lang_with_father, lang_with_mother)
             else:
-                a.set_baby_family_links(consort, self, lang_with_father, lang_with_mother)
+                a.set_family_links(consort, self, lang_with_father, lang_with_mother)
 
     def remove_after_death(self):
         """ call this function if death conditions
@@ -547,11 +638,9 @@ class Simple_Language_Agent:
                  num_children=0, ag_home=None, ag_school=None, ag_job=None, city_idx=None, import_IC=False):
         self.model = model
         self.unique_id = unique_id
-        self.info['language'] = language # 0, 1, 2 => spa, bil, cat
-        self.lang_thresholds = {'speak':lang_act_thresh, 'understand':lang_passive_thresh}
-        self.info['age'] = age
-        self.info['num_children'] = num_children # TODO : group marital/parental info in dict ??
-
+        # language values: 0, 1, 2 => spa, bil, cat
+        self.info = {'language': language, 'age': age, 'num_children': num_children} # TODO : group marital/parental info in dict ??
+        self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
         self.loc_info = {'home': ag_home, 'school': ag_school, 'job': ag_job, 'city_idx': city_idx}
 
         # define container for languages' tracking and statistics

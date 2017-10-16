@@ -30,7 +30,7 @@ import pyprind
 # IMPORT FROM simp_agent.py
 from agent_simple import Simple_Language_Agent, Home, School, Job
 # import from clusters.py
-from clusters import BuildClusters
+#from clusters import BuildClusters
 
 # IMPORT MESA LIBRARIES
 from mesa import Model
@@ -444,11 +444,11 @@ class Simple_Language_Model(Model):
         pct12 = ag1.lang_stats['L2']['pct'][ag1.info['age']]
         pct21 = ag2.lang_stats['L1']['pct'][ag2.info['age']]
         pct22 = ag2.lang_stats['L2']['pct'][ag2.info['age']]
-        if (ag1.language, ag2.language) in [(0, 0), (0, 1), (1, 0)]:
+        if (ag1.info['language'], ag2.info['language']) in [(0, 0), (0, 1), (1, 0)]:
             lang = 0
-        elif (ag1.language, ag2.language) in [(2, 1), (1, 2), (2, 2)]:
+        elif (ag1.info['language'], ag2.info['language']) in [(2, 1), (1, 2), (2, 2)]:
             lang = 1
-        elif (ag1.language, ag2.language) == (1, 1):
+        elif (ag1.info['language'], ag2.info['language']) == (1, 1):
             # Find weakest combination lang-agent, pick other language as common one
             idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
             if idx_weakest in [0, 2]:
@@ -479,15 +479,15 @@ class Simple_Language_Model(Model):
                 home = clust_info['homes'][idx]
                 # import ICs and assign home
                 # apply correlation between parents' and children's lang knowledge if parents bilinguals
-                if 1 in [family[0].language, family[1].language]:
+                if 1 in [m.info['language'] for m in family[:2]]:
                     key_parents = [] # define list to store parents' percentage knowledge
                     for ix, member in enumerate(family):
-                        if ix < 2 and member.language == 1:
+                        if ix < 2 and member.info['language'] == 1:
                             key = np.random.choice(self.ic_pct_keys)
                             key_parents.append(key)
                             member.set_lang_ics(biling_key=key)
                         elif ix < 2:
-                            lang_mono = member.language
+                            lang_mono = member.info['language']
                             member.set_lang_ics()
                         elif ix >= 2:
                             if len(key_parents) == 1:
@@ -504,12 +504,12 @@ class Simple_Language_Model(Model):
                         self._assign_home_to_agent(member, home)
                 else: # monolingual parents
                     # check if children are bilingual
-                    if 1 in [family[2].language, family[3].language]:
+                    if 1 in [m.info['language'] for m in family[2:4]]:
                         for ix, member in enumerate(family):
                             if ix < 2:
                                 member.set_lang_ics()
                             else:
-                                if member.language == 1:
+                                if member.info['language'] == 1:
                                     # logical that child has much better knowledge of parents lang
                                     member.set_lang_ics(biling_key=90)
                                 else:
@@ -598,7 +598,7 @@ class Simple_Language_Model(Model):
                 continue
             for coll in getattr(ag_occupation, colleagues).difference({ag}):
                 #check colleague lang distance and all frienship conditions
-                if (abs(coll.language - ag.language) <= 1 and
+                if (abs(coll.info['language'] - ag.info['language']) <= 1 and
                 len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
                 coll not in self.friendship_network[ag] and
                 coll not in self.family_network[ag]):
@@ -616,7 +616,7 @@ class Simple_Language_Model(Model):
             Then makes each speaker speak and the rest listen (loop through all involved agents)
             Args:
                 * ag_init : agent object instance. Agent that starts conversation
-                * others : list of agent object instances. Rest of agents that take part in conversation
+                * others : list of agent class instances. Rest of agents that take part in conversation
                            It can be a single agent object that will be automatically converted into a list
                 * bystander: extra agent that may listen to conversation words without actually being involved.
                     Agent vocabulary gets correspondingly updated if bystander agent is specified
@@ -627,7 +627,7 @@ class Simple_Language_Model(Model):
         # get all parameters of conversation
         conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
-            if ag.language != conv_params['mute_type']:
+            if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, long=conv_params['long'])
                 # call 'self' agent update
                 ag.update_lang_arrays(spoken_words)
@@ -638,14 +638,13 @@ class Simple_Language_Model(Model):
         # update acquaintances
         if type(others) is list:
             for ix, ag in enumerate(others):
-                if ag.language != conv_params['mute_type']:
+                if ag.info['language'] != conv_params['mute_type']:
                     ag_init.update_acquaintances(ag, conv_params['lang_group'][0])
                     ag.update_acquaintances(ag_init, conv_params['lang_group'][ix])
         else:
-            if others.language != conv_params['mute_type']:
+            if others.info['language'] != conv_params['mute_type']:
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])
                 others.update_acquaintances(ag_init, conv_params['lang_group'][1])
-
 
     def get_conv_params(self, ags):
         """
@@ -656,15 +655,13 @@ class Simple_Language_Model(Model):
             conversation length.
         It implements MAXIMIN language rule from Van Parijs
         Args:
-            * ag_init : agent object instance .Agent that starts conversation
-            * others : list of agent object instances. Rest of agents that take part in conversation
-                       It can be a single agent object that will be automatically converted into a list
+            * ags : list of agent class instances. All agents that take part in conversation
         Returns:
             * conv_params dict with following keys:
                 * lang: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
-                * mute_type: integer. agent lang type that is unable to speak in conversation
-                * bilingual:
-                * long:
+                * mute_type: integer. Agent lang type that is unable to speak in conversation
+                * bilingual: boolean. True if conv is held in more than one language
+                * long: boolean. True if conv is long
         """
 
         # redefine separate agents for readability
@@ -678,7 +675,7 @@ class Simple_Language_Model(Model):
         l2_pcts = [ag.lang_stats['L2']['pct'][ag.info['age']] for ag in ags]
         # get lists of favorite language per agent and set of language types involved
         fav_lang_per_agent = list(np.argmax([l1_pcts, l2_pcts], axis=0))
-        ags_lang_types = set([ag.language for ag in ags])
+        ags_lang_types = set([ag.info['language'] for ag in ags])
 
         # define current case
         if ags_lang_types in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
@@ -723,7 +720,7 @@ class Simple_Language_Model(Model):
                 # Some agents only understand and speak L1, while others partially understand but can't speak L1
                 # slight bias towards l1 => conversation in l1 but some speakers will stay mute = > short conversation
                 mute_type = 2
-                if ag_init.language != mute_type:
+                if ag_init.info['language'] != mute_type:
                     lang_group = 0
                 else:
                     lang_group, mute_type = 1, 0
@@ -735,7 +732,7 @@ class Simple_Language_Model(Model):
                 # Some agents only understand and speak l2, while others partially understand but can't speak l2
                 # slight bias towards l2 => conversation in L2 but some speakers will stay mute = > short conversation
                 mute_type = 0
-                if ag_init.language != mute_type:
+                if ag_init.info['language'] != mute_type:
                     lang_group = 1
                 else:
                     lang_group, mute_type = 0, 2
@@ -745,7 +742,7 @@ class Simple_Language_Model(Model):
                 # There are agents on both lang sides unable to follow other's speech.
                 # Initiator agent will speak with whom understands him, others will listen but understand nothing
 
-                if ag_init.language == 1:
+                if ag_init.info['language'] == 1:
                     # init agent is bilingual
                     # pick majority lang
                     num_l1_speakers = sum([1 if pct >= 0.1 else 0 for pct in l1_pcts])
@@ -765,6 +762,8 @@ class Simple_Language_Model(Model):
 
         if not conv_params['multilingual']:
             conv_params['lang_group'] = [conv_params['lang_group']] * len(ags)
+
+        conv_params['min_group_age'] = min([ag.age for ag in ags])
 
         return conv_params
 
@@ -835,7 +834,7 @@ class Simple_Language_Model(Model):
             * lang type count as percentage of total
 
         """
-        ag_lang_list = [ag.language for ag in self.schedule.agents]
+        ag_lang_list = [ag.info['language'] for ag in self.schedule.agents]
         num_ag = len(ag_lang_list)
         lang_counts = Counter(ag_lang_list)
         return lang_counts[i]/num_ag
@@ -849,7 +848,7 @@ class Simple_Language_Model(Model):
 
         """
         list_biling = [ag.lang_stats['L2']['pct'][ag.info['age']] for ag in self.schedule.agents
-                       if ag.language == 1]
+                       if ag.info['language'] == 1]
         if list_biling:
             return np.array(list_biling).mean()
         else:
@@ -1042,6 +1041,6 @@ class Simple_Language_Model(Model):
         #        people_pos_dict= dict(zip(self.schedule.agents, people_pos))
         people_pos_dict = {elem: elem.pos
                            for elem in self.schedule.agents}
-        people_color = [elem.language for elem in self.family_network]
+        people_color = [elem.info['language'] for elem in self.family_network]
         nx.draw(self.family_network, pos=people_pos_dict, node_color=people_color)
 
