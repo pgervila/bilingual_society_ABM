@@ -44,7 +44,7 @@ class StagedActivation_modif(StagedActivation):
     def step(self):
         """ Executes all the stages for all agents. """
         for agent in self.agents[:]:
-            agent.info['age']+= 1
+            agent.info['age'] += 1
             # simulate chance to reproduce
             agent.reproduce()
             for lang in ['L1', 'L2']:
@@ -763,13 +763,13 @@ class Simple_Language_Model(Model):
         if not conv_params['multilingual']:
             conv_params['lang_group'] = [conv_params['lang_group']] * len(ags)
 
-        conv_params['min_group_age'] = min([ag.age for ag in ags])
+        conv_params['min_group_age'] = min([ag.info['age'] for ag in ags])
 
         return conv_params
 
     def remove_after_death(self, agent):
         """ Removes agent object from all places where it belongs.
-            It makes sure no references to agent object are left aftr removal,
+            It makes sure no references to agent object are left after removal,
             so that garbage collector can free memory
             Call this function if death conditions for agent are verified
         """
@@ -797,6 +797,7 @@ class Simple_Language_Model(Model):
         # make id from deceased agent available
         self.set_available_ids.add(agent.unique_id)
 
+        # TODO : need to do 'del agent' to delete last reference to instance???
 
 
     def step(self):

@@ -10,19 +10,19 @@ from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
 
 
 class BaseAgent:
-    """ Main agent class that contains methods common to all lang agents subclasses"""
+    """ Basic agent class that contains attributes and methods common to all lang agents subclasses"""
 
     # define memory retrievability constant
     k = np.log(10 / 9)
 
-    def __init__(self, model, unique_id, language, sex, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
-                 ag_home=None, ag_school=None, ag_job=None, city_idx=None, import_IC=False):
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
         """ language => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
-        self.info = {'age': age, 'married': False, 'language': language, 'sex': sex, 'num_children': 0}
+        self.info = {'age': age, 'language': language, 'sex': sex}
+        self.loc_info = {'home': home, 'city_idx': city_idx, 'school': school}
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
-        self.loc_info = {'home': ag_home, 'city_idx': city_idx, 'school': ag_school, 'job': ag_job}
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
@@ -128,7 +128,6 @@ class BaseAgent:
             for lang_key, lang_words in words:
                 words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
                                                   lang_words, assume_unique=True)
-
                 self.update_lang_arrays(words, speak=False)
 
 
@@ -285,11 +284,13 @@ class BaseAgent:
 
 class Baby(BaseAgent): # from 0 to 2
 
-    def listen(self, to_agent=None):
-        """Listen to parents, siblings, family, friends of family
-        :param to_agent:
-        """
-        pass
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
+                         lang_act_thresh, lang_passive_thresh, import_IC)
+        self.info['mother'] = [ag for ag in self.model.family_network[self]
+                               if self.model.family_network[self][ag]['fam_link'] == 'mother'][0]
+        # TODO add self.info['father'], self.info['siblings']
 
     def get_conversation_lang(self):
         """ Adapt to baby exceptions"""
@@ -311,50 +312,64 @@ class Baby(BaseAgent): # from 0 to 2
                 else:
                     com_lang = 1 if lang == 0 else 0
                 if labels["fam_link"] == 'father':
-                    self.family_networks.add_edge(self, agent, fam_link='grandfather',
+                    self.model.family_network.add_edge(self, agent, fam_link='grandfather',
                                                   lang=com_lang )
-                    self.family_networks.add_edge(agent, self, fam_link='grandchild',
+                    self.model.family_network.add_edge(agent, self, fam_link='grandchild',
                                                   lang=com_lang)
                 elif labels["fam_link"] == 'mother':
-                    self.family_networks.add_edge(self, agent, fam_link='grandmother', lang=com_lang)
-                    self.family_networks.add_edge(agent, self, fam_link='grandchild', lang=com_lang)
+                    self.model.family_network.add_edge(self, agent, fam_link='grandmother', lang=com_lang)
+                    self.model.family_network.add_edge(agent, self, fam_link='grandchild', lang=com_lang)
                 elif labels["fam_link"] == 'sibling':
-                    self.family_networks.add_edge(self, agent,
-                                                  fam_link='uncle' if agent.info['sex'] == 'M' else 'aunt',
-                                                  lang=com_lang)
-                    self.family_networks.add_edge(agent, self, fam_link='nephew', lang=com_lang)
+                    self.model.family_network.add_edge(self, agent,
+                                                       fam_link='uncle' if agent.info['sex'] == 'M' else 'aunt',
+                                                       lang=com_lang)
+                    self.model.family_network.add_edge(agent, self, fam_link='nephew', lang=com_lang)
                     if agent.info['married']:
                         consort = [key for key, value
-                                   in self.family_networks[agent].items()
+                                   in self.model.family_network[agent].items()
                                    if value['fam_link'] == 'consort'][0]
-                        self.family_networks.add_edge(self, consort,
-                                                      fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
-                        self.family_networks.add_edge(consort, self, fam_link='nephew', lang=com_lang)
+                        self.model.family_network.add_edge(self, consort,
+                                                           fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
+                        self.model.family_network.add_edge(consort, self, fam_link='nephew', lang=com_lang)
                 elif labels["fam_link"] == 'nephew':
-                    self.family_networks.add_edge(self, agent, fam_link='cousin', lang=com_lang)
-                    self.family_networks.add_edge(agent, self, fam_link='cousin', lang=com_lang)
+                    self.model.family_network.add_edge(self, agent, fam_link='cousin', lang=com_lang)
+                    self.model.family_network.add_edge(agent, self, fam_link='cousin', lang=com_lang)
 
     def stage_1(self):
-        self.listen()
+        if self.age > 36:
+            for ag in [ag for ag in self.loc_info['home'].occupants.difference({self})
+                       if ag.info['age'] > 72]:
+                self.listen(to_agent=ag)
 
     def stage_2(self):
-        pass
+        if self.age > 36:
+            self.model.grid.move_agent(self, self.loc_info['school'].pos)
+            self.loc_info['school'].agents_in.add(self)
+            school_ags = np.random.choice(self.loc_info['school'].agents_in, size=3)
+            for ag in school_ags:
+                self.listen(to_agent=ag)
 
     def stage_3(self):
-        pass
+        if self.age > 36:
+            grown_up_family = [ag for ag in self.model.family_network[self]]
 
     def stage_4(self):
+        if self.age > 36:
+            for ag in [ag for ag in self.loc_info['home'].occupants.difference({self})
+                       if ag.info['age'] > 72]:
+                self.listen(to_agent=ag)
         if self.info['age'] == 36 * 2:
             self.grow(Child)
 
-class Child(Baby): #from 2 to 10
+class Child(BaseAgent): #from 2 to 10
 
-    def __init__(self, model, unique_id, language, sex, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
-                 ag_home=None, ag_school=None, import_IC=False):
-        super().__init__(model, unique_id, language, None, age, ag_home, city_idx, import_IC)
-        self.loc_info['school'] = ag_school
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
+                         lang_act_thresh, lang_passive_thresh, import_IC)
 
-    def pick_vocab(self, lang, long=True, min_age_interlocs=None, biling_interloc=False):
+    def pick_vocab(self, lang, long=True, min_age_interlocs=None,
+                   biling_interloc=False, num_days=10):
         """ Method that models word choice by self agent in a conversation
             Word choice is governed by vocabulary knowledge constraints
             Args:
@@ -364,6 +379,7 @@ class Child(Baby): #from 2 to 10
                     It is used to modulate conversation vocabulary to younger agents
                 * biling_interloc : boolean. If True, speaker word choice might be mixed, since
                     he/she is certain interlocutor will understand
+                * num_days : integer [1, 10]. Number of days in one 10day-step this kind of speech is done
             Output:
                 * spoken words: dict where keys are lang labels and values are lists with words spoken
                     in lang key and corresponding counts
@@ -371,16 +387,16 @@ class Child(Baby): #from 2 to 10
 
         # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
 
-        #TODO : model 'Grammatical foreigner talk' =>
-        #TODO : how word choice is adapted by native speakers when speaking to adult learners
-        #TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
+        # TODO : model 'Grammatical foreigner talk' =>
+        # TODO : how word choice is adapted by native speakers when speaking to adult learners
+        # TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
 
         # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in following STEPS
 
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
         # These are the thoughts that speaker tries to convey
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
-        num_words = int(self.get_num_words_per_conv(long) * 10) #TODO: check the value 10 !!!
+        num_words = int(self.get_num_words_per_conv(long) * num_days)
         if min_age_interlocs:
             word_samples = randZipf(self.model.cdf_data['s'][min_age_interlocs], num_words)
         else:
@@ -460,6 +476,11 @@ class Child(Baby): #from 2 to 10
 
 class Adolescent(Child): # from 10 to 18
 
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
+                         lang_act_thresh, lang_passive_thresh, import_IC)
+
     def move_random(self):
         """ Take a random step into any surrounding cell
             All eight surrounding cells are available as choices
@@ -493,11 +514,15 @@ class Adolescent(Child): # from 10 to 18
 
 class Young(Adolescent): # from 18 to 30
 
-    def __init__(self, model, unique_id, language, sex, age=0, lang_act_thresh=0.1, lang_passive_thresh=0.025,
-                 ag_home=None, ag_school=None, ag_job=None, city_idx=None):
-        super().__init__(model, unique_id, language, sex, age, ag_home, ag_school, city_idx, import_IC=False)
-        self.loc_info['job'] = ag_job
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False,
+                 married=False, num_children=0, job=None):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
+                         lang_act_thresh, lang_passive_thresh, import_IC)
+        self.info['married'] = married
         self.info['num_children'] = num_children
+        self.loc_info['job'] = job
+
 
     def get_partner(self):
         """ Check lang distance is not > 1"""
@@ -528,9 +553,7 @@ class Young(Adolescent): # from 18 to 30
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate agent
-            a = Baby(self.model, id_, lang, ag_home=self.loc_info['home'],
-                     ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
-                     city_idx=self.loc_info['city_idx'])
+            a = Baby(self.model, id_, lang, sex=self.loc_info['home'], city_idx=self.loc_info['city_idx'])
             # Add agent to model
             self.model.add_agent_to_grid_sched_networks(a)
             # Update num of children for both self and consort
@@ -599,6 +622,14 @@ class Young(Adolescent): # from 18 to 30
 
 class Adult(Young): # from 30 to 65
 
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False,
+                 married=False, num_children=0, job=None):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
+                         lang_act_thresh, lang_passive_thresh, import_IC,
+                         married, num_children, job)
+
+
     def reproduce(self, day_prob=0.005):
         if self.info['age'] < 40 * 36:
             pass  # try chance
@@ -617,6 +648,14 @@ class Adult(Young): # from 30 to 65
             self.grow(Pensioner)
 
 class Pensioner(Adult): # from 65 to death
+
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False,
+                 married=False, num_children=0, job=None):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
+                         lang_act_thresh, lang_passive_thresh, import_IC,
+                         married, num_children, job)
+
     def stage_1(self):
         pass
 
