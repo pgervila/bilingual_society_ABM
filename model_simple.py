@@ -75,6 +75,7 @@ class Simple_Language_Model(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
+    school_lang_policy = [1]
 
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250), width=100, height=100,
                  max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
@@ -307,21 +308,28 @@ class Simple_Language_Model(Model):
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
                 self.clusters_info[clust_idx]['jobs'].append(Job((x,y), num_places))
 
-    def map_schools(self, school_size=100):
+    def map_schools(self, max_school_size=100):
         """ Generate coordinates for school centers and instantiate school objects
             Args:
-                * school_size: fixed size of all schools generated
+                * max_school_size: fixed size of all schools generated
         """
-        num_schools_per_agent = self.max_people_factor / school_size
+        num_schools_per_agent = self.max_people_factor / max_school_size
+
+
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
-            x_s, y_s = self.generate_cluster_points_coords(clust_c_coords,
-                                                           ceil(clust_size * num_schools_per_agent))
+            school_places_per_cluster = int(self.max_people_factor * clust_size / 2)
+            num_schools_per_cluster = ceil(school_places_per_cluster / max_school_size)
+            # generate school coords
+            x_s, y_s = self.generate_cluster_points_coords(clust_c_coords, num_schools_per_cluster)
             if (not self.lang_ags_sorted_by_dist) and (self.lang_ags_sorted_in_clust):
                 x_s, y_s = self.sort_coords_in_clust(x_s, y_s, clust_idx)
-            for x,y in zip(x_s, y_s):
-                self.clusters_info[clust_idx]['schools'].append(School((x,y), school_size))
+            for x, y in zip(x_s, y_s):
+                school_size = min(max_school_size, school_places_per_cluster)
+                school = School((x, y), school_size, clust_idx, lang_policy = self.school_lang_policy)
+                self.clusters_info[clust_idx]['schools'].append(school)
+                school_places_per_cluster -= school_size
 
     def map_homes(self, num_people_per_home=4):
         """ Generate coordinates for agent homes and instantiate Home objects"""
@@ -522,12 +530,26 @@ class Simple_Language_Model(Model):
 
                 # assign job to parents
                 for parent in family[:2]:
+                    # TODO : assign all school jobs
+                    # if random.random() < 0.6:
+                    #     while True:
+                    #         school = random.choice(clust_info['schools'])
+                    #         lang_sch = school.info['lang_policy']
+                    #         if len(school.info['teachers']) < 5:
+                    #             if lang_sch == 1 and parent.language
+                    #
+                    #
+                    #             school.info['teachers'].append(parent)
+                    #
+                    #
+                    #
+                    # else:
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
                             job.num_places -= 1
                             parent.loc_info['job'] = job
-                            job.employees.add(parent)
+                            job.info['employees'].add(parent)
                             break
                 # assign school to children
                 # find closest school
@@ -536,7 +558,7 @@ class Simple_Language_Model(Model):
                 school = clust_info['schools'][idx_school]
                 for child in family[2:]:
                     child.loc_info['school'] = school
-                    school.students.add(child)
+                    school.info['students'].add(child)
                 # find out lang of interaction btw family members
                 # consorts
                 lang_consorts, pcts = self.define_lang_interaction(family[0], family[1], ret_pcts=True)
@@ -558,7 +580,7 @@ class Simple_Language_Model(Model):
                 for (i, j, link) in [(0, 2, 'child'), (2, 0, 'father'), (0, 3, 'child'), (3, 0, 'father')]:
                     self.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_father)
                     self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_father)
-                for (i, j, link) in [(1, 2, 'child'), (2, 1, 'mother'), (1,3, 'child'), (3,1,'mother')]:
+                for (i, j, link) in [(1, 2, 'child'), (2, 1, 'mother'), (1, 3, 'child'), (3, 1,'mother')]:
                     self.family_network.add_edge(family[i], family[j], fam_link=link, lang=lang_with_mother)
                     self.known_people_network.add_edge(family[i], family[j], family=True, lang=lang_with_mother)
                 for (i, j) in [(2, 3), (3, 2)]:
@@ -596,7 +618,7 @@ class Simple_Language_Model(Model):
                 colleagues = 'students'
             else:
                 continue
-            for coll in getattr(ag_occupation, colleagues).difference({ag}):
+            for coll in getattr(ag_occupation, 'info')[colleagues].difference({ag}):
                 #check colleague lang distance and all frienship conditions
                 if (abs(coll.info['language'] - ag.info['language']) <= 1 and
                 len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and

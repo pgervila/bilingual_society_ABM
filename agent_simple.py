@@ -4,6 +4,7 @@ import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
 from collections import defaultdict
+from itertools import groupby
 
 #import private library to model lang zipf CDF
 from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
@@ -16,7 +17,7 @@ class BaseAgent:
     k = np.log(10 / 9)
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
         """ language => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
@@ -25,10 +26,10 @@ class BaseAgent:
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
 
         # define container for languages' tracking and statistics
-        self.lang_stats = defaultdict(lambda:defaultdict(dict))
+        self.lang_stats = defaultdict(lambda: defaultdict(dict))
         self.day_mask = {l: np.zeros(self.model.vocab_red, dtype=np.bool)
                          for l in ['L1', 'L12', 'L21', 'L2']}
-        if import_IC:
+        if import_ic:
             self.set_lang_ics()
         else:
             # set null knowledge in all possible langs
@@ -102,11 +103,12 @@ class BaseAgent:
         self._set_null_lang_attrs('L12', S_0, t_0)
         self._set_null_lang_attrs('L21', S_0, t_0)
 
-    def listen(self, to_agent=None):
+    def listen(self, to_agent=None, min_age_interlocs=None):
         """
             Method to listen to conversations, media, etc... and update corresponding vocabulary
             Args:
                 * to_agent: class instance. It can be either a language agent or a media agent
+                :param min_age_interlocs:
         """
         if not to_agent:
             # get all agents currently placed on chosen cell
@@ -123,7 +125,7 @@ class BaseAgent:
                 lang = self.model.known_people_network[self][to_agent]['lang']
             else:
                 lang = self.model.define_lang_interaction(self, to_agent)
-            words = to_agent.pick_vocab(lang, long=False)
+            words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs)
 
             for lang_key, lang_words in words:
                 words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
@@ -285,12 +287,18 @@ class BaseAgent:
 class Baby(BaseAgent): # from 0 to 2
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
-                         lang_act_thresh, lang_passive_thresh, import_IC)
-        self.info['mother'] = [ag for ag in self.model.family_network[self]
-                               if self.model.family_network[self][ag]['fam_link'] == 'mother'][0]
-        # TODO add self.info['father'], self.info['siblings']
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
+                         lang_passive_thresh, import_ic)
+
+        self.info['close_family'] = {}
+        self.info['close_family']['mother'] = [ag for ag in self.model.family_network[self]
+                                               if self.model.family_network[self][ag]['fam_link'] == 'mother'][0]
+        self.info['close_family']['father'] = [ag for ag in self.model.family_network[self]
+                                               if self.model.family_network[self][ag]['fam_link'] == 'father'][0]
+        self.info['close_family']['siblings'] = [ag for ag in self.model.family_network[self]
+                                                 if self.model.family_network[self][ag]['fam_link'] == 'sibling']
+        self.info['teacher'] = random.choice(self.loc_info['school'].info['teachers'])
 
     def get_conversation_lang(self):
         """ Adapt to baby exceptions"""
@@ -337,36 +345,58 @@ class Baby(BaseAgent): # from 0 to 2
 
     def stage_1(self):
         if self.age > 36:
-            for ag in [ag for ag in self.loc_info['home'].occupants.difference({self})
+            for ag in [ag for ag in self.loc_info['home'].agents_in.difference({self})
                        if ag.info['age'] > 72]:
-                self.listen(to_agent=ag)
+                self.listen(to_agent=ag, min_age_interlocs=self.age)
 
     def stage_2(self):
         if self.age > 36:
-            self.model.grid.move_agent(self, self.loc_info['school'].pos)
-            self.loc_info['school'].agents_in.add(self)
+            school = self.loc_info['school']
+            self.model.grid.move_agent(self, school.pos)
+            mother = self.info['close_family']['mother']
+            self.listen(to_agent=mother, min_age_interlocs=self.age)
+            # TODO : talk to children teacher
+            school.agents_in.add(self)
             school_ags = np.random.choice(self.loc_info['school'].agents_in, size=3)
             for ag in school_ags:
                 self.listen(to_agent=ag)
+            teacher = random.choice(school.info['teachers'])
+            self.listen(to_agent=teacher)
+
+
+
 
     def stage_3(self):
         if self.age > 36:
-            grown_up_family = [ag for ag in self.model.family_network[self]]
+            mother = self.info['close_family']['mother']
+            school = self.loc_info['school']
+            parents = [p.info['close_family']['mother']
+                       if random.random() > 0.4 else p.info['close_family']['father']
+                       for p in school.info['students'] if p['mother'].pos == school.pos]
+            if parents:
+                self.model.grid.move_agent(mother, school.pos)
+                num_peop = random.randint(1, min(len(parents), 4))
+                mother.start_conversation(with_agents = random.sample(parents, num_peop))
+            for stud in school.info['students']:
+                if stud.info['close_family']['mother']:
+                    pass
+
+            self.listen(to_agent=mother, min_age_interlocs=self.age)
 
     def stage_4(self):
         if self.age > 36:
-            for ag in [ag for ag in self.loc_info['home'].occupants.difference({self})
+            for ag in [ag for ag in self.loc_info['home'].agents_in.difference({self})
                        if ag.info['age'] > 72]:
-                self.listen(to_agent=ag)
+                self.listen(to_agent=ag, min_age_interlocs=self.age)
         if self.info['age'] == 36 * 2:
             self.grow(Child)
 
 class Child(BaseAgent): #from 2 to 10
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
-                         lang_act_thresh, lang_passive_thresh, import_IC)
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
+                         lang_passive_thresh, import_ic)
 
     def pick_vocab(self, lang, long=True, min_age_interlocs=None,
                    biling_interloc=False, num_days=10):
@@ -477,9 +507,9 @@ class Child(BaseAgent): #from 2 to 10
 class Adolescent(Child): # from 10 to 18
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
-                         lang_act_thresh, lang_passive_thresh, import_IC)
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
+                         lang_passive_thresh, import_ic)
 
     def move_random(self):
         """ Take a random step into any surrounding cell
@@ -515,13 +545,16 @@ class Adolescent(Child): # from 10 to 18
 class Young(Adolescent): # from 18 to 30
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False,
-                 married=False, num_children=0, job=None):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
-                         lang_act_thresh, lang_passive_thresh, import_IC)
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
+                         lang_passive_thresh, import_ic)
         self.info['married'] = married
         self.info['num_children'] = num_children
         self.loc_info['job'] = job
+        self.info['close_family']['consort'] = [ag for ag in self.model.family_network[self]
+                                                if self.model.family_network[self][ag]['fam_link'] == 'consort'][0]
+        self.info['close_family']['children'] = [ag for ag in self.model.family_network[self]
+                                                 if self.model.family_network[self][ag]['fam_link'] == 'child']
 
 
     def get_partner(self):
@@ -553,7 +586,9 @@ class Young(Adolescent): # from 18 to 30
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate agent
-            a = Baby(self.model, id_, lang, sex=self.loc_info['home'], city_idx=self.loc_info['city_idx'])
+            sex = 'M' if random.random() > 0.5 else 'F'
+            a = Baby(self.model, id_, lang, sex, home=self.loc_info['home'],
+                     school=closest_school_idx, city_idx=self.loc_info['city_idx'])
             # Add agent to model
             self.model.add_agent_to_grid_sched_networks(a)
             # Update num of children for both self and consort
@@ -623,11 +658,9 @@ class Young(Adolescent): # from 18 to 30
 class Adult(Young): # from 30 to 65
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False,
-                 married=False, num_children=0, job=None):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
-                         lang_act_thresh, lang_passive_thresh, import_IC,
-                         married, num_children, job)
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
+                         lang_passive_thresh, import_ic)
 
 
     def reproduce(self, day_prob=0.005):
@@ -650,11 +683,9 @@ class Adult(Young): # from 30 to 65
 class Pensioner(Adult): # from 65 to death
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_IC=False,
-                 married=False, num_children=0, job=None):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
-                         lang_act_thresh, lang_passive_thresh, import_IC,
-                         married, num_children, job)
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
+                         lang_passive_thresh, import_ic)
 
     def stage_1(self):
         pass
@@ -867,7 +898,7 @@ class Simple_Language_Agent:
             if job_c.num_places:
                 job_c.num_places -= 1
                 self.loc_info['job'] = job_c
-                job_c.employees.add(self)
+                job_c.info['employees'].add(self)
                 job_c.agents_in.add(self)
                 break
 
@@ -1237,11 +1268,39 @@ class Home:
 
 
 class School:
-    def __init__(self, pos, num_places):
-        self.students = set()
-        self.pos=pos
-        self.num_free=num_places
+    """ Class that defines a School object
+        Args:
+          * lang_policy: requested languages in order to work at this site
+            [0, 1] -> both 0, 1 agents may work here
+            [1] -> only 1 agents may work here
+            [1, 2] -> both 1, 2 agents may work here
+    """
+    def __init__(self, pos, num_places, clust, age_range=(1, 18), lang_policy=None):
+        self.pos = pos
+        self.num_free = num_places
         self.agents_in = set()
+        self.info = {'teachers': set(), 'students': set(),
+                     'lang_policy': lang_policy, 'clust': clust,
+                     'age_range': age_range} # 4 teachers
+
+    def group_students_per_year(self):
+        """ organize students per age in order to create different courses"""
+        ags = list(self.info['students'])
+        ags_sorted = sorted(ags, key=lambda x: int(x.info['age'] / 36))
+        ags_grouped = [(k, list(it)) for k, it in groupby(ags_sorted,
+                                                          lambda x: int(x.info['age'] / 36))]
+
+    def look_for_teachers(self, min_age = 30):
+        """ Look for teachers when needed"""
+        if len(self.info['teachers']) < 5:
+            ix = self.info['clust']
+            for ag in self.model.clusters_info[ix]['agents']:
+                if ag.age > min_age * 36 and not ag.loc_info['job'] and ag.language in self.info['lang_policy']:
+                    ag.loc_info['job'] = self
+                    self.info['teachers'].append(ag)
+                    break
+
+
     def __repr__(self):
         return 'School_{0.pos!r}'.format(self)
 
@@ -1249,17 +1308,22 @@ class School:
 class Job:
     """ class that defines a Job object.
         Args:
+            *
             * lang_policy: requested languages in order to work at this site
                 0 -> only L1 (so both 0, 1 agents may work here)
                 1 -> both L1 and L2 ( only 1 agents may work here )
                 2 -> only L2 (so both 1, 2 agents may work here)
     """
     def __init__(self, pos, num_places, skill_level=0, lang_policy = 1):
-        self.employees = set()
         self.pos=pos
         self.num_places=num_places
-        self.skill_level = skill_level
+        self.info = {'employees': set(), 'lang_policy': lang_policy,
+                     'skill_level': skill_level, }
         self.agents_in = set()
-        self.lang_policy = lang_policy
+
+
+    def look_for_employees(self):
+        pass
+
     def __repr__(self):
         return 'Job{0.pos!r}'.format(self)
