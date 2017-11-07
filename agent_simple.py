@@ -1270,36 +1270,43 @@ class Home:
 class School:
     """ Class that defines a School object
         Args:
-          * lang_policy: requested languages in order to work at this site
-            [0, 1] -> both 0, 1 agents may work here
-            [1] -> only 1 agents may work here
-            [1, 2] -> both 1, 2 agents may work here
+            * pos: 2-D tuple of integers. School coordinates
+            * num_places: integer. Total number of school places available
+            * clust: integer. Cluster to which school belongs
+            * age_range: 2-D tuple of integers.
+            * lang_policy: requested languages in order to work at this site
+                [0, 1] -> both 0, 1 agents may work here
+                [1] -> only 1 agents may work here
+                [1, 2] -> both 1, 2 agents may work here
     """
     def __init__(self, pos, num_places, clust, age_range=(1, 18), lang_policy=None):
         self.pos = pos
-        self.num_free = num_places
         self.agents_in = set()
-        self.info = {'teachers': set(), 'students': set(),
+        self.info = {'employees': set(), 'students': set(),
                      'lang_policy': lang_policy, 'clust': clust,
-                     'age_range': age_range} # 4 teachers
+                     'age_range': age_range, 'num_places': num_places}
+
+    def school_year_timer(self):
+        pass
 
     def group_students_per_year(self):
-        """ organize students per age in order to create different courses"""
-        ags = list(self.info['students'])
-        ags_sorted = sorted(ags, key=lambda x: int(x.info['age'] / 36))
-        ags_grouped = [(k, list(it)) for k, it in groupby(ags_sorted,
-                                                          lambda x: int(x.info['age'] / 36))]
+        """ organize students per age in order to create different courses """
+        list_studs = list(self.info['students'])
+        studs_sorted = sorted(list_studs, key=lambda x: int(x.info['age'] / 36))
+        # get list of tuples with age and corresponding students, then make dict
+        self.grouped_studs = dict([(k, list(stud)) for k, stud in groupby(studs_sorted,
+                                                                          lambda x: int(x.info['age'] / 36))])
+        # compute number of teachers needed
 
-    def look_for_teachers(self, min_age = 30):
+    def look_for_teachers(self, min_age=30):
         """ Look for teachers when needed"""
-        if len(self.info['teachers']) < 5:
+        if len(self.info['teachers']) < len(self.grouped_studs):
             ix = self.info['clust']
             for ag in self.model.clusters_info[ix]['agents']:
                 if ag.age > min_age * 36 and not ag.loc_info['job'] and ag.language in self.info['lang_policy']:
                     ag.loc_info['job'] = self
                     self.info['teachers'].append(ag)
                     break
-
 
     def __repr__(self):
         return 'School_{0.pos!r}'.format(self)
@@ -1327,3 +1334,6 @@ class Job:
 
     def __repr__(self):
         return 'Job{0.pos!r}'.format(self)
+
+class University(School):
+    pass
