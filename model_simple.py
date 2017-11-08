@@ -663,7 +663,7 @@ class Simple_Language_Model(Model):
                 if len(self.friendship_network[ag]) > num_friends - 1:
                     break
 
-    def run_conversation(self, ag_init, others, bystander=None):
+    def run_conversation(self, ag_init, others, bystander=None, num_days=10):
         """ Method that models conversation between ag_init and others
             Calls method to determine conversation parameters
             Then makes each speaker speak and the rest listen (loop through all involved agents)
@@ -673,6 +673,7 @@ class Simple_Language_Model(Model):
                            It can be a single agent object that will be automatically converted into a list
                 * bystander: extra agent that may listen to conversation words without actually being involved.
                     Agent vocabulary gets correspondingly updated if bystander agent is specified
+                * num_days: integer [1, 10]. Number of days in one 10day-step this kind of speech is done
         """
         # define list of all agents involved
         ags = [ag_init]
@@ -681,7 +682,7 @@ class Simple_Language_Model(Model):
         conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
-                spoken_words = ag.pick_vocab(lang, long=conv_params['long'])
+                spoken_words = ag.pick_vocab(lang, long=conv_params['long'], num_days=num_days)
                 # call 'self' agent update
                 ag.update_lang_arrays(spoken_words)
                 # call listeners' updates ( check if there is a bystander)

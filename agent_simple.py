@@ -76,7 +76,7 @@ class BaseAgent:
         self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                  self.model.vocab_red)
+                                                          self.model.vocab_red)
 
     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
         """ set agent's linguistic Initial Conditions by calling set up methods
@@ -103,12 +103,15 @@ class BaseAgent:
         self._set_null_lang_attrs('L12', S_0, t_0)
         self._set_null_lang_attrs('L21', S_0, t_0)
 
-    def listen(self, to_agent=None, min_age_interlocs=None):
+    def listen(self, to_agent=None, min_age_interlocs=None, num_days=10):
         """
             Method to listen to conversations, media, etc... and update corresponding vocabulary
             Args:
-                * to_agent: class instance. It can be either a language agent or a media agent
-                :param min_age_interlocs:
+                * to_agent: class instance (optional). It can be either a language agent or a media agent.
+                    If not specified, self agent will listen to a random conversation taking place on his cell
+                * min_age_interlocs: integer. Allows to adapt vocabulary pick to the youngest
+                    participant in the conversation
+                * num_days:
         """
         if not to_agent:
             # get all agents currently placed on chosen cell
@@ -125,7 +128,8 @@ class BaseAgent:
                 lang = self.model.known_people_network[self][to_agent]['lang']
             else:
                 lang = self.model.define_lang_interaction(self, to_agent)
-            words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs)
+            words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs,
+                                        num_days=num_days)
 
             for lang_key, lang_words in words:
                 words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
@@ -298,7 +302,7 @@ class Baby(BaseAgent): # from 0 to 2
                                                if self.model.family_network[self][ag]['fam_link'] == 'father'][0]
         self.info['close_family']['siblings'] = [ag for ag in self.model.family_network[self]
                                                  if self.model.family_network[self][ag]['fam_link'] == 'sibling']
-        self.info['teacher'] = random.choice(self.loc_info['school'].info['teachers'])
+        #TODO modify self.info['teacher'] = random.choice(self.loc_info['school'].info['teachers'])
 
     def get_conversation_lang(self):
         """ Adapt to baby exceptions"""
@@ -363,9 +367,6 @@ class Baby(BaseAgent): # from 0 to 2
             teacher = random.choice(school.info['teachers'])
             self.listen(to_agent=teacher)
 
-
-
-
     def stage_3(self):
         if self.age > 36:
             mother = self.info['close_family']['mother']
@@ -405,7 +406,7 @@ class Child(BaseAgent): #from 2 to 10
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
                 * long: boolean that defines conversation length
-                * min_age_interlocs: the youngest age among all interlocutors, EXPRESSED IN STEPS.
+                * min_age_interlocs: integer. The youngest age among all interlocutors, EXPRESSED IN STEPS.
                     It is used to modulate conversation vocabulary to younger agents
                 * biling_interloc : boolean. If True, speaker word choice might be mixed, since
                     he/she is certain interlocutor will understand
