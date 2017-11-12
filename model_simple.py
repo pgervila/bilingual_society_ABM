@@ -312,11 +312,10 @@ class Simple_Language_Model(Model):
     def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
             Args:
-                * max_school_size: fixed size of all schools generated
+                * max_school_size: integer. Maximum size of all schools generated
+                * min_school_size: integer. Minimum size of all schools generated. Must be < max_school_size
+                * buffer_factor: float > 1. Allows to define buffer wrt current number of student population
         """
-        num_schools_per_agent = self.max_people_factor / max_school_size
-
-
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
@@ -472,6 +471,76 @@ class Simple_Language_Model(Model):
         else:
             return lang
 
+    # def assign_jobs(self, family, clust_info):
+    #     # assign job to parents
+    #     for parent in family[:2]:
+    #         while True:
+    #             job = np.random.choice(clust_info['jobs'])
+    #             if job.num_places:
+    #                 job.num_places -= 1
+    #                 parent.loc_info['job'] = job
+    #                 job.info['employees'].add(parent)
+    #                 break
+    #
+    # def assign_schools(self, family, clust_info, home):
+    #     # assign school to children
+    #     # find closest school to home
+    #     # TODO : introduce also University for age > 18
+    #     idx_school = np.argmin([pdist([home.pos, school.pos])
+    #                             for school in clust_info['schools']])
+    #     school = clust_info['schools'][idx_school]
+    #     for child in family[2:]:
+    #         child.loc_info['school'] = school
+    #         school.info['students'].add(child)
+    #
+
+    def assign_teachers_to_schools(self):
+        """ Method to find suitable teacher agents for all clusters
+            For each school, it groups students by age to form classes and assigns
+            a teacher to each class """
+        # assign school jobs
+        # get total number of courses in each school of cluster => number of teachers needed
+        for clust_idx, clust_info in self.clusters_info.items():
+            for school in clust_info['schools']:
+                school.group_students_per_year()
+                num_teachers = len(school.grouped_studs)
+                if num_teachers:
+                    candidat_ags = [ag for ag in clust_info['agents']
+                                    if ag.info['language'] in school.info['lang_policy'] and
+                                    ag.info['age'] > 1000 and 'job' in ag.loc_info and
+                                    not isinstance(ag.loc_info['job'], type(school))]
+                    if len(candidat_ags) < num_teachers:
+                        set_teachers = set(candidat_ags)
+                        idx_clust_sorted = sorted(range(len(self.clust_centers)),
+                                                  key=lambda x: pdist([self.clust_centers[x],
+                                                                       self.clust_centers[clust_idx]])[0])
+                        for idx in idx_clust_sorted[1:]:
+                            extra_ags = [ag for ag in self.clusters_info[idx]['agents']
+                                         if ag.info['language'] in school.info['lang_policy'] and
+                                         ag.info['age'] > 1000 and 'job' in ag.loc_info and
+                                         not isinstance(ag.loc_info['job'], type(school))]
+                            needed_teachers = num_teachers - len(set_teachers)
+                            if needed_teachers <= len(extra_ags):
+                                random.shuffle(extra_ags)
+                                set_teachers = set_teachers.union(set(extra_ags[:needed_teachers]))
+                            else:
+                                set_teachers = set_teachers.union(set(extra_ags))
+                            if len(set_teachers) == num_teachers:
+                                for t in set_teachers:
+                                    t.loc_info['job'] = school
+                                school.info['employees'] = school.info['employees'].union(set_teachers)
+                                break
+                    else:
+                        # assign school job only to as many ags as teachers are required (shuffle list first)
+                        random.shuffle(candidat_ags)
+                        for ag in candidat_ags[:num_teachers]:
+                            ag.loc_info['job'] = school
+                            school.info['employees'].add(ag)
+                # assign class key to teachers and add teachers to grouped studs
+                for (k, stds), t in zip(school.grouped_studs.items(), school.info['employees']):
+                    t.loc_info['class_key'] = k
+                    school.grouped_studs[k] = {'students':stds, 'teacher':t}
+
     def define_family_networks(self):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
@@ -534,17 +603,6 @@ class Simple_Language_Model(Model):
 
                 # assign job to parents
                 for parent in family[:2]:
-                    # TODO : assign all school jobs. first assign ordinary jobs, then loop on relevant lang agents to assign school jobs
-                    # if random.random() < 0.6:
-                    #     while True:
-                    #         school = random.choice(clust_info['schools'])
-                    #         lang_sch = school.info['lang_policy']
-                    #         if len(school.info['teachers']) < 5:
-                    #             if lang_sch == 1 and parent.language
-                    #
-                    #
-                    #             school.info['teachers'].append(parent)
-                    # else:
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
@@ -552,15 +610,17 @@ class Simple_Language_Model(Model):
                             parent.loc_info['job'] = job
                             job.info['employees'].add(parent)
                             break
+
                 # assign school to children
                 # find closest school
-                # TODO : adapt to new school class
+                # TODO : introduce also University for age > 18
                 idx_school = np.argmin([pdist([home.pos, school.pos])
                                         for school in clust_info['schools']])
                 school = clust_info['schools'][idx_school]
                 for child in family[2:]:
                     child.loc_info['school'] = school
                     school.info['students'].add(child)
+
                 # find out lang of interaction btw family members
                 # consorts
                 lang_consorts, pcts = self.define_lang_interaction(family[0], family[1], ret_pcts=True)
@@ -606,35 +666,8 @@ class Simple_Language_Model(Model):
                             job.num_places -= 1
                             ag.loc_info['job'] = job
                             break
-            # get total number of classes in each cluster school => number of teachers needed
-            # TODO : loop on schools, compute number of classes once students are assigned to school
-            for school in clust_info['schools']:
-                school.group_students_per_year()
-                num_teachers = len(school.grouped_studs)
-                if num_teachers:
-                    candidat_ags = [ag for ag in clust_info['agents']
-                                    if ag.info['language'] in self.school_lang_policy and
-                                    ag.info['age'] > 1000 and 'job' in ag.loc_info and
-                                    not isinstance(ag.loc_info['job'], type(school))]
-                    if len(candidat_ags) < num_teachers:
-                        idx_clust_sorted = sorted(range(len(self.clust_centers)),
-                                                  key=lambda x: pdist([self.clust_centers[x],
-                                                                       self.clust_centers[clust_idx]])[0])
-                        for idx in idx_clust_sorted[1:]:
-                            for ag in self.clusters_info[idx]['agents']:
-                                if (ag.info['language'] in self.school_lang_policy and
-                                    ag.info['age'] > 1000 and 'job' in ag.loc_info and
-                                    not isinstance(ag.loc_info['job'], type(school))):
-                                    candidat_ags.append(ag)
-                                    ag.loc_info['job'] = school
-                                    school.info['employees'].add(ag)
-                                    if len(candidat_ags) == num_teachers:
-                                        break
-                    else:
-                        #assign school job only to as many ags as teachers are required
-                        for ag in candidat_ags[:num_teachers]:
-                            ag.loc_info['job'] = school
-                            school.info['employees'].add(ag)
+        # assign school jobs
+        self.assign_teachers_to_schools()
 
     def define_friendship_networks(self):
         # TODO :

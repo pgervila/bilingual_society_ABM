@@ -348,12 +348,14 @@ class Baby(BaseAgent): # from 0 to 2
                     self.model.family_network.add_edge(agent, self, fam_link='cousin', lang=com_lang)
 
     def stage_1(self):
+        # listen to close family at home
         if self.age > 36:
             for ag in [ag for ag in self.loc_info['home'].agents_in.difference({self})
                        if ag.info['age'] > 72]:
                 self.listen(to_agent=ag, min_age_interlocs=self.age)
 
     def stage_2(self):
+        # go to daycare with mom or dad
         if self.age > 36:
             school = self.loc_info['school']
             self.model.grid.move_agent(self, school.pos)
@@ -1295,12 +1297,20 @@ class School:
         list_studs = list(self.info['students'])
         studs_sorted = sorted(list_studs, key=lambda x: int(x.info['age'] / 36))
         # get list of tuples with age and corresponding students, then make dict
-        self.grouped_studs = dict([(k, list(stud)) for k, stud in groupby(studs_sorted,
-                                                                          lambda x: int(x.info['age'] / 36))])
+
+        grouped_studs = [(k, list(stud)) for k, stud in groupby(studs_sorted,
+                                                                lambda x: int(x.info['age'] / 36))]
+        grouped_studs = [(y, studs) for (y, studs) in grouped_studs if y <= self.info['age_range'][1]]
+        self.grouped_studs = dict(grouped_studs)
+        # assign class key to students
+        for k, stds in self.grouped_studs.items():
+            for st in stds:
+                st.loc_info['class_key'] = k
         # compute number of teachers needed
 
     def look_for_teachers(self, min_age=30):
-        """ Look for teachers when needed"""
+        """ Look for teachers when needed """
+        # TODO : when teacher dies or retires a signal needs to be sent to school so that it can update
         if len(self.info['teachers']) < len(self.grouped_studs):
             ix = self.info['clust']
             for ag in self.model.clusters_info[ix]['agents']:
