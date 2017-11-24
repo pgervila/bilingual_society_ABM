@@ -19,16 +19,12 @@ import networkx as nx
 #import library to save any python data type to HDF5
 import deepdish as dd
 
-#import private library to model lang zipf CDF
-from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
-
-
 # import progress bar
 import pyprind
 
 
 # IMPORT FROM simp_agent.py
-from agent_simple import Simple_Language_Agent, Home, School, Job
+from agent_simple import Simple_Language_Agent, Home, School, Faculty, University, Job
 # import from clusters.py
 #from clusters import BuildClusters
 
@@ -39,7 +35,7 @@ from mesa.space import MultiGrid
 from mesa.datacollection import DataCollector
 
 
-class StagedActivation_modif(StagedActivation):
+class StagedActivationModif(StagedActivation):
 
     def step(self):
         """ Executes all the stages for all agents. """
@@ -52,7 +48,7 @@ class StagedActivation_modif(StagedActivation):
                 agent.lang_stats[lang]['t'][~agent.day_mask[lang]] += 1
                 # set current lang knowledge
                 agent.lang_stats[lang]['pct'][agent.info['age']] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                            agent.model.vocab_red)
+                                                                    agent.model.vocab_red)
                 # reset day mask
                 agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
             # Update lang switch
@@ -68,6 +64,17 @@ class StagedActivation_modif(StagedActivation):
         # simulate death chance
         for agent in self.agents[:]:
             agent.simulate_random_death()
+        # loop and update courses in schools and universities year after year
+        if not self.steps % 36:
+            for clust_idx, clust_info in self.model.clusters_info.items():
+                if 'university' in clust_info:
+                    for fac in clust_info['university'].faculties.values():
+                        if fac.info['students']:
+                            fac.update_courses()
+                for school in clust_info['schools']:
+                    school.update_courses()
+                    if not self.steps % 72: # every 2 years only, teachers swap
+                        school.teachers_course_swap()
         self.steps += 1
 
 
@@ -76,6 +83,7 @@ class Simple_Language_Model(Model):
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
     school_lang_policy = [1]
+    steps_per_year = 36
 
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250), width=100, height=100,
                  max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
@@ -96,6 +104,7 @@ class Simple_Language_Model(Model):
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.clust_centers = None
         self.cluster_sizes = None
+        self.random_seeds = np.random.randint(1, 10000, size=2)
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
         self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_spoken_ics_vs_step.h5'))
@@ -103,11 +112,11 @@ class Simple_Language_Model(Model):
 
         # define model grid and schedule
         self.grid = MultiGrid(height, width, False)
-        self.schedule = StagedActivation_modif(self,
-                                               stage_list=["stage_1", "stage_2",
+        self.schedule = StagedActivationModif(self,
+                                              stage_list=["stage_1", "stage_2",
                                                            "stage_3", "stage_4"],
-                                               shuffle=True,
-                                               shuffle_between_stages=True)
+                                              shuffle=True,
+                                              shuffle_between_stages=True)
 
         ## Define clusters parameters
         self.compute_cluster_centers()
@@ -138,10 +147,7 @@ class Simple_Language_Model(Model):
         self.family_network = nx.DiGraph()
 
         # ADD ALL AGENTS TO GRID AND SCHEDULE
-        self.map_jobs()
-        self.map_schools()
-        self.map_homes()
-        self.map_lang_agents()
+        self.map_model_objects()
         self.define_family_networks()
         # TODO run schools internal rearrangement
         self.define_friendship_networks()
@@ -160,6 +166,7 @@ class Simple_Language_Model(Model):
         )
 
     def compute_cluster_centers(self, min_dist=0.20, min_grid_pct_val=0.1, max_grid_pct_val=0.9):
+
         """ Generate 2D coordinates for all cluster (towns/villages) centers
             Args:
                 * min_dist: float. Minimum distance between cluster centers
@@ -175,10 +182,10 @@ class Simple_Language_Model(Model):
         set_av_grid_pts = set(product(grid_side_pcts, grid_side_pcts))
         # initiate list of cluster centers and append random point from set
         self.clust_centers = []
-        p = random.sample(set_av_grid_pts, 1)[0]
-        self.clust_centers.append(p)
+        pt = random.choice(list(set_av_grid_pts))
+        self.clust_centers.append(pt)
         # remove picked point from availability list
-        set_av_grid_pts.remove(p)
+        set_av_grid_pts.remove(pt)
         # Ensure min distance btwn cluster centers
         # Iterate over available points until all requested centers are found
         for _ in range(self.num_clusters - 1):
@@ -186,19 +193,19 @@ class Simple_Language_Model(Model):
             # from availability set
             # Iterate over copy of original set since elements are being removed during iteration
             for point in set(set_av_grid_pts):
-                if pdist([point, p]) < min_dist * (grid_side_pcts.max() - grid_side_pcts.min()):
-                # if pdist([point, p]) < min_dist:
+                if pdist([point, pt]) < min_dist * (grid_side_pcts.max() - grid_side_pcts.min()):
+                # if pdist([point, pt]) < min_dist:
                     set_av_grid_pts.remove(point)
             # Try picking new center from availability set ( if it's not already empty...)
             try:
-                p = random.sample(set_av_grid_pts, 1)[0]
+                pt = random.choice(list(set_av_grid_pts))
             except ValueError:
                 print('INPUT ERROR: Reduce either number of clusters or minimum distance '
                       'in order to meet distance constraint')
                 raise
             # Add new center to return list and remove it from availability set
-            self.clust_centers.append(p)
-            set_av_grid_pts.remove(p)
+            self.clust_centers.append(pt)
+            set_av_grid_pts.remove(pt)
         self.clust_centers = np.array(self.clust_centers)
         # If requested, sort cluster centers based on their distance to grid origin
         if self.lang_ags_sorted_by_dist:
@@ -215,8 +222,10 @@ class Simple_Language_Model(Model):
                 * list of integers representing cluster sizes
 
         """
+        np.random.seed(self.random_seeds[0])
         p = np.random.pareto(1.25, size=self.num_clusters)
         pcts = p / p.sum()
+        np.random.seed(self.random_seeds[1])
         self.cluster_sizes = np.random.multinomial(self.num_people, pcts)
         tot_sub_val = 0
         for idx in np.where(self.cluster_sizes < min_size)[0]:
@@ -251,12 +260,18 @@ class Simple_Language_Model(Model):
 
         return x_coords, y_coords
 
+    def sort_clusts_by_dist(self, ix):
+        return sorted(range(len(self.clust_centers)),
+                                  key=lambda x: pdist([self.clust_centers[x],
+                                                       self.clust_centers[ix]])[0])
+
     def set_clusters_info(self):
         """ Create dict container for all cluster info"""
         self.clusters_info = defaultdict(dict)
 
         for idx, clust_size in enumerate(self.cluster_sizes):
             self.clusters_info[idx]['num_agents'] = clust_size
+            self.clusters_info[idx]['closest_clusters'] = self.sort_clusts_by_dist(idx)
             self.clusters_info[idx]['jobs'] = []
             self.clusters_info[idx]['schools'] = []
             self.clusters_info[idx]['homes'] = []
@@ -330,9 +345,19 @@ class Simple_Language_Model(Model):
                     school_size = max(min_school_size, school_places_per_cluster)
                 else:
                     school_size = max_school_size
-                school = School((x, y), school_size, clust_idx, lang_policy=self.school_lang_policy)
+                school = School(self, (x, y), clust_idx, school_size, lang_policy=self.school_lang_policy)
                 self.clusters_info[clust_idx]['schools'].append(school)
                 school_places_per_cluster -= school_size
+
+    def map_universities(self, pct_univ_towns = 0.2):
+        num_univ = ceil(pct_univ_towns * self.num_clusters)
+        ixs_sorted = np.argsort(self.cluster_sizes)[::-1][:num_univ]
+        for clust_idx in ixs_sorted:
+            x_u, y_u = self.generate_cluster_points_coords(self.clust_centers[clust_idx], 1)
+            univ = University(self, (x_u[0], y_u[0]), clust_idx)
+            self.clusters_info[clust_idx]['university'] = univ
+
+
 
     def map_homes(self, num_people_per_home=4):
         """ Generate coordinates for agent homes and instantiate Home objects"""
@@ -393,19 +418,19 @@ class Simple_Language_Model(Model):
         # get lang distribution for each cluster
         langs_per_clust = self.generate_lang_distrib()
         # set agents ids
-        ids = set(range(self.num_people))
+        lang_ags_ids = set(range(self.num_people))
 
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.family_size)):
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
-                ag1 = Simple_Language_Agent(self, ids.pop(), family_langs[0], city_idx=clust_idx)
-                ag2 = Simple_Language_Agent(self, ids.pop(), family_langs[1], city_idx=clust_idx)
+                ag1 = Simple_Language_Agent(self, lang_ags_ids.pop(), family_langs[0], city_idx=clust_idx)
+                ag2 = Simple_Language_Agent(self, lang_ags_ids.pop(), family_langs[1], city_idx=clust_idx)
 
                 # instantiate 2 adolescents with neither school nor home assigned
-                ag3 = Simple_Language_Agent(self, ids.pop(), family_langs[2], city_idx=clust_idx)
-                ag4 = Simple_Language_Agent(self, ids.pop(), family_langs[3], city_idx=clust_idx)
+                ag3 = Simple_Language_Agent(self, lang_ags_ids.pop(), family_langs[2], city_idx=clust_idx)
+                ag4 = Simple_Language_Agent(self, lang_ags_ids.pop(), family_langs[3], city_idx=clust_idx)
 
                 # add agents to clust_info, schedule, grid and networks
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
@@ -420,9 +445,18 @@ class Simple_Language_Model(Model):
             if num_left_agents:
                 for lang in langs_per_clust[clust_idx][-num_left_agents:]:
                     sex = ['M' if random.random() < 0.5 else 'F']
-                    ag = Simple_Language_Agent(self, ids.pop(), lang, sex, city_idx=clust_idx)
+                    ag = Simple_Language_Agent(self, lang_ags_ids.pop(), lang, sex, city_idx=clust_idx)
                     clust_info['agents'].append(ag)
                     self.add_agent_to_grid_sched_networks(ag)
+
+    def map_model_objects(self):
+        """ Initialize and locate all model objects on 2-D grid """
+        self.map_jobs()
+        self.map_schools()
+        self.map_universities()
+        self.map_homes()
+        self.map_lang_agents()
+
 
     def add_agent_to_grid_sched_networks(self, ag, *more_ags):
         """ Method to add a number of agents to grid, schedule and system networks
@@ -471,77 +505,16 @@ class Simple_Language_Model(Model):
         else:
             return lang
 
-    # def assign_jobs(self, family, clust_info):
-    #     # assign job to parents
-    #     for parent in family[:2]:
-    #         while True:
-    #             job = np.random.choice(clust_info['jobs'])
-    #             if job.num_places:
-    #                 job.num_places -= 1
-    #                 parent.loc_info['job'] = job
-    #                 job.info['employees'].add(parent)
-    #                 break
-    #
-    # def assign_schools(self, family, clust_info, home):
-    #     # assign school to children
-    #     # find closest school to home
-    #     # TODO : introduce also University for age > 18
-    #     idx_school = np.argmin([pdist([home.pos, school.pos])
-    #                             for school in clust_info['schools']])
-    #     school = clust_info['schools'][idx_school]
-    #     for child in family[2:]:
-    #         child.loc_info['school'] = school
-    #         school.info['students'].add(child)
-    #
-
     def assign_teachers_to_schools(self):
-        """ Method to find suitable teacher agents for all clusters
-            For each school, it groups students by age to form classes and assigns
+        """ Method to find suitable teacher agents for each school.
+            For each school, it groups students by age to form courses and assigns
             a teacher to each class """
-        # assign school jobs
-        # get total number of courses in each school of cluster => number of teachers needed
+        # Loop over schools to assign teachers
         for clust_idx, clust_info in self.clusters_info.items():
             for school in clust_info['schools']:
-                school.group_students_per_year()
-                num_teachers = len(school.grouped_studs)
-                if num_teachers:
-                    candidat_ags = [ag for ag in clust_info['agents']
-                                    if ag.info['language'] in school.info['lang_policy'] and
-                                    ag.info['age'] > 1000 and 'job' in ag.loc_info and
-                                    not isinstance(ag.loc_info['job'], type(school))]
-                    if len(candidat_ags) < num_teachers:
-                        set_teachers = set(candidat_ags)
-                        idx_clust_sorted = sorted(range(len(self.clust_centers)),
-                                                  key=lambda x: pdist([self.clust_centers[x],
-                                                                       self.clust_centers[clust_idx]])[0])
-                        for idx in idx_clust_sorted[1:]:
-                            extra_ags = [ag for ag in self.clusters_info[idx]['agents']
-                                         if ag.info['language'] in school.info['lang_policy'] and
-                                         ag.info['age'] > 1000 and 'job' in ag.loc_info and
-                                         not isinstance(ag.loc_info['job'], type(school))]
-                            needed_teachers = num_teachers - len(set_teachers)
-                            if needed_teachers <= len(extra_ags):
-                                random.shuffle(extra_ags)
-                                set_teachers = set_teachers.union(set(extra_ags[:needed_teachers]))
-                            else:
-                                set_teachers = set_teachers.union(set(extra_ags))
-                            if len(set_teachers) == num_teachers:
-                                for t in set_teachers:
-                                    t.loc_info['job'] = school
-                                school.info['employees'] = school.info['employees'].union(set_teachers)
-                                break
-                    else:
-                        # assign school job only to as many ags as teachers are required (shuffle list first)
-                        random.shuffle(candidat_ags)
-                        for ag in candidat_ags[:num_teachers]:
-                            ag.loc_info['job'] = school
-                            school.info['employees'].add(ag)
-                # assign class key to teachers and add teachers to grouped studs
-                for (k, stds), t in zip(school.grouped_studs.items(), school.info['employees']):
-                    t.loc_info['class_key'] = k
-                    school.grouped_studs[k] = {'students':stds, 'teacher':t}
+                school.set_up_courses()
 
-    def define_family_networks(self):
+    def define_family_networks(self, parents_age_range=(38, 48), children_age_range=(8, 18)):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
             It assumes distribution of languages in clusters has already been sorted at cluster level or
@@ -551,11 +524,10 @@ class Simple_Language_Model(Model):
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.family_size)):
                 # set ages of family members
-                steps_per_year = 36
-                min_age, max_age = 40 * steps_per_year, 50 * steps_per_year
-                family[0].info['age'], family[1].info['age']= np.random.randint(min_age, max_age, size=2)
-                min_age, max_age = 10 * steps_per_year, 20 * steps_per_year
-                family[2].info['age'], family[3].info['age']= np.random.randint(min_age, max_age, size=2)
+                min_age, max_age = parents_age_range
+                family[0].info['age'], family[1].info['age']= np.random.randint(min_age, max_age, 2) * self.steps_per_year
+                min_age, max_age = children_age_range
+                family[2].info['age'], family[3].info['age']= np.random.randint(min_age, max_age, 2) * self.steps_per_year
                 # assign same home to all family members
                 home = clust_info['homes'][idx]
                 # import ICs and assign home
@@ -654,7 +626,7 @@ class Simple_Language_Model(Model):
             num_left_agents = len_clust % self.family_size
             if num_left_agents:
                 for ag in clust_info['agents'][-num_left_agents:]:
-                    min_age, max_age = 40 * steps_per_year, 60 * steps_per_year
+                    min_age, max_age = 40 * self.steps_per_year, 60 * self.steps_per_year
                     ag.info['age']= np.random.randint(min_age, max_age)
                     ag.set_lang_ics()
                     home = clust_info['homes'][idx + 1]
@@ -870,7 +842,7 @@ class Simple_Language_Model(Model):
                 continue
         # remove agent from all locations where it might be
         for loc, attr in zip([agent.loc_info['home'], agent.loc_info['job'], agent.loc_info['school']],
-                             ['occupants','employees','students']) :
+                             ['occupants','employees','students']):
             try:
                 getattr(loc, attr).remove(agent)
                 loc.agents_in.remove(agent)
@@ -884,7 +856,6 @@ class Simple_Language_Model(Model):
         # make id from deceased agent available
         self.set_available_ids.add(agent.unique_id)
 
-        # TODO : need to do 'del agent' to delete last reference to instance???
 
 
     def step(self):
