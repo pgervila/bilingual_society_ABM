@@ -505,15 +505,6 @@ class Simple_Language_Model(Model):
         else:
             return lang
 
-    def assign_teachers_to_schools(self):
-        """ Method to find suitable teacher agents for each school.
-            For each school, it groups students by age to form courses and assigns
-            a teacher to each class """
-        # Loop over schools to assign teachers
-        for clust_idx, clust_info in self.clusters_info.items():
-            for school in clust_info['schools']:
-                school.set_up_courses()
-
     def define_family_networks(self, parents_age_range=(38, 48), children_age_range=(8, 18)):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
@@ -639,7 +630,10 @@ class Simple_Language_Model(Model):
                             ag.loc_info['job'] = job
                             break
         # assign school jobs
-        self.assign_teachers_to_schools()
+        # Loop over schools to assign teachers
+        for clust_idx, clust_info in self.clusters_info.items():
+            for school in clust_info['schools']:
+                school.set_up_courses()
 
     def define_friendship_networks(self):
         # TODO :
