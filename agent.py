@@ -799,7 +799,6 @@ class LanguageAgent:
         self._set_null_lang_attrs('L12', S_0, t_0)
         self._set_null_lang_attrs('L21', S_0, t_0)
 
-
     def move_random(self):
         """ Take a random step into any surrounding cell
             All eight surrounding cells are available as choices
@@ -834,7 +833,7 @@ class LanguageAgent:
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate new agent
-            a = Simple_Language_Agent(self.model, id_, lang, ag_home=self.loc_info['home'],
+            a = LanguageAgent(self.model, id_, lang, ag_home=self.loc_info['home'],
                                       ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
                                       ag_job=None,
                                       city_idx=self.loc_info['city_idx'])
@@ -866,37 +865,37 @@ class LanguageAgent:
         elif self.info['age'] >= age_3:
             self.remove_after_death()
 
-    def remove_after_death(self):
-        """ Removes agent object from all places where it belongs.
-            It makes sure no references to agent object are left aftr removal,
-            so that garbage collector can free memory
-            Call this function if death conditions for agent are verified
-        """
-        # Remove agent from all networks
-        for network in [self.model.family_network,
-                        self.model.known_people_network,
-                        self.model.friendship_network]:
-            try:
-                network.remove_node(self)
-            except nx.NetworkXError:
-                pass
-        # remove agent from all locations where it might be
-        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
-                             ['occupants','employees','students']) :
-            try:
-                getattr(loc, attr).remove(self)
-                loc.agents_in.remove(self)
-            except:
-                continue
-        # remove agent from city
-        self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
-
-        # remove agent from grid and schedule
-        self.model.grid._remove_agent(self.pos, self)
-        self.model.schedule.remove(self)
-
-        # make id from deceased agent available
-        self.model.set_available_ids.add(self.unique_id)
+    # def remove_after_death(self):
+    #     """ Removes agent object from all places where it belongs.
+    #         It makes sure no references to agent object are left aftr removal,
+    #         so that garbage collector can free memory
+    #         Call this function if death conditions for agent are verified
+    #     """
+    #     # Remove agent from all networks
+    #     for network in [self.model.family_network,
+    #                     self.model.known_people_network,
+    #                     self.model.friendship_network]:
+    #         try:
+    #             network.remove_node(self)
+    #         except nx.NetworkXError:
+    #             pass
+    #     # remove agent from all locations where it might be
+    #     for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
+    #                          ['occupants','employees','students']) :
+    #         try:
+    #             getattr(loc, attr).remove(self)
+    #             loc.agents_in.remove(self)
+    #         except:
+    #             continue
+    #     # remove agent from city
+    #     self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
+    #
+    #     # remove agent from grid and schedule
+    #     self.model.grid._remove_agent(self.pos, self)
+    #     self.model.schedule.remove(self)
+    #
+    #     # make id from deceased agent available
+    #     self.model.set_available_ids.add(self.unique_id)
 
     def look_for_job(self):
         """ Method for agent to look for a job """
@@ -917,7 +916,6 @@ class LanguageAgent:
             self.model.known_people_network[self][other].update({'num_meet': 1, 'lang': lang})
         elif (other not in self.model.family_network[self]) and (other not in self.model.friendship_network[self]):
             self.model.known_people_network[self][other]['num_meet'] += 1
-
 
     def make_friendship(self):
         """ Check num_meet in known people network to filter candidates """
