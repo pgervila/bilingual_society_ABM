@@ -380,7 +380,9 @@ class Simple_Language_Model(Model):
                 * A list of lists where each list contains lang labels per cluster
         """
         # generate random array with lang labels ( no sorting at all )
-        langs_per_ag_array = np.random.choice([0, 1, 2], p=self.init_lang_distrib, size=self.num_people)
+        langs_per_ag_array = np.random.choice([0, 1, 2],
+                                              p=self.init_lang_distrib,
+                                              size=self.num_people)
         idxs_to_split_by_clust = self.cluster_sizes.cumsum()[:-1]
         # check if agent-sorting by distance to origin is requested
         if self.lang_ags_sorted_by_dist:
@@ -393,7 +395,7 @@ class Simple_Language_Model(Model):
                     clust_subsorted_by_fam = [fam for fam in zip(*[iter(clust)] * 4)]
                     random.shuffle(clust_subsorted_by_fam)
                     clust_subsorted_by_fam = [val for group in clust_subsorted_by_fam
-                                                 for val in group]
+                                              for val in group]
                     clust[:len(clust_subsorted_by_fam)] = clust_subsorted_by_fam
         else:
             # split lang labels by cluster
@@ -409,7 +411,7 @@ class Simple_Language_Model(Model):
                     clust_subsorted_by_fam = [fam for fam in zip(*[iter(clust)] * 4)]
                     random.shuffle(clust_subsorted_by_fam)
                     clust_subsorted_by_fam = [val for group in clust_subsorted_by_fam
-                                                 for val in group]
+                                              for val in group]
                     clust[:len(clust_subsorted_by_fam)] = clust_subsorted_by_fam
         return langs_per_clust
 
