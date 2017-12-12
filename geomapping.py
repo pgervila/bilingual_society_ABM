@@ -198,7 +198,7 @@ class GeoMapper:
             school_places_per_cluster = int(buffer_factor * clust_size / 2)
             num_schools_per_cluster = ceil(school_places_per_cluster / max_school_size)
             # generate school coords
-            x_s, y_s = self.generate_points_coords(clust_c_coords, num_schools_per_cluster)
+            x_s, y_s = self.generate_points_coords(clust_c_coords, num_schools_per_cluster, clust_idx)
             if (not self.model.lang_ags_sorted_by_dist) and self.model.lang_ags_sorted_in_clust:
                 x_s, y_s = self.sort_coords_in_clust(x_s, y_s, clust_idx)
             for x, y in zip(x_s, y_s):
@@ -206,7 +206,7 @@ class GeoMapper:
                     school_size = max(min_school_size, school_places_per_cluster)
                 else:
                     school_size = max_school_size
-                school = School(self, (x, y), clust_idx, school_size,
+                school = School(self.model, (x, y), clust_idx, school_size,
                                 lang_policy=self.model.school_lang_policy)
                 self.clusters_info[clust_idx]['schools'].append(school)
                 school_places_per_cluster -= school_size
@@ -215,8 +215,8 @@ class GeoMapper:
         num_univ = ceil(pct_univ_towns * self.num_clusters)
         ixs_sorted = np.argsort(self.cluster_sizes)[::-1][:num_univ]
         for clust_idx in ixs_sorted:
-            x_u, y_u = self.generate_cluster_points_coords(self.clust_centers[clust_idx], 1)
-            univ = University(self, (x_u[0], y_u[0]), clust_idx)
+            x_u, y_u = self.generate_points_coords(self.clust_centers[clust_idx], 1, clust_idx)
+            univ = University(self.model, (x_u[0], y_u[0]), clust_idx)
             self.clusters_info[clust_idx]['university'] = univ
 
     def map_homes(self, num_people_per_home=4):
@@ -230,7 +230,7 @@ class GeoMapper:
                                                    ceil(clust_size * num_homes_per_agent),
                                                    clust_idx)
             for x, y in zip(x_h, y_h):
-                self.clusters_info[clust_idx]['homes'].append(Home((x,y)))
+                self.clusters_info[clust_idx]['homes'].append(Home((x, y)))
 
     def generate_lang_distrib(self):
         """ Method that generates a list of lists of lang labels in the requested order
@@ -285,12 +285,12 @@ class GeoMapper:
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
-                ag1 = LanguageAgent(self, lang_ags_ids.pop(), family_langs[0], city_idx=clust_idx)
-                ag2 = LanguageAgent(self, lang_ags_ids.pop(), family_langs[1], city_idx=clust_idx)
+                ag1 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[0], city_idx=clust_idx)
+                ag2 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[1], city_idx=clust_idx)
 
                 # instantiate 2 adolescents with neither school nor home assigned
-                ag3 = LanguageAgent(self, lang_ags_ids.pop(), family_langs[2], city_idx=clust_idx)
-                ag4 = LanguageAgent(self, lang_ags_ids.pop(), family_langs[3], city_idx=clust_idx)
+                ag3 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[2], city_idx=clust_idx)
+                ag4 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[3], city_idx=clust_idx)
 
                 # add agents to clust_info, schedule, grid and networks
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
@@ -305,7 +305,7 @@ class GeoMapper:
             if num_left_agents:
                 for lang in langs_per_clust[clust_idx][-num_left_agents:]:
                     sex = ['M' if random.random() < 0.5 else 'F']
-                    ag = LanguageAgent(self, lang_ags_ids.pop(), lang, sex, city_idx=clust_idx)
+                    ag = LanguageAgent(self.model, lang_ags_ids.pop(), lang, sex, city_idx=clust_idx)
                     clust_info['agents'].append(ag)
                     self.add_agents_to_grid_and_schedule(ag)
 

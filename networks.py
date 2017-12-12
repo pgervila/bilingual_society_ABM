@@ -48,13 +48,15 @@ class Networks:
             by groups of four to ensure linguistic affinity within families.
             Marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
         """
-        for clust_idx, clust_info in self.clusters_info.items():
-            for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.family_size)):
+        for clust_idx, clust_info in self.model.gm.clusters_info.items():
+            for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
                 # set ages of family members
                 min_age, max_age = parents_age_range
-                family[0].info['age'], family[1].info['age']= np.random.randint(min_age, max_age, 2) * self.steps_per_year
+                (family[0].info['age'],
+                 family[1].info['age']) = np.random.randint(min_age, max_age, 2) * self.model.steps_per_year
                 min_age, max_age = children_age_range
-                family[2].info['age'], family[3].info['age']= np.random.randint(min_age, max_age, 2) * self.steps_per_year
+                (family[2].info['age'],
+                 family[3].info['age']) = np.random.randint(min_age, max_age, 2) * self.model.steps_per_year
                 # assign same home to all family members
                 home = clust_info['homes'][idx]
                 # import ICs and assign home
@@ -63,7 +65,7 @@ class Networks:
                     key_parents = [] # define list to store parents' percentage knowledge
                     for ix, member in enumerate(family):
                         if ix < 2 and member.info['language'] == 1:
-                            key = np.random.choice(self.ic_pct_keys)
+                            key = np.random.choice(self.model.ic_pct_keys)
                             key_parents.append(key)
                             member.set_lang_ics(biling_key=key)
                         elif ix < 2:
@@ -77,11 +79,12 @@ class Networks:
                                     key = key_parents[0] / 2
                             else:
                                 key = sum(key_parents) / len(key_parents)
-                            key = self.ic_pct_keys[
-                                bisect.bisect_left(self.ic_pct_keys, key, hi=len(self.ic_pct_keys)-1)
+                            key = self.model.ic_pct_keys[
+                                bisect.bisect_left(self.model.ic_pct_keys, key,
+                                                   hi=len(self.model.ic_pct_keys) - 1)
                             ]
                             member.set_lang_ics(biling_key=key)
-                        self._assign_home_to_agent(member, home)
+                        self.model._assign_home_to_agent(member, home)
                 else: # monolingual parents
                     # check if children are bilingual
                     if 1 in [m.info['language'] for m in family[2:4]]:
@@ -94,11 +97,11 @@ class Networks:
                                     member.set_lang_ics(biling_key=90)
                                 else:
                                     member.set_lang_ics()
-                            self._assign_home_to_agent(member, home)
+                            self.model._assign_home_to_agent(member, home)
                     else:
                         for member in family:
                             member.set_lang_ics()
-                            self._assign_home_to_agent(member, home)
+                            self.model._assign_home_to_agent(member, home)
 
                 # assign job to parents
                 for parent in family[:2]:
@@ -122,7 +125,7 @@ class Networks:
 
                 # find out lang of interaction btw family members
                 # consorts
-                lang_consorts, pcts = self.define_lang_interaction(family[0], family[1], ret_pcts=True)
+                lang_consorts, pcts = self.model.define_lang_interaction(family[0], family[1], ret_pcts=True)
                 # language of children with father, mother
                 lang_with_father = np.argmax(pcts[:2])
                 lang_with_mother = np.argmax(pcts[2:])
@@ -133,7 +136,7 @@ class Networks:
                 elif avg_lang == 1:
                     lang_siblings = 1
                 else:
-                    lang_siblings = self.define_lang_interaction(family[2], family[3])
+                    lang_siblings = self.model.define_lang_interaction(family[2], family[3])
                 # add family edges in family and known_people networks ( both are DIRECTED networks ! )
                 for (i, j) in [(0, 1), (1, 0)]:
                     self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
@@ -150,10 +153,10 @@ class Networks:
 
             # set up agents left out of family partition of cluster
             len_clust = len(clust_info['agents'])
-            num_left_agents = len_clust % self.family_size
+            num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
                 for ag in clust_info['agents'][-num_left_agents:]:
-                    min_age, max_age = 40 * self.steps_per_year, 60 * self.steps_per_year
+                    min_age, max_age = 40 * self.model.steps_per_year, 60 * self.model.steps_per_year
                     ag.info['age']= np.random.randint(min_age, max_age)
                     ag.set_lang_ics()
                     home = clust_info['homes'][idx + 1]
@@ -167,7 +170,7 @@ class Networks:
                             break
         # assign school jobs
         # Loop over schools to assign teachers
-        for clust_idx, clust_info in self.clusters_info.items():
+        for clust_idx, clust_info in self.model.gm.clusters_info.items():
             for school in clust_info['schools']:
                 school.set_up_courses()
 
@@ -184,12 +187,12 @@ class Networks:
                 colleagues = 'students'
             else:
                 continue
-            for coll in getattr(ag_occupation, colleagues).difference({ag}):
-                #check colleague lang distance and all frienship conditions
-                if (abs(coll.language - ag.language) <= 1 and
-                len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
-                coll not in self.friendship_network[ag] and
-                coll not in self.family_network[ag]):
+            for coll in getattr(ag_occupation, 'info')[colleagues].difference({ag}):
+                # check colleague lang distance and all frienship conditions
+                if (abs(coll.info['language'] - ag.info['language']) <= 1 and
+                            len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
+                            coll not in self.friendship_network[ag] and
+                            coll not in self.family_network[ag]):
                     lang = self.model.define_lang_interaction(ag, coll)
                     self.friendship_network.add_edge(ag, coll, lang=lang)
                     # kpnetwork is directed graph !

@@ -11,16 +11,15 @@ import deepdish as dd
 
 class DataProcessor(DataCollector):
     def __init__(self, model):
-        super().__init__(model_reporters={"count_spa": self.get_lang_stats(0),
-                             "count_bil": self.get_lang_stats(1),
-                             "count_cat": self.get_lang_stats(2),
-                             "total_num_agents": lambda m: m.schedule.get_agent_count(),
-                             "biling_evol": self.get_bilingual_global_evol()
-                             },
-                         agent_reporters={"pct_cat_in_biling": lambda a: a.lang_stats['L2']['pct'][a.age],
-                             "pct_spa_in_biling": lambda a: a.lang_stats['L1']['pct'][a.age]})
         self.model = model
-
+        super().__init__(model_reporters={"count_spa": self.get_lang_stats(0),
+                                          "count_bil": self.get_lang_stats(1),
+                                          "count_cat": self.get_lang_stats(2),
+                                          "total_num_agents": lambda m: m.schedule.get_agent_count(),
+                                          "biling_evol": self.get_bilingual_global_evol()
+                                         },
+                         agent_reporters={"pct_cat_in_biling": lambda a: a.lang_stats['L2']['pct'][a.info['age']],
+                                          "pct_spa_in_biling": lambda a: a.lang_stats['L1']['pct'][a.info['age']]})
 
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent
@@ -32,7 +31,7 @@ class DataProcessor(DataCollector):
             * lang type count as percentage of total
 
         """
-        ag_lang_list = [ag.language for ag in self.model.schedule.agents]
+        ag_lang_list = [ag.info['language'] for ag in self.model.schedule.agents]
         num_ag = len(ag_lang_list)
         lang_counts = Counter(ag_lang_list)
         return lang_counts[i]/num_ag
@@ -45,8 +44,8 @@ class DataProcessor(DataCollector):
              * float representing the AVERAGE percentage of Catalan in bilinguals
 
         """
-        list_biling = [ag.lang_stats['L2']['pct'][ag.age] for ag in self.model.schedule.agents
-                       if ag.language == 1]
+        list_biling = [ag.lang_stats['L2']['pct'][ag.info['age']] for ag in self.model.schedule.agents
+                       if ag.info['language'] == 1]
         if list_biling:
             return np.array(list_biling).mean()
         else:

@@ -128,7 +128,7 @@ class LanguageModel(Model):
         home.agents_in.add(agent)
 
     @staticmethod
-    def define_lang_interaction(self, ag1, ag2, ret_pcts=False):
+    def define_lang_interaction(ag1, ag2, ret_pcts=False):
         """ Method to find out lang of interaction between two agents """
         pct11 = ag1.lang_stats['L1']['pct'][ag1.info['age']]
         pct12 = ag1.lang_stats['L2']['pct'][ag1.info['age']]

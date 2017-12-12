@@ -834,9 +834,8 @@ class LanguageAgent:
                                             for sc_coord in clust_schools_coords])
             # instantiate new agent
             a = LanguageAgent(self.model, id_, lang, ag_home=self.loc_info['home'],
-                                      ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
-                                      ag_job=None,
-                                      city_idx=self.loc_info['city_idx'])
+                              ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
+                              ag_job=None, city_idx=self.loc_info['city_idx'])
             # Add agent to model
             self.model.add_agent_to_grid_sched_networks(a)
             # add newborn agent to home presence list
@@ -900,8 +899,8 @@ class LanguageAgent:
     def look_for_job(self):
         """ Method for agent to look for a job """
         # loop through shuffled job centers list until a job is found
-        np.random.shuffle(self.model.clusters_info[self.loc_info['city_idx']]['jobs'])
-        for job_c in self.model.clusters_info[self.loc_info['city_idx']]['jobs']:
+        np.random.shuffle(self.model.gm.clusters_info[self.loc_info['city_idx']]['jobs'])
+        for job_c in self.model.gm.clusters_info[self.loc_info['city_idx']]['jobs']:
             if job_c.num_places:
                 job_c.num_places -= 1
                 self.loc_info['job'] = job_c
@@ -911,11 +910,11 @@ class LanguageAgent:
 
     def update_acquaintances(self, other, lang):
         """ Add edges to known_people network when meeting for first time """
-        if other not in self.model.known_people_network[self]:
-            self.model.known_people_network.add_edge(self, other)
-            self.model.known_people_network[self][other].update({'num_meet': 1, 'lang': lang})
-        elif (other not in self.model.family_network[self]) and (other not in self.model.friendship_network[self]):
-            self.model.known_people_network[self][other]['num_meet'] += 1
+        if other not in self.model.nws.known_people_network[self]:
+            self.model.nws.known_people_network.add_edge(self, other)
+            self.model.nws.known_people_network[self][other].update({'num_meet': 1, 'lang': lang})
+        elif (other not in self.model.nws.family_network[self]) and (other not in self.model.nws.friendship_network[self]):
+            self.model.nws.known_people_network[self][other]['num_meet'] += 1
 
     def make_friendship(self):
         """ Check num_meet in known people network to filter candidates """
@@ -1236,15 +1235,15 @@ class LanguageAgent:
             self.loc_info['job'].agents_in.remove(self)
         self.move_random()
         self.start_conversation()
-        if random.random() > 0.5 and self.model.friendship_network[self]:
-            picked_friend = np.random.choice(self.model.friendship_network.neighbors(self))
+        if random.random() > 0.5 and self.model.nws.friendship_network[self]:
+            picked_friend = np.random.choice(self.model.nws.friendship_network.neighbors(self))
             self.start_conversation(with_agents=picked_friend)
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
         self.loc_info['home'].agents_in.add(self)
         try:
-            for key in self.model.family_network[self]:
+            for key in self.model.nws.family_network[self]:
                 if key.pos == self.loc_info['home'].pos:
-                    lang = self.model.family_network[self][key]['lang']
+                    lang = self.model.nws.family_network[self][key]['lang']
                     self.start_conversation(with_agents=key, lang=lang)
         except:
             pass
@@ -1303,10 +1302,10 @@ class EducationCenter:
         school_clust_ix = self.info['clust']
         hired_teachers = []
         # loop over clusters from closest to farthest from school
-        for ix in self.model.clusters_info[school_clust_ix]['closest_clusters']:
+        for ix in self.model.gm.clusters_info[school_clust_ix]['closest_clusters']:
             # list cluster teacher candidates. Shuffle them to add randomness
             # TODO : hire teachers based on fact they have UNIV education !!!
-            clust_cands = [ag for ag in self.model.clusters_info[ix]['agents']
+            clust_cands = [ag for ag in self.model.gm.clusters_info[ix]['agents']
                            if ag.info['language'] in self.info['lang_policy'] and
                            ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
                            not isinstance(ag.loc_info['job'], (School, University))]
