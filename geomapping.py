@@ -5,7 +5,7 @@ from itertools import product
 from collections import defaultdict
 from math import ceil
 # IMPORT AGENTS AND  ENTITIES
-from agent_simple import LanguageAgent, Job, School, University, Home
+from agent import LanguageAgent, Job, School, University, Home
 
 
 class GeoMapper:
@@ -17,9 +17,14 @@ class GeoMapper:
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
         self.set_clusters_info()
-        # setup agent mapping
+        # setup agent and object mapping
+        self.map_model_objects()
+
+    def map_model_objects(self):
+        """ Initialize and locate all model objects on 2-D grid """
         self.map_jobs()
         self.map_schools()
+        self.map_universities()
         self.map_homes()
         self.map_lang_agents()
 

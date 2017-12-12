@@ -707,7 +707,7 @@ class Pensioner(Adult): # from 65 to death
     def stage_4(self):
         pass
 
-class Simple_Language_Agent:
+class LanguageAgent:
 
     #define memory retrievability constant
     k = np.log(10 / 9)

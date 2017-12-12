@@ -6,12 +6,12 @@ import numpy as np
 from scipy.spatial.distance import pdist
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-import agent_simple
-import model_simple
-reload(agent_simple)
-reload(model_simple)
-from agent_simple import Simple_Language_Agent
-from model_simple import Simple_Language_Model
+import agent
+import model
+reload(agent)
+reload(model)
+from agent import Simple_Language_Agent
+from model import Simple_Language_Model
 
 @pytest.fixture(scope="module")
 def model():
