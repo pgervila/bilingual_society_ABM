@@ -29,8 +29,6 @@ from networks import Networks
 from dataprocess import DataProcessor, DataViz
 
 
-
-
 class StagedActivationModif(StagedActivation):
 
     def step(self):
@@ -129,7 +127,9 @@ class LanguageModel(Model):
 
     @staticmethod
     def define_lang_interaction(ag1, ag2, ret_pcts=False):
-        """ Method to find out lang of interaction between two agents """
+        """ Method to find out lang of interaction between two given agents """
+        # compute lang knowledge for each agent
+        # TODO : for each lang and agent pick the best spoken variety
         pct11 = ag1.lang_stats['L1']['pct'][ag1.info['age']]
         pct12 = ag1.lang_stats['L2']['pct'][ag1.info['age']]
         pct21 = ag2.lang_stats['L1']['pct'][ag2.info['age']]

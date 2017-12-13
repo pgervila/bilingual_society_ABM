@@ -1,3 +1,5 @@
+import sys
+from importlib import reload
 import numpy as np
 import random
 from scipy.spatial.distance import pdist
@@ -5,7 +7,11 @@ from itertools import product
 from collections import defaultdict
 from math import ceil
 # IMPORT AGENTS AND  ENTITIES
-from agent import LanguageAgent, Job, School, University, Home
+from agent import LanguageAgent
+import agent, city_objects
+reload(sys.modules['agent'])
+reload(sys.modules['city_objects'])
+from city_objects import Job, School, University, Home
 
 
 class GeoMapper:

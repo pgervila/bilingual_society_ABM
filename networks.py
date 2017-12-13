@@ -3,7 +3,6 @@ from scipy.spatial.distance import pdist
 import networkx as nx
 import bisect
 
-
 class Networks:
     """ Class to deal with everything that has to do with networks in model"""
 
