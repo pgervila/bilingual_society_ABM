@@ -47,7 +47,7 @@ class Networks:
             by groups of four to ensure linguistic affinity within families.
             Marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
         """
-        for clust_idx, clust_info in self.model.gm.clusters_info.items():
+        for clust_idx, clust_info in self.model.geo.clusters_info.items():
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
                 # set ages of family members
                 min_age, max_age = parents_age_range
@@ -169,7 +169,7 @@ class Networks:
                             break
         # assign school jobs
         # Loop over schools to assign teachers
-        for clust_idx, clust_info in self.model.gm.clusters_info.items():
+        for clust_idx, clust_info in self.model.geo.clusters_info.items():
             for school in clust_info['schools']:
                 school.set_up_courses()
 

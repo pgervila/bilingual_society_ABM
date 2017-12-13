@@ -113,7 +113,7 @@ class LanguageModel(Model):
                                               shuffle_between_stages=True)
 
         # define model geomapping and model networks
-        self.gm = GeoMapper(self, num_clusters)
+        self.geo = GeoMapper(self, num_clusters)
         self.nws = Networks(self)
         # define datacollector and dataprocessor
         self.data_process = DataProcessor(self)
@@ -129,17 +129,21 @@ class LanguageModel(Model):
     def define_lang_interaction(ag1, ag2, ret_pcts=False):
         """ Method to find out lang of interaction between two given agents """
         # compute lang knowledge for each agent
-        # TODO : for each lang and agent pick the best spoken variety
-        pct11 = ag1.lang_stats['L1']['pct'][ag1.info['age']]
-        pct12 = ag1.lang_stats['L2']['pct'][ag1.info['age']]
-        pct21 = ag2.lang_stats['L1']['pct'][ag2.info['age']]
-        pct22 = ag2.lang_stats['L2']['pct'][ag2.info['age']]
+        age1, age2 = ag1.info['age'], ag2.info['age']
+        pct11 = max(ag1.lang_stats['L1']['pct'][age1],
+                    ag1.lang_stats['L12']['pct'][age1])
+        pct12 = max(ag1.lang_stats['L21']['pct'][age1],
+                    ag1.lang_stats['L2']['pct'][age1])
+        pct21 = max(ag2.lang_stats['L1']['pct'][age2],
+                    ag2.lang_stats['L12']['pct'][age2])
+        pct22 = max(ag2.lang_stats['L21']['pct'][age2],
+                    ag2.lang_stats['L2']['pct'][age2])
         if (ag1.info['language'], ag2.info['language']) in [(0, 0), (0, 1), (1, 0)]:
             lang = 0
         elif (ag1.info['language'], ag2.info['language']) in [(2, 1), (1, 2), (2, 2)]:
             lang = 1
         elif (ag1.info['language'], ag2.info['language']) == (1, 1):
-            # Find weakest combination lang-agent, pick other language as common one
+            # Find weakest combination lang-agent, pick other lang as common one
             idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
             if idx_weakest in [0, 2]:
                 lang = 1

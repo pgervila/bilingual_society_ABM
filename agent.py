@@ -897,8 +897,8 @@ class LanguageAgent:
     def look_for_job(self):
         """ Method for agent to look for a job """
         # loop through shuffled job centers list until a job is found
-        np.random.shuffle(self.model.gm.clusters_info[self.loc_info['city_idx']]['jobs'])
-        for job_c in self.model.gm.clusters_info[self.loc_info['city_idx']]['jobs']:
+        np.random.shuffle(self.model.geo.clusters_info[self.loc_info['city_idx']]['jobs'])
+        for job_c in self.model.geo.clusters_info[self.loc_info['city_idx']]['jobs']:
             if job_c.num_places:
                 job_c.num_places -= 1
                 self.loc_info['job'] = job_c
