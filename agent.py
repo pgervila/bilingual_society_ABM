@@ -15,8 +15,8 @@ class BaseAgent:
     # define memory retrievability constant
     k = np.log(10 / 9)
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None,
+                 city_idx=None, lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
         """ language => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
@@ -109,7 +109,7 @@ class BaseAgent:
             Args:
                 * to_agent: class instance (optional). It can be either a language agent or a media agent.
                     If not specified, self agent will listen to a random conversation taking place on his cell
-                * min_age_interlocs: integer. Allows to adapt vocabulary pick to the youngest
+                * min_age_interlocs: integer. Allows to adapt vocabulary choice to the youngest
                     participant in the conversation
                 * num_days:
         """
@@ -130,10 +130,9 @@ class BaseAgent:
                 lang = self.model.define_lang_interaction(self, to_agent)
             words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs,
                                         num_days=num_days)
-
             for lang_key, lang_words in words:
                 words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
-                                                  lang_words, assume_unique=True)
+                                       lang_words, assume_unique=True)
                 self.update_lang_arrays(words, speak=False)
 
 
@@ -284,39 +283,39 @@ class BaseAgent:
             'Smoothing and projecting age-specific probabilities of death by TOPALS' by Joop de Beer
             Resulting life expectancy is 77 years and std is ~ 15 years
         """
-        if random.random() < a * (np.exp(b * self.info['age']) + c) / 36:
+        if random.random() < a * (np.exp(b * self.info['age']) + c) / self.model.steps_per_year:
             self.model.remove_after_death(self)
 
 
-class Baby(BaseAgent): # from 0 to 2
+class Baby(BaseAgent): # from 0 to 2 yo
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
                  lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
         super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
                          lang_passive_thresh, import_ic)
 
-        self.info['close_family'] = {}
-        self.info['close_family']['mother'] = [ag for ag in self.model.family_network[self]
-                                               if self.model.family_network[self][ag]['fam_link'] == 'mother'][0]
-        self.info['close_family']['father'] = [ag for ag in self.model.family_network[self]
-                                               if self.model.family_network[self][ag]['fam_link'] == 'father'][0]
-        self.info['close_family']['siblings'] = [ag for ag in self.model.family_network[self]
-                                                 if self.model.family_network[self][ag]['fam_link'] == 'sibling']
-        #TODO modify self.info['teacher'] = random.choice(self.loc_info['school'].info['teachers'])
-
     def get_conversation_lang(self):
         """ Adapt to baby exceptions"""
         pass
 
     def set_family_links(self, father, mother, lang_with_father, lang_with_mother):
-        """ Method to define family links and interaction language of newborn baby """
-        self.model.family_network.add_edge(father, self, fam_link='child', lang=lang_with_father)
-        self.model.family_network.add_edge(self, father, fam_link='father', lang=lang_with_father)
-        self.model.family_network.add_edge(mother, self, fam_link='child', lang=lang_with_mother)
-        self.model.family_network.add_edge(self, father, fam_link='mother', lang=lang_with_mother)
+        """
+            Method to define family links and interaction language of a newborn baby at BIRTH .
+            Corresponding edges are created in family network
+            Args:
+                * father: agent instance. The baby's father
+                * mother: agent instance. The baby's mother
+                * lang_with_father: integer [0, 1]. Defines lang with father
+                * lang_with_mother: integer [0, 1]. Defines lang with mother
+        """
+        fam_nw = self.model.nws.family_network
+        fam_nw.add_edge(father, self, fam_link='child', lang=lang_with_father)
+        fam_nw.add_edge(self, father, fam_link='father', lang=lang_with_father)
+        fam_nw.add_edge(mother, self, fam_link='child', lang=lang_with_mother)
+        fam_nw.add_edge(self, father, fam_link='mother', lang=lang_with_mother)
         # rest of family will if possible speak same language with baby as their link agent to the baby
         for elder, lang in zip([father, mother], [lang_with_father, lang_with_mother]):
-            for agent, labels in self.model.family_network[elder].items():
+            for agent, labels in fam_nw[elder].items():
                 lang_labels = ['L1', 'L12'] if lang == 0 else ['L2', 'L21']
                 if True in [agent.lang_stats[l]['pct'][agent.info['age']] > agent.lang_act_thresh
                             for l in lang_labels]:
@@ -324,53 +323,71 @@ class Baby(BaseAgent): # from 0 to 2
                 else:
                     com_lang = 1 if lang == 0 else 0
                 if labels["fam_link"] == 'father':
-                    self.model.family_network.add_edge(self, agent, fam_link='grandfather',
-                                                  lang=com_lang )
-                    self.model.family_network.add_edge(agent, self, fam_link='grandchild',
-                                                  lang=com_lang)
-                elif labels["fam_link"] == 'mother':
-                    self.model.family_network.add_edge(self, agent, fam_link='grandmother', lang=com_lang)
-                    self.model.family_network.add_edge(agent, self, fam_link='grandchild', lang=com_lang)
-                elif labels["fam_link"] == 'sibling':
-                    self.model.family_network.add_edge(self, agent,
-                                                       fam_link='uncle' if agent.info['sex'] == 'M' else 'aunt',
+                    fam_nw.add_edge(self, agent, fam_link='grandfather',
+                                                       lang=com_lang )
+                    fam_nw.add_edge(agent, self, fam_link='grandchild',
                                                        lang=com_lang)
-                    self.model.family_network.add_edge(agent, self, fam_link='nephew', lang=com_lang)
+                elif labels["fam_link"] == 'mother':
+                    fam_nw.add_edge(self, agent, fam_link='grandmother', lang=com_lang)
+                    fam_nw.add_edge(agent, self, fam_link='grandchild', lang=com_lang)
+                elif labels["fam_link"] == 'sibling':
+                    fam_nw.add_edge(self, agent,
+                                    fam_link='uncle' if agent.info['sex'] == 'M' else 'aunt',
+                                    lang=com_lang)
+                    fam_nw.add_edge(agent, self, fam_link='nephew', lang=com_lang)
                     if agent.info['married']:
-                        consort = [key for key, value
-                                   in self.model.family_network[agent].items()
+                        consort = [key for key, value in fam_nw[agent].items()
                                    if value['fam_link'] == 'consort'][0]
-                        self.model.family_network.add_edge(self, consort,
-                                                           fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
-                        self.model.family_network.add_edge(consort, self, fam_link='nephew', lang=com_lang)
+                        fam_nw.add_edge(self, consort,
+                                        fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
+                        fam_nw.add_edge(consort, self, fam_link='nephew', lang=com_lang)
                 elif labels["fam_link"] == 'nephew':
-                    self.model.family_network.add_edge(self, agent, fam_link='cousin', lang=com_lang)
-                    self.model.family_network.add_edge(agent, self, fam_link='cousin', lang=com_lang)
+                    fam_nw.add_edge(self, agent, fam_link='cousin', lang=com_lang)
+                    fam_nw.add_edge(agent, self, fam_link='cousin', lang=com_lang)
+        self.info['close_family'] = {}
+        self.info['close_family']['mother'] = [ag for ag in fam_nw[self]
+                                               if fam_nw[self][ag]['fam_link'] == 'mother'][0]
+        self.info['close_family']['father'] = [ag for ag in fam_nw[self]
+                                               if fam_nw[self][ag]['fam_link'] == 'father'][0]
+        self.info['close_family']['siblings'] = [ag for ag in fam_nw[self]
+                                                 if fam_nw[self][ag]['fam_link'] == 'sibling']
+        # TODO modify self.info['teacher'] = random.choice(self.loc_info['school'].info['teachers'])
 
-    def stage_1(self):
+    def register_to_school(self):
+        # find closest school in cluster
+        clust_info = self.model.geo.clusters_info[self.loc_info['city_idx']]
+        idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
+                                for school in clust_info['schools']])
+        school = clust_info['schools'][idx_school]
+        # register
+        school.assign_stud(self)
+
+    def stage_1(self, num_days=10):
         # listen to close family at home
-        if self.age > 36:
+        if self.info['age'] > 36:
             for ag in [ag for ag in self.loc_info['home'].agents_in.difference({self})
                        if ag.info['age'] > 72]:
-                self.listen(to_agent=ag, min_age_interlocs=self.age)
+                self.listen(to_agent=ag, min_age_interlocs=self.info['age'],
+                            num_days=num_days)
+            if not self.loc_info['school']:
+                self.register_to_school()
 
     def stage_2(self):
         # go to daycare with mom or dad
-        if self.age > 36:
+        if self.info['age'] > 36:
             school = self.loc_info['school']
             self.model.grid.move_agent(self, school.pos)
             mother = self.info['close_family']['mother']
-            self.listen(to_agent=mother, min_age_interlocs=self.age)
-            # TODO : talk to children teacher
+            self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=7)
+            # TODO : a part of speech from teacher to all course(from teacher stage),
+            # TODO another is personalized
             school.agents_in.add(self)
-            school_ags = np.random.choice(self.loc_info['school'].agents_in, size=3)
-            for ag in school_ags:
-                self.listen(to_agent=ag)
-            teacher = random.choice(school.info['teachers'])
-            self.listen(to_agent=teacher)
+            course_key = self.loc_info['course_key']
+            teacher = school.grouped_studs[course_key]['teacher']
+            self.listen(to_agent=teacher, num_days=5)
 
     def stage_3(self):
-        if self.age > 36:
+        if self.info['age'] > 36:
             mother = self.info['close_family']['mother']
             school = self.loc_info['school']
             parents = [p.info['close_family']['mother']
@@ -383,16 +400,15 @@ class Baby(BaseAgent): # from 0 to 2
             for stud in school.info['students']:
                 if stud.info['close_family']['mother']:
                     pass
-
-            self.listen(to_agent=mother, min_age_interlocs=self.age)
+            school.agents_in.remove(self)
+            self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=7)
 
     def stage_4(self):
-        if self.age > 36:
-            for ag in [ag for ag in self.loc_info['home'].agents_in.difference({self})
-                       if ag.info['age'] > 72]:
-                self.listen(to_agent=ag, min_age_interlocs=self.age)
+        # baby goes to school early during week
+        self.stage_1(num_days=5)
         if self.info['age'] == 36 * 2:
             self.grow(Child)
+
 
 class Child(BaseAgent): #from 2 to 10
 
@@ -501,7 +517,20 @@ class Child(BaseAgent): #from 2 to 10
         pass
 
     def stage_3(self):
-        pass
+        mother = self.info['close_family']['mother']
+        school = self.loc_info['school']
+        parents = [p.info['close_family']['mother']
+                   if random.random() > 0.4 else p.info['close_family']['father']
+                   for p in school.info['students'] if p['mother'].pos == school.pos]
+        if parents:
+            self.model.grid.move_agent(mother, school.pos)
+            num_peop = random.randint(1, min(len(parents), 4))
+            mother.start_conversation(with_agents = random.sample(parents, num_peop))
+        for stud in school.info['students']:
+            if stud.info['close_family']['mother']:
+                pass
+        school.agents_in.remove(self)
+        self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=7)
 
     def stage_4(self):
         if self.info['age'] == 36 * 10:
@@ -590,7 +619,7 @@ class Young(Adolescent): # from 18 to 30
             clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
-            # instantiate agent
+            # instantiate baby agent
             sex = 'M' if random.random() > 0.5 else 'F'
             a = Baby(self.model, id_, lang, sex, home=self.loc_info['home'],
                      school=closest_school_idx, city_idx=self.loc_info['city_idx'])
@@ -685,6 +714,15 @@ class Adult(Young): # from 30 to 65
     def stage_4(self):
         if self.info['age'] == 36 * 65:
             self.grow(Pensioner)
+
+
+class Worker(Adult):
+    pass
+
+
+class Teacher(Adult):
+    pass
+
 
 class Pensioner(Adult): # from 65 to death
 

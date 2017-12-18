@@ -174,8 +174,7 @@ class Networks:
                 school.set_up_courses()
 
     def define_friendship_networks(self):
-        # TODO :
-        # Apply small world graph to relevant nodes using networkx
+        # TODO : Apply small world graph to relevant nodes using networkx
         friends_per_agent = np.random.randint(1, 5, size=self.model.num_people)
         for ag, num_friends in zip(self.model.schedule.agents, friends_per_agent):
             if ag.loc_info['job'] and len(self.friendship_network[ag]) < num_friends:

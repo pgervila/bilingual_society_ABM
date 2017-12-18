@@ -59,10 +59,10 @@ class EducationCenter:
         school_clust_ix = self.info['clust']
         hired_teachers = []
         # loop over clusters from closest to farthest from school
-        for ix in self.model.gm.clusters_info[school_clust_ix]['closest_clusters']:
+        for ix in self.model.geo.clusters_info[school_clust_ix]['closest_clusters']:
             # list cluster teacher candidates. Shuffle them to add randomness
             # TODO : hire teachers based on fact they have UNIV education !!!
-            clust_cands = [ag for ag in self.model.gm.clusters_info[ix]['agents']
+            clust_cands = [ag for ag in self.model.geo.clusters_info[ix]['agents']
                            if ag.info['language'] in self.info['lang_policy'] and
                            ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
                            not isinstance(ag.loc_info['job'], (School, University))]
@@ -212,7 +212,7 @@ class School(EducationCenter):
     def exit_studs(self, studs):
         # sent studs from last year to univ or job market
         universities = [clust_info['university']
-                        for clust_info in self.model.gm.clusters_info.values()
+                        for clust_info in self.model.geo.clusters_info.values()
                         if 'university' in clust_info]
         # get closest univ
         idx_univ = np.argmin([pdist([self.pos, univ.pos])

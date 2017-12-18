@@ -75,15 +75,15 @@ class DataProcessor(DataCollector):
             plt.show()
 
     def save_model_data(self):
-        self.model_data = {'initial_conditions':{'num_clusters': self.model.gm.num_clusters,
-                                                 'cluster_sizes': self.model.gm.cluster_sizes,
-                                                 'cluster_centers': self.model.gm.clust_centers,
-                                                 'init_num_people': self.model.num_people,
-                                                 'grid_width': self.model.grid.width,
-                                                 'grid_height': self.model.grid.height,
-                                                 'init_lang_distrib': self.model.init_lang_distrib,
-                                                 'sort_by_dist': self.model.lang_ags_sorted_by_dist,
-                                                 'sort_within_clust': self.model.lang_ags_sorted_in_clust},
+        self.model_data = {'initial_conditions': {'num_clusters': self.model.geo.num_clusters,
+                                                  'cluster_sizes': self.model.geo.cluster_sizes,
+                                                  'cluster_centers': self.model.geo.clust_centers,
+                                                  'init_num_people': self.model.num_people,
+                                                  'grid_width': self.model.grid.width,
+                                                  'grid_height': self.model.grid.height,
+                                                  'init_lang_distrib': self.model.init_lang_distrib,
+                                                  'sort_by_dist': self.model.lang_ags_sorted_by_dist,
+                                                  'sort_within_clust': self.model.lang_ags_sorted_in_clust},
                            'model_results': self.get_model_vars_dataframe(),
                            'agent_results': self.get_agent_vars_dataframe()}
         if self.save_dir:

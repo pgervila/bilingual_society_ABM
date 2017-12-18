@@ -161,7 +161,7 @@ class LanguageModel(Model):
             Args:
                 * ag_init : agent object instance. Agent that starts conversation
                 * others : list of agent class instances. Rest of agents that take part in conversation
-                           It can be a single agent object that will be automatically converted into a list
+                    It can be a single agent object that will be automatically converted into a list
                 * bystander: extra agent that may listen to conversation words without actually being involved.
                     Agent vocabulary gets correspondingly updated if bystander agent is specified
                 * num_days: integer [1, 10]. Number of days in one 10day-step this kind of speech is done
@@ -225,7 +225,7 @@ class LanguageModel(Model):
         # define current case
         if ags_lang_types in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
             lang_group = 0
-            conv_params.update({'lang_group':lang_group})
+            conv_params.update({'lang_group': lang_group})
         elif ags_lang_types == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
@@ -235,9 +235,9 @@ class LanguageModel(Model):
             else:
                 lang_init = np.argmax([l1_pcts[0], l2_pcts[0]])
             # TODO : why known agents only checked for this option ??????????????
-            langs_with_known_agents = [self.known_people_network[ag_init][ag]['lang']
+            langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
                                        for ag in others
-                                       if ag in self.known_people_network[ag_init]]
+                                       if ag in self.nws.known_people_network[ag_init]]
             if langs_with_known_agents:
                 lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
             else:
@@ -319,9 +319,9 @@ class LanguageModel(Model):
             Call this function if death conditions for agent are verified
         """
         # Remove agent from all networks
-        for network in [self.family_network,
-                        self.known_people_network,
-                        self.friendship_network]:
+        for network in [self.nws.family_network,
+                        self.nws.known_people_network,
+                        self.nws.friendship_network]:
             try:
                 network.remove_node(agent)
             except nx.NetworkXError:
@@ -335,7 +335,7 @@ class LanguageModel(Model):
             except:
                 continue
         # remove agent from city
-        self.clusters_info[agent.loc_info['city_idx']]['agents'].remove(agent)
+        self.geo.clusters_info[agent.loc_info['city_idx']]['agents'].remove(agent)
         # remove agent from grid and schedule
         self.grid._remove_agent(agent.pos, agent)
         self.schedule.remove(agent)
