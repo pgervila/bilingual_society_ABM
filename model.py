@@ -1,4 +1,3 @@
-## NEW IMPORTS
 # IMPORT RELEVANT LIBRARIES
 import os, sys
 from importlib import reload
@@ -9,14 +8,13 @@ import networkx as nx
 # matplotlib.use("TKAgg")
 import matplotlib.pylab as plt
 import matplotlib.animation as animation
-# import progress bar
 import pyprind
-# import library to save any python data type to HDF5
 import deepdish as dd
 
 # IMPORT MESA LIBRARIES
 from mesa import Model
-from mesa.time import StagedActivation
+#from mesa.time import StagedActivation
+from schedule import StagedActivationModif
 from mesa.space import MultiGrid
 
 # IMPORT MODEL LIBRARIES
@@ -29,49 +27,6 @@ from networks import Networks
 from dataprocess import DataProcessor, DataViz
 
 
-class StagedActivationModif(StagedActivation):
-
-    def step(self):
-        """ Executes all the stages for all agents. """
-        for agent in self.agents[:]:
-            agent.info['age'] += 1
-            # simulate chance to reproduce
-            agent.reproduce()
-            for lang in ['L1', 'L12', 'L21', 'L2']:
-                # update last-time word use vector
-                agent.lang_stats[lang]['t'][~agent.day_mask[lang]] += 1
-                # set current lang knowledge
-                agent.lang_stats[lang]['pct'][agent.info['age']] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                                    agent.model.vocab_red)
-                # reset day mask
-                agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
-            # Update lang switch
-            agent.update_lang_switch()
-        if self.shuffle:
-            random.shuffle(self.agents)
-        for stage in self.stage_list:
-            for agent in self.agents[:]:
-                getattr(agent, stage)()  # Run stage
-            if self.shuffle_between_stages:
-                random.shuffle(self.agents)
-            self.time += self.stage_time
-        # simulate death chance
-        for agent in self.agents[:]:
-            agent.simulate_random_death()
-        # loop and update courses in schools and universities year after year
-        if not self.steps % 36:
-            for clust_idx, clust_info in self.model.clusters_info.items():
-                if 'university' in clust_info:
-                    for fac in clust_info['university'].faculties.values():
-                        if fac.info['students']:
-                            fac.update_courses()
-                for school in clust_info['schools']:
-                    school.update_courses()
-                    if not self.steps % 72: # every 2 years only, teachers swap
-                        school.teachers_course_swap()
-        self.steps += 1
-
-
 class LanguageModel(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
@@ -79,8 +34,10 @@ class LanguageModel(Model):
     school_lang_policy = [1]
     steps_per_year = 36
 
-    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250), width=100, height=100,
-                 max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
+    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250),
+                 width=100, height=100,
+                 max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1],
+                 num_clusters=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
         self.num_people = num_people
         if spoken_only:
@@ -96,9 +53,12 @@ class LanguageModel(Model):
         self.max_run_steps = max_run_steps
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
-        self.clust_centers = None
-        self.cluster_sizes = None
+        # self.clust_centers = None
+        # self.cluster_sizes = None
         self.random_seeds = np.random.randint(1, 10000, size=2)
+
+        #define container for available ids
+        self.set_available_ids = set(range(num_people, max_people_factor * num_people))
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
         self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_spoken_ics_vs_step.h5'))
@@ -343,7 +303,7 @@ class LanguageModel(Model):
         self.set_available_ids.add(agent.unique_id)
 
     def step(self):
-        self.datacollector.collect(self)
+        self.data_process.collect(self)
         self.schedule.step()
 
     def run_model(self, steps, recording_steps_period=None, save_dir=''):
@@ -423,7 +383,7 @@ class LanguageModel(Model):
             self.step()
 
             #create plots and data for 1D plots
-            data = self.datacollector.get_model_vars_dataframe()
+            data = self.data_process.get_model_vars_dataframe()
             line10.set_data(data.index, data['count_spa'])
             line11.set_data(data.index, data['count_bil'])
             line12.set_data(data.index, data['count_cat'])

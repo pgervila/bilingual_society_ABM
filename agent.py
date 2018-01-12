@@ -111,7 +111,8 @@ class BaseAgent:
                     If not specified, self agent will listen to a random conversation taking place on his cell
                 * min_age_interlocs: integer. Allows to adapt vocabulary choice to the youngest
                     participant in the conversation
-                * num_days:
+                * num_days: integer. Number of days per step listening action takes place on average.
+                    A step equals 10 days.
         """
         if not to_agent:
             # get all agents currently placed on chosen cell
@@ -278,13 +279,19 @@ class BaseAgent:
     def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
         """ Method to randomly determine agent death or survival at each step
             The fitted function provides the death likelihood for a given rounded age
-            In order to get the death-probability per step we divide by number of steps in a year (36)
-            Fitting parameters are from https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
-            'Smoothing and projecting age-specific probabilities of death by TOPALS' by Joop de Beer
+            In order to get the death-probability per step we divide
+            by number of steps in a year (36)
+            Fitting parameters are from
+            https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
+            " Smoothing and projecting age-specific probabilities of death by TOPALS "
+            by Joop de Beer
             Resulting life expectancy is 77 years and std is ~ 15 years
         """
         if random.random() < a * (np.exp(b * self.info['age']) + c) / self.model.steps_per_year:
             self.model.remove_after_death(self)
+
+    def __repr__(self):
+        return 'Lang_Agent_{0.unique_id!r}'.format(self)
 
 
 class Baby(BaseAgent): # from 0 to 2 yo
@@ -365,28 +372,28 @@ class Baby(BaseAgent): # from 0 to 2 yo
     def stage_1(self, num_days=10):
         # listen to close family at home
         if self.info['age'] > 36:
-            for ag in [ag for ag in self.loc_info['home'].agents_in.difference({self})
-                       if ag.info['age'] > 72]:
-                self.listen(to_agent=ag, min_age_interlocs=self.info['age'],
-                            num_days=num_days)
+            for ag in self.loc_info['home'].agents_in.difference({self}):
+                if ag.info['age'] > 72:
+                    self.listen(to_agent=ag, min_age_interlocs=self.info['age'],
+                                num_days=num_days)
             if not self.loc_info['school']:
                 self.register_to_school()
 
-    def stage_2(self):
+    def stage_2(self, num_days=7):
         # go to daycare with mom or dad
         if self.info['age'] > 36:
             school = self.loc_info['school']
             self.model.grid.move_agent(self, school.pos)
-            mother = self.info['close_family']['mother']
-            self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=7)
+            parent = self.info['close_family']['mother']
+            self.listen(to_agent=parent, min_age_interlocs=self.info['age'], num_days=num_days)
             # TODO : a part of speech from teacher to all course(from teacher stage),
             # TODO another is personalized
             school.agents_in.add(self)
             course_key = self.loc_info['course_key']
             teacher = school.grouped_studs[course_key]['teacher']
-            self.listen(to_agent=teacher, num_days=5)
+            self.listen(to_agent=teacher, num_days=num_days)
 
-    def stage_3(self):
+    def stage_3(self, num_days=7):
         if self.info['age'] > 36:
             mother = self.info['close_family']['mother']
             school = self.loc_info['school']
@@ -396,12 +403,12 @@ class Baby(BaseAgent): # from 0 to 2 yo
             if parents:
                 self.model.grid.move_agent(mother, school.pos)
                 num_peop = random.randint(1, min(len(parents), 4))
-                mother.start_conversation(with_agents = random.sample(parents, num_peop))
+                mother.start_conversation(with_agents=random.sample(parents, num_peop))
             for stud in school.info['students']:
                 if stud.info['close_family']['mother']:
                     pass
             school.agents_in.remove(self)
-            self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=7)
+            self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=num_days)
 
     def stage_4(self):
         # baby goes to school early during week
@@ -653,19 +660,18 @@ class Young(Adolescent): # from 18 to 30
         self.model.grid._remove_agent((x,y), self)
         self.model.schedule.remove(self)
 
-
-    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):  ##
-        # transform ages to steps
-        age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
-        # define stochastic probability of agent death as function of age
-        if (self.info['age'] > age_1) and (self.info['age'] <= age_2):
-            if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
-                self.remove_after_death()
-        elif (self.info['age'] > age_2) and (self.info['age'] < age_3):
-            if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
-                self.remove_after_death()
-        elif self.info['age'] >= age_3:
-            self.remove_after_death()
+    # def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):
+    #     # transform ages to steps
+    #     age_1, age_2, age_3 = [age * 36 for age in [age_1, age_2, age_3]]
+    #     # define stochastic probability of agent death as function of age
+    #     if (self.info['age'] > age_1) and (self.info['age'] <= age_2):
+    #         if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
+    #             self.remove_after_death()
+    #     elif (self.info['age'] > age_2) and (self.info['age'] < age_3):
+    #         if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
+    #             self.remove_after_death()
+    #     elif self.info['age'] >= age_3:
+    #         self.remove_after_death()
 
     def look_for_job(self):
         # loop through shuffled job centers list until a job is found
@@ -879,58 +885,19 @@ class LanguageAgent:
             # Update num of children
             self.info['num_children'] += 1
 
-    def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):
-        """ Method that may randomly kill self agent at each step. Agent death likelihood varies with age
-            Args:
-                * age_1: integer. Minimum age for death to be possible
-                * age_2: integer.
-                * age_3: integer
-                * prob_1: death probability in first period
-                * prob_2: death probability in second period
+    def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
+        """ Method to randomly determine agent death or survival at each step
+            The fitted function provides the death likelihood for a given rounded age
+            In order to get the death-probability per step we divide
+            by number of steps in a year (36)
+            Fitting parameters are from
+            https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
+            " Smoothing and projecting age-specific probabilities of death by TOPALS "
+            by Joop de Beer
+            Resulting life expectancy is 77 years and std is ~ 15 years
         """
-        # transform ages to steps
-        age_1, age_2, age_3 = age_1 * 36, age_2 * 36, age_3 * 36
-        # define stochastic probability of agent death as function of age
-        if (self.info['age'] > age_1) and (self.info['age'] <= age_2):
-            if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
-                self.remove_after_death()
-        elif (self.info['age'] > age_2) and (self.info['age'] < age_3):
-            if random.random() < prob_2 / (age_3 - age_2):  # 70% pop will die through this period
-                self.remove_after_death()
-        elif self.info['age'] >= age_3:
-            self.remove_after_death()
-
-    # def remove_after_death(self):
-    #     """ Removes agent object from all places where it belongs.
-    #         It makes sure no references to agent object are left aftr removal,
-    #         so that garbage collector can free memory
-    #         Call this function if death conditions for agent are verified
-    #     """
-    #     # Remove agent from all networks
-    #     for network in [self.model.family_network,
-    #                     self.model.known_people_network,
-    #                     self.model.friendship_network]:
-    #         try:
-    #             network.remove_node(self)
-    #         except nx.NetworkXError:
-    #             pass
-    #     # remove agent from all locations where it might be
-    #     for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
-    #                          ['occupants','employees','students']) :
-    #         try:
-    #             getattr(loc, attr).remove(self)
-    #             loc.agents_in.remove(self)
-    #         except:
-    #             continue
-    #     # remove agent from city
-    #     self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
-    #
-    #     # remove agent from grid and schedule
-    #     self.model.grid._remove_agent(self.pos, self)
-    #     self.model.schedule.remove(self)
-    #
-    #     # make id from deceased agent available
-    #     self.model.set_available_ids.add(self.unique_id)
+        if random.random() < a * (np.exp(b * self.info['age']) + c) / self.model.steps_per_year:
+            self.model.remove_after_death(self)
 
     def look_for_job(self):
         """ Method for agent to look for a job """

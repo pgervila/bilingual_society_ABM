@@ -107,8 +107,8 @@ class GeoMapper:
 
     def sort_clusts_by_dist(self, ix):
         return sorted(range(len(self.clust_centers)),
-                                  key=lambda x: pdist([self.clust_centers[x],
-                                                       self.clust_centers[ix]])[0])
+                      key=lambda x: pdist([self.clust_centers[x],
+                                           self.clust_centers[ix]])[0])
 
     def set_clusters_info(self):
         """ Create dict container for all cluster info"""

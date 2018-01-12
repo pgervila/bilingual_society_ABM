@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
 from collections import Counter
-#import library to save any python data type to HDF5
 import deepdish as dd
 
 
