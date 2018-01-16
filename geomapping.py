@@ -354,10 +354,10 @@ class GeoMapper:
         # construct an iterable list out of all possible input structure
         ags = [ags] if type(ags) != list else ags
         # add agent to grid and schedule
-        for a in ags:
-            self.model.schedule.add(a)
-            if a.loc_info['home']:
-                self.model.grid.place_agent(a, a.loc_info['home'].pos)
+        for ag in ags:
+            self.model.schedule.add(ag)
+            if ag.loc_info['home']:
+                self.model.grid.place_agent(ag, ag.loc_info['home'].pos)
             else:
-                self.model.grid.place_agent(a, (0, 0))
+                self.model.grid.place_agent(ag, (0, 0))
 

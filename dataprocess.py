@@ -11,14 +11,27 @@ import deepdish as dd
 class DataProcessor(DataCollector):
     def __init__(self, model):
         self.model = model
-        super().__init__(model_reporters={"count_spa": self.get_lang_stats(0),
-                                          "count_bil": self.get_lang_stats(1),
-                                          "count_cat": self.get_lang_stats(2),
-                                          "total_num_agents": lambda m: m.schedule.get_agent_count(),
-                                          "biling_evol": self.get_bilingual_global_evol()
+        super().__init__(model_reporters={"count_spa": lambda dp: dp.get_lang_stats(0),
+                                          "count_bil": lambda dp: dp.get_lang_stats(1),
+                                          "count_cat": lambda dp: dp.get_lang_stats(2),
+                                          "total_num_agents": lambda dp: len(dp.model.schedule.agents),
+                                          "biling_evol": lambda dp: dp.get_bilingual_global_evol()
                                          },
                          agent_reporters={"pct_cat_in_biling": lambda a: a.lang_stats['L2']['pct'][a.info['age']],
                                           "pct_spa_in_biling": lambda a: a.lang_stats['L1']['pct'][a.info['age']]})
+
+    def collect(self):
+        """ Collect all the data for the given model object. """
+        if self.model_reporters:
+            for var, reporter in self.model_reporters.items():
+                self.model_vars[var].append(reporter(self))
+
+        if self.agent_reporters:
+            for var, reporter in self.agent_reporters.items():
+                agent_records = []
+                for agent in self.model.schedule.agents:
+                    agent_records.append((agent.unique_id, reporter(agent)))
+                self.agent_vars[var].append(agent_records)
 
     def get_lang_stats(self, i):
         """Method to get counts of each type of lang agent

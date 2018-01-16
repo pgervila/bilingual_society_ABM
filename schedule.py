@@ -28,19 +28,19 @@ class StagedActivationModif(StagedActivation):
             random.shuffle(self.agents)
         for stage in self.stage_list:
             for agent in self.agents[:]:
-                getattr(agent, stage)()  # Run stage
+                # Run stage
+                getattr(agent, stage)()
             if self.shuffle_between_stages:
                 random.shuffle(self.agents)
             self.time += self.stage_time
-        # simulate reproduction and death chances
+        # check reproduction, death
+        # TODO: check if isinstance(agent, Young)
         for agent in self.agents[:]:
-            # TODO: if isinstance(agent, Young)
             agent.reproduce()
             agent.random_death()
-
         # loop and update courses in schools and universities year after year
         if not self.steps % 36:
-            for clust_idx, clust_info in self.model.clusters_info.items():
+            for clust_idx, clust_info in self.model.geo.clusters_info.items():
                 if 'university' in clust_info:
                     for fac in clust_info['university'].faculties.values():
                         if fac.info['students']:

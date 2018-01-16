@@ -11,11 +11,12 @@ import matplotlib.animation as animation
 import pyprind
 import deepdish as dd
 
-# IMPORT MESA LIBRARIES
+# IMPORT MESA LIBRARIES ( Model, Grid, Schedule )
 from mesa import Model
-#from mesa.time import StagedActivation
-from schedule import StagedActivationModif
 from mesa.space import MultiGrid
+import schedule
+reload(sys.modules['schedule'])
+from schedule import StagedActivationModif
 
 # IMPORT MODEL LIBRARIES
 import geomapping, networks, dataprocess
@@ -25,6 +26,7 @@ reload(sys.modules['dataprocess'])
 from geomapping import GeoMapper
 from networks import Networks
 from dataprocess import DataProcessor, DataViz
+
 
 
 class LanguageModel(Model):
@@ -303,7 +305,7 @@ class LanguageModel(Model):
         self.set_available_ids.add(agent.unique_id)
 
     def step(self):
-        self.data_process.collect(self)
+        self.data_process.collect()
         self.schedule.step()
 
     def run_model(self, steps, recording_steps_period=None, save_dir=''):

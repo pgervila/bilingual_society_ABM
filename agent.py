@@ -379,8 +379,9 @@ class Baby(BaseAgent): # from 0 to 2 yo
             if not self.loc_info['school']:
                 self.register_to_school()
 
-    def stage_2(self, num_days=7):
-        # go to daycare with mom or dad
+    def stage_2(self):
+        # go to daycare with mom or dad - 7 days out of 10
+        num_days = 7
         if self.info['age'] > 36:
             school = self.loc_info['school']
             self.model.grid.move_agent(self, school.pos)
@@ -392,8 +393,12 @@ class Baby(BaseAgent): # from 0 to 2 yo
             course_key = self.loc_info['course_key']
             teacher = school.grouped_studs[course_key]['teacher']
             self.listen(to_agent=teacher, num_days=num_days)
+        # model week-ends time
+        num_days = 3
 
-    def stage_3(self, num_days=7):
+
+    def stage_3(self):
+        num_days = 7
         if self.info['age'] > 36:
             mother = self.info['close_family']['mother']
             school = self.loc_info['school']
@@ -409,10 +414,13 @@ class Baby(BaseAgent): # from 0 to 2 yo
                     pass
             school.agents_in.remove(self)
             self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=num_days)
+        num_days = 3
+        # pick random friends from parents. Set up meeting witht them
+        # TODO : better do this from parents object ??
 
     def stage_4(self):
-        # baby goes to school early during week
-        self.stage_1(num_days=5)
+        # baby goes to bed early during week
+        self.stage_1(num_days=3)
         if self.info['age'] == 36 * 2:
             self.grow(Child)
 
@@ -517,8 +525,11 @@ class Child(BaseAgent): #from 2 to 10
         return spoken_words
 
 
-    def stage_1(self):
-        pass
+    def stage_1(self, num_days=10):
+        for ag in self.loc_info['home'].agents_in.difference({self}):
+            if ag.info['age'] > 72:
+                self.listen(to_agent=ag, min_age_interlocs=self.info['age'],
+                            num_days=num_days)
 
     def stage_2(self):
         pass
@@ -623,7 +634,7 @@ class Young(Adolescent): # from 18 to 30
 
             # find closest school to parent home
             city_idx = self.loc_info['city_idx']
-            clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
+            clust_schools_coords = [sc.pos for sc in self.model.geo.clusters_info[city_idx]['schools']]
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate baby agent
@@ -631,7 +642,8 @@ class Young(Adolescent): # from 18 to 30
             a = Baby(self.model, id_, lang, sex, home=self.loc_info['home'],
                      school=closest_school_idx, city_idx=self.loc_info['city_idx'])
             # Add agent to model
-            self.model.add_agent_to_grid_sched_networks(a)
+            self.model.geo.add_agents_to_grid_and_schedule(a)
+            self.model.nws.add_ags_to_networks(a)
             # Update num of children for both self and consort
             self.info['num_children'] += 1
             consort.info['num_children'] += 1
@@ -659,19 +671,6 @@ class Young(Adolescent): # from 18 to 30
         # remove agent from grid and schedule
         self.model.grid._remove_agent((x,y), self)
         self.model.schedule.remove(self)
-
-    # def simulate_random_death(self, age_1=20, age_2=75, age_3=90, prob_1=0.25, prob_2=0.7):
-    #     # transform ages to steps
-    #     age_1, age_2, age_3 = [age * 36 for age in [age_1, age_2, age_3]]
-    #     # define stochastic probability of agent death as function of age
-    #     if (self.info['age'] > age_1) and (self.info['age'] <= age_2):
-    #         if random.random() < prob_1 / (age_2 - age_1):  # 25% pop will die through this period
-    #             self.remove_after_death()
-    #     elif (self.info['age'] > age_2) and (self.info['age'] < age_3):
-    #         if random.random() < prob_2 / (age_3 - age_2):  # 70% will die
-    #             self.remove_after_death()
-    #     elif self.info['age'] >= age_3:
-    #         self.remove_after_death()
 
     def look_for_job(self):
         # loop through shuffled job centers list until a job is found
@@ -871,15 +870,16 @@ class LanguageAgent:
             lang = self.info['language']
             # find closest school to parent home
             city_idx = self.loc_info['city_idx']
-            clust_schools_coords = [sc.pos for sc in self.model.clusters_info[city_idx]['schools']]
+            clust_schools_coords = [sc.pos for sc in self.model.geo.clusters_info[city_idx]['schools']]
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate new agent
             a = LanguageAgent(self.model, id_, lang, ag_home=self.loc_info['home'],
-                              ag_school=self.model.clusters_info[city_idx]['schools'][closest_school_idx],
+                              ag_school=self.model.geo.clusters_info[city_idx]['schools'][closest_school_idx],
                               ag_job=None, city_idx=self.loc_info['city_idx'])
             # Add agent to model
-            self.model.add_agent_to_grid_sched_networks(a)
+            self.model.geo.add_agents_to_grid_and_schedule(a)
+            self.model.nws.add_ags_to_networks(a)
             # add newborn agent to home presence list
             a.loc_info['home'].agents_in.add(a)
             # Update num of children
@@ -978,14 +978,18 @@ class LanguageAgent:
         else:
             return self.model.num_words_conv[0] / factor
 
-    def pick_vocab(self, lang, long=True, biling_interloc=False):
+    def pick_vocab(self, lang, long=True, min_age_interlocs=None,
+                   biling_interloc=False, num_days=10):
         """ Method that models word choice by self agent in a conversation
             Word choice is governed by vocabulary knowledge constraints
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
                 * long: boolean that defines conversation length
+                * min_age_interlocs: integer. The youngest age among all interlocutors, EXPRESSED IN STEPS.
+                    It is used to modulate conversation vocabulary to younger agents
                 * biling_interloc : boolean. If True, speaker word choice might be mixed, since
                     he/she is certain interlocutor will understand
+                * num_days : integer [1, 10]. Number of days in one 10day-step this kind of speech is done
             Output:
                 * spoken words: dict where keys are lang labels and values are lists with words spoken
                     in lang key and corresponding counts
@@ -993,19 +997,21 @@ class LanguageAgent:
 
         # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
 
-        #TODO : model 'Grammatical foreigner talk' =>
-        #TODO : how word choice is adapted by native speakers when speaking to learners
-        #TODO : or more importantly, by adults to children
-
-        #TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
+        # TODO : model 'Grammatical foreigner talk' =>
+        # TODO : how word choice is adapted by native speakers when speaking to adult learners
+        # TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
 
         # sample must come from AVAILABLE words in R ( retrievability) !!!! This can be modeled in following STEPS
 
         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
         # These are the thoughts that speaker tries to convey
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
-        word_samples = randZipf(self.model.cdf_data['s'][self.info['age']],
-                                int(self.get_num_words_per_conv(long) * 10)) # 10 is num_days per step
+        num_words = int(self.get_num_words_per_conv(long) * num_days)
+        if min_age_interlocs:
+            word_samples = randZipf(self.model.cdf_data['s'][min_age_interlocs], num_words)
+        else:
+            word_samples = randZipf(self.model.cdf_data['s'][self.info['age']], num_words)
+
         # get unique words and counts
         bcs = np.bincount(word_samples)
         act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
@@ -1041,7 +1047,7 @@ class LanguageAgent:
         # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
         # get mask for words successfully retrieved from memory
         mask_R = np.random.rand(len(act)) <= self.lang_stats[lang]['R'][act]
-        spoken_words = {lang: [act[mask_R], act_c[mask_R]]}
+        spoken_words = {lang:[act[mask_R], act_c[mask_R]]}
         # if there are missing words-concepts, they might be found in the other known language(s)
         if np.count_nonzero(mask_R) < len(act):
             if lang in ['L1', 'L12']:
@@ -1050,7 +1056,7 @@ class LanguageAgent:
                 lang2 = 'L21' if lang == 'L2' else 'L2'
             mask_R2 = np.random.rand(len(act[~mask_R])) <= self.lang_stats[lang2]['R'][act[~mask_R]]
             if act[~mask_R][mask_R2].size:
-                spoken_words.update({lang2: [act[~mask_R][mask_R2], act_c[~mask_R][mask_R2]]})
+                spoken_words.update({lang2:[act[~mask_R][mask_R2], act_c[~mask_R][mask_R2]]})
             # if still missing words, check in last lang available
             if (act[mask_R].size + act[~mask_R][mask_R2].size) < len(act):
                 lang3 = 'L2' if lang2 in ['L12', 'L1'] else 'L1'
@@ -1061,7 +1067,7 @@ class LanguageAgent:
                     # This is the process of creation/adaption/translation
                     tr_lang = max([lang, lang2], key=len)
                     spoken_words.update({lang2: [rem_words[mask_R3], act_c[~mask_R][~mask_R2][mask_R3]]})
-        # TODO : add further effect of 'pressure' from very clear-in-mind words from other lang on spoken lang
+
         return spoken_words
 
     def update_lang_arrays(self, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
@@ -1222,8 +1228,12 @@ class LanguageAgent:
             self.start_conversation() # WITH FRIENDS, IN GROUPS
         else:
             if self.loc_info['job']:
-                self.model.grid.move_agent(self, self.loc_info['job'].pos)
-                self.loc_info['job'].agents_in.add(self)
+                if not isinstance(self.loc_info['job'], list):
+                    job = self.loc_info['job']
+                else:
+                    job = self.loc_info['job'][0]
+                self.model.grid.move_agent(self, job.pos)
+                job.agents_in.add(self)
                 # TODO speak to people in job !!! DEFINE GROUP CONVERSATIONS !
                 self.start_conversation()
                 self.start_conversation()
