@@ -8,6 +8,10 @@ class Networks:
     """ Class to deal with everything that has to do with networks in model"""
 
     def __init__(self, model):
+
+        self.adj_mat_fam_nw = None
+        self.adj_mat_friend_nw = None
+
         self.model = model
         # setup
         self.create_networks()
@@ -193,8 +197,8 @@ class Networks:
                             coll not in self.friendship_network[ag] and
                             coll not in self.family_network[ag]):
                     lang = self.model.define_lang_interaction(ag, coll)
-                    self.friendship_network.add_edge(ag, coll, lang=lang)
-                    # kpnetwork is directed graph !
+                    self.friendship_network.add_edge(ag, coll, lang=lang, weight=np.random.randint(1,10))
+                    # known people network is directed graph !
                     self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
                     self.known_people_network.add_edge(coll, ag, friends=True, lang=lang)
                 if len(self.friendship_network[ag]) > num_friends - 1:

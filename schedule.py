@@ -1,7 +1,8 @@
 from mesa.time import StagedActivation
-#from agent import Young
+from agent import Young
 
 import numpy as np
+import networkx as nx
 import random
 
 
@@ -10,8 +11,6 @@ class StagedActivationModif(StagedActivation):
 
     def step(self):
         """ Executes all the stages for all agents. """
-        # basic IDEA: network adj matrices will be fixed through all stages of one step
-        # first
         for agent in self.agents[:]:
             agent.info['age'] += 1
             for lang in ['L1', 'L12', 'L21', 'L2']:
@@ -26,10 +25,23 @@ class StagedActivationModif(StagedActivation):
             agent.update_lang_switch()
         if self.shuffle:
             random.shuffle(self.agents)
+        # basic IDEA: network adj matrices will be fixed through all stages of one step
+        # compute adjacent matrices for family and friends
+        Fam_Graph = nx.adjacency_matrix(self.model.nws.family_network,
+                                        nodelist=self.agents).toarray()
+        self.model.nws.adj_mat_fam_nw = Fam_Graph/Fam_Graph.sum(axis=1, keepdims=True)
+
+        Friend_Graph = nx.adjacency_matrix(self.model.nws.friendship_network,
+                                           nodelist=self.agents).toarray()
+        self.model.nws.adj_mat_friend_nw = Friend_Graph/Friend_Graph.sum(axis=1, keepdims=True)
+
         for stage in self.stage_list:
-            for agent in self.agents[:]:
+            for ix_agent, agent in enumerate(self.agents[:]):
                 # Run stage
-                getattr(agent, stage)()
+                if isinstance(agent, Young):
+                    getattr(agent, stage)(ix_agent)
+                else:
+                    getattr(agent, stage)()
             if self.shuffle_between_stages:
                 random.shuffle(self.agents)
             self.time += self.stage_time

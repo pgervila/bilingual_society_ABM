@@ -18,7 +18,9 @@ class DataProcessor(DataCollector):
                                           "biling_evol": lambda dp: dp.get_bilingual_global_evol()
                                          },
                          agent_reporters={"pct_cat_in_biling": lambda a: a.lang_stats['L2']['pct'][a.info['age']],
-                                          "pct_spa_in_biling": lambda a: a.lang_stats['L1']['pct'][a.info['age']]})
+                                          "pct_L21_in_biling": lambda a: a.lang_stats['L21']['pct'][a.info['age']],
+                                          "pct_spa_in_biling": lambda a: a.lang_stats['L1']['pct'][a.info['age']],
+                                          "pct_L12_in_biling": lambda a: a.lang_stats['L12']['pct'][a.info['age']]})
 
     def collect(self):
         """ Collect all the data for the given model object. """

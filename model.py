@@ -59,6 +59,7 @@ class LanguageModel(Model):
         # self.cluster_sizes = None
         self.random_seeds = np.random.randint(1, 10000, size=2)
 
+
         #define container for available ids
         self.set_available_ids = set(range(num_people, max_people_factor * num_people))
 
@@ -72,7 +73,7 @@ class LanguageModel(Model):
                                               stage_list=["stage_1", "stage_2",
                                                           "stage_3", "stage_4"],
                                               shuffle=True,
-                                              shuffle_between_stages=True)
+                                              shuffle_between_stages=False)
 
         # define model geomapping and model networks
         self.geo = GeoMapper(self, num_clusters)
