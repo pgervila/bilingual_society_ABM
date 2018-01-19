@@ -376,32 +376,32 @@ class Baby(BaseAgent): # from 0 to 2 yo
         # listen to close family at home
         # all activities are DRIVEN by current agent
         if self.info['age'] > 36:
-            for ag in self.loc_info['home'].agents_in.difference({self}):
-                if ag.info['age'] > 72:
-                    self.listen(to_agent=ag, min_age_interlocs=self.info['age'],
-                                num_days=num_days)
+            ags_at_home = self.loc_info['home'].agents_in.difference({self})
+            if ags_at_home:
+                for ag in ags_at_home:
+                    if isinstance(ag, Child):
+                        self.listen(to_agent=ag, min_age_interlocs=self.info['age'],
+                                    num_days=num_days)
             if not self.loc_info['school']:
                 self.register_to_school()
 
-    def stage_2(self):
+    def stage_2(self, num_days = 7):
         # go to daycare with mom or dad - 7 days out of 10
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
-        num_days = 7
         if self.info['age'] > 36:
             school = self.loc_info['school']
             self.model.grid.move_agent(self, school.pos)
             self.listen(to_agent=self.school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
             # TODO : a part of speech from teacher to all course(driven from teacher stage method),
-            # TODO while another is personalized ( in this stage)
             school.agents_in.add(self)
             course_key = self.loc_info['course_key']
             teacher = school.grouped_studs[course_key]['teacher']
+            self.model.run_conversation(teacher, self.school_parent, num_days=num_days)
             self.listen(to_agent=teacher, min_age_interlocs=self.info['age'], num_days=num_days)
         # model week-ends time are modeled in PARENTS stages
 
-    def stage_3(self):
+    def stage_3(self, num_days=7):
         # parent comes to pick up and speaks with other parents. Then baby listens to parent on way back
-        num_days = 7
         if self.info['age'] > 36:
             school = self.loc_info['school']
             self.model.grid.move_agent(self.school_parent, school.pos)
@@ -413,7 +413,6 @@ class Baby(BaseAgent): # from 0 to 2 yo
                 self.school_parent.start_conversation(with_agents=random.sample(parents, num_peop))
             school.agents_in.remove(self)
             self.listen(to_agent=self.school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
-        num_days = 3
         # TODO : pick random friends from parents. Set up meeting witht them
 
     def stage_4(self):
@@ -427,13 +426,17 @@ class Child(BaseAgent): #from 2 to 10
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
                  lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
-                         lang_passive_thresh, import_ic)
+        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
+                         lang_act_thresh, lang_passive_thresh, import_ic)
+
+        self.school_parent = np.random.choice([self.info['close_family']['mother'],
+                                               self.info['close_family']['father']],
+                                              p=[0.7, 0.3])
 
     def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
                                real_spoken_tokens_per_day=16000):
         """ Computes number of words spoken per conversation for a given age
-            drawing from a 'num_words vs age' curve
+            based on a 'num_words vs age' curve
             It assumes a compression scale of 40 in SIMULATED vocabulary and
             16000 tokens per adult per day as REAL number of spoken words on average
             Args:
@@ -552,35 +555,49 @@ class Child(BaseAgent): #from 2 to 10
 
         return spoken_words
 
-
     def stage_1(self, num_days=10):
-        for ag in self.loc_info['home'].agents_in.difference({self}):
-            if ag.info['age'] > 72:
-                self.listen(to_agent=ag, min_age_interlocs=self.info['age'],
-                            num_days=num_days)
+        ags_at_home = self.loc_info['home'].agents_in.difference({self})
+        ags_at_home = [ag for ag in ags_at_home if isinstance(ag, Child)]
+        others = random.randint(1, min(len(ags_at_home), 4))
+        self.model.run_conversation(self, others)
 
-    def stage_2(self):
-        pass
-
-    def stage_3(self):
-        mother = self.info['close_family']['mother']
+    def stage_2(self, num_days=7):
+        # go to daycare with mom or dad - 7 days out of 10
+        # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
         school = self.loc_info['school']
-        parents = [p.info['close_family']['mother']
-                   if random.random() > 0.4 else p.info['close_family']['father']
-                   for p in school.info['students'] if p['mother'].pos == school.pos]
+        self.model.grid.move_agent(self, school.pos)
+        self.model.run_conversation(self, self.school_parent, num_days=num_days)
+        # TODO : a part of speech from teacher to all course(driven from teacher stage method),
+        school.agents_in.add(self)
+        # talk to teacher and mates
+        course_key = self.loc_info['course_key']
+        # talk with teacher
+        teacher = school.grouped_studs[course_key]['teacher']
+        self.model.run_conversation(teacher, self, num_days=num_days)
+        self.model.run_conversation(teacher, self.school_parent, num_days=2)
+        # talk with school mates
+        mates = school.grouped_studs[course_key]['students'].difference({self})
+        mates = random.randint(1, len(mates))
+        self.model.run_conversation(self, mates, num_days=num_days)
+        # week-ends time are modeled in PARENTS stages
+
+    def stage_3(self, num_days=7):
+        school = self.loc_info['school']
+        self.model.grid.move_agent(self.school_parent, school.pos)
+        course_key = self.loc_info['course_key']
+        parents = [stud.school_parent for stud in school.grouped_studs[course_key]['students']
+                   if stud.school_parent.pos == school.pos ]
         if parents:
-            self.model.grid.move_agent(mother, school.pos)
             num_peop = random.randint(1, min(len(parents), 4))
-            mother.start_conversation(with_agents = random.sample(parents, num_peop))
-        for stud in school.info['students']:
-            if stud.info['close_family']['mother']:
-                pass
+            self.school_parent.start_conversation(with_agents=random.sample(parents, num_peop))
         school.agents_in.remove(self)
-        self.listen(to_agent=mother, min_age_interlocs=self.info['age'], num_days=7)
+        self.model.run_conversation(self, self.school_parent, num_days=num_days)
 
     def stage_4(self):
+        self.stage_1(num_days=10)
         if self.info['age'] == 36 * 10:
             self.grow(Adolescent)
+
 
 class Adolescent(Child): # from 10 to 18
 

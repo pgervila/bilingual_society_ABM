@@ -48,7 +48,8 @@ class StagedActivationModif(StagedActivation):
         # check reproduction, death
         # TODO: check if isinstance(agent, Young)
         for agent in self.agents[:]:
-            agent.reproduce()
+            if isinstance(agent, Young):
+                agent.reproduce()
             agent.random_death()
         # loop and update courses in schools and universities year after year
         if not self.steps % 36:
