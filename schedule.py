@@ -1,5 +1,5 @@
 from mesa.time import StagedActivation
-from agent import Young
+from agent import Adolescent, Young
 
 import numpy as np
 import networkx as nx
@@ -38,7 +38,7 @@ class StagedActivationModif(StagedActivation):
         for stage in self.stage_list:
             for ix_agent, agent in enumerate(self.agents[:]):
                 # Run stage
-                if isinstance(agent, Young):
+                if isinstance(agent, Adolescent):
                     getattr(agent, stage)(ix_agent)
                 else:
                     getattr(agent, stage)()
@@ -46,7 +46,6 @@ class StagedActivationModif(StagedActivation):
                 random.shuffle(self.agents)
             self.time += self.stage_time
         # check reproduction, death
-        # TODO: check if isinstance(agent, Young)
         for agent in self.agents[:]:
             if isinstance(agent, Young):
                 agent.reproduce()

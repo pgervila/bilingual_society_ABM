@@ -197,7 +197,7 @@ class Networks:
                             coll not in self.friendship_network[ag] and
                             coll not in self.family_network[ag]):
                     lang = self.model.define_lang_interaction(ag, coll)
-                    self.friendship_network.add_edge(ag, coll, lang=lang, weight=np.random.randint(1,10))
+                    self.friendship_network.add_edge(ag, coll, lang=lang, weight=np.random.randint(1, 10))
                     # known people network is directed graph !
                     self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
                     self.known_people_network.add_edge(coll, ag, friends=True, lang=lang)
@@ -213,5 +213,7 @@ class Networks:
                            for elem in self.model.schedule.agents}
         people_color = [elem.language for elem in self.family_network]
         nx.draw(self.family_network, pos=people_pos_dict, node_color=people_color)
+
+
 
 
