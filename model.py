@@ -83,11 +83,6 @@ class LanguageModel(Model):
         # define dataviz
         self.data_viz = DataViz(self)
 
-    def _assign_home_to_agent(self, agent, home):
-        agent.loc_info['home'] = home
-        home.occupants.add(agent)
-        home.agents_in.add(agent)
-
     @staticmethod
     def define_lang_interaction(ag1, ag2, ret_pcts=False):
         """ Method to find out lang of interaction between two given agents """

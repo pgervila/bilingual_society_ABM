@@ -189,7 +189,7 @@ class GeoMapper:
             num_places_job_c = np.clip(num_places_job_c, min_places, max_places)
 
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
-                self.clusters_info[clust_idx]['jobs'].append(Job((x,y), num_places))
+                self.clusters_info[clust_idx]['jobs'].append(Job(clust_idx, (x, y), num_places))
 
     def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
@@ -236,7 +236,7 @@ class GeoMapper:
                                                    ceil(clust_size * num_homes_per_agent),
                                                    clust_idx)
             for x, y in zip(x_h, y_h):
-                self.clusters_info[clust_idx]['homes'].append(Home((x, y)))
+                self.clusters_info[clust_idx]['homes'].append(Home(clust_idx, (x, y)))
 
     def generate_lang_distrib(self):
         """ Method that generates a list of lists of lang labels in the requested order

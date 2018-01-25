@@ -36,7 +36,7 @@ class StagedActivationModif(StagedActivation):
         self.model.nws.adj_mat_friend_nw = Friend_Graph/Friend_Graph.sum(axis=1, keepdims=True)
 
         for stage in self.stage_list:
-            for ix_agent, agent in enumerate(self.agents[:]):
+            for ix_agent, agent in enumerate(self.agents):
                 # Run stage
                 if isinstance(agent, Adolescent):
                     getattr(agent, stage)(ix_agent)
@@ -45,7 +45,8 @@ class StagedActivationModif(StagedActivation):
             if self.shuffle_between_stages:
                 random.shuffle(self.agents)
             self.time += self.stage_time
-        # check reproduction, death
+        # check reproduction, death : make shallow copy of agents list,
+        # since we are potentially removing agents as we iterate
         for agent in self.agents[:]:
             if isinstance(agent, Young):
                 agent.reproduce()

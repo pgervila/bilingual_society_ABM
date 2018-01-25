@@ -5,19 +5,33 @@ from math import ceil
 import string
 from scipy.spatial.distance import pdist
 
+from agent import Teacher
+
 
 class Home:
-    def __init__(self, pos):
-        self.occupants = set()
+    def __init__(self, clust, pos):
+
+        self.clust = clust
         self.pos = pos
+        self.occupants = set()
         self.agents_in = set()
 
+    def assign_to_agent(self, agent, *ags):
+        """ assign the current home instance to each agent
+            Args:
+                * agent: agent instance
+                * ags: additional agents might be specified at once"""
+        for ag in [agent, *ags]:
+            ag.loc_info['home'] = self
+            self.occupants.add(ag)
+            self.agents_in.add(ag)
+
     def __repr__(self):
-        return 'Home_{0.pos!r}'.format(self)
+        return 'Home_{0.clust!r}_{0.pos!r}'.format(self)
 
 
 class EducationCenter:
-    """ Common methods to all educational centers such a Schools, Faculties """
+    """ Common methods to all educational centers such as Schools, Faculties """
 
     def __init__(self, model, pos, clust, num_places, age_range,
                  lang_policy, min_age_teacher):
@@ -194,12 +208,14 @@ class School(EducationCenter):
         """ Hire teachers for the specified courses
             Args:
                 * courses_keys: list of integer(s). Identifies courses for which teachers are missing
-                    through years of age
+                    through years of age of its students
         """
         hired_teachers = self.find_teachers(courses_keys, ret_output=True)
         # assign class key to teachers and add teachers to grouped studs
         # TODO : sort employees by lang competence from lowest to highest
         for (k, t) in zip(courses_keys, hired_teachers):
+            # turn hired agent into Teacher
+            t.grow(Teacher)
             self.grouped_studs[k]['teacher'] = t
             t.loc_info['job'] = self
             t.loc_info['course_key'] = k
@@ -280,6 +296,8 @@ class Faculty(EducationCenter):
         # assign class key to teachers and add teachers to grouped studs
         # TODO : sort employees by lang competence from lowest to highest
         for (k, t) in zip(courses_keys, hired_teachers):
+            # turn hired agent into Teacher
+            t.grow(Teacher)
             self.grouped_studs[k]['teacher'] = t
             t.loc_info['job'] = [self.univ, self.info['type']]
             t.loc_info['course_key'] = k
@@ -330,7 +348,8 @@ class Job:
                 1 -> both L1 and L2 ( only 1 agents may work here )
                 2 -> only L2 (so both 1, 2 agents may work here)
     """
-    def __init__(self, pos, num_places, skill_level=0, lang_policy = 1):
+    def __init__(self, clust, pos, num_places, skill_level=0, lang_policy=1):
+        self.clust = clust
         self.pos = pos
         self.num_places=num_places
         self.info = {'employees': set(), 'lang_policy': lang_policy,
@@ -343,4 +362,4 @@ class Job:
     # TODO : update workers by department and send them to retirement when age reached
 
     def __repr__(self):
-        return 'Job{0.pos!r}'.format(self)
+        return 'Job_{0.clust!r}_{0.pos!r}'.format(self)

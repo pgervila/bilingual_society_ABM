@@ -88,7 +88,7 @@ class Networks:
                                                    hi=len(self.model.ic_pct_keys) - 1)
                             ]
                             member.set_lang_ics(biling_key=key)
-                        self.model._assign_home_to_agent(member, home)
+                        home.assign_to_agent(member)
                 else: # monolingual parents
                     # check if children are bilingual
                     if 1 in [m.info['language'] for m in family[2:4]]:
@@ -101,11 +101,11 @@ class Networks:
                                     member.set_lang_ics(biling_key=90)
                                 else:
                                     member.set_lang_ics()
-                            self.model._assign_home_to_agent(member, home)
+                            home.assign_to_agent(member)
                     else:
                         for member in family:
                             member.set_lang_ics()
-                            self.model._assign_home_to_agent(member, home)
+                            home.assign_to_agent(member)
 
                 # assign job to parents
                 for parent in family[:2]:
