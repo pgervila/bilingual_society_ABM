@@ -342,13 +342,15 @@ class University:
 class Job:
     """ class that defines a Job object.
         Args:
-            *
+            * clust: integer. Index of cluster where job object is found
+            * pos: 2-D integer tuple. Job location on grid
+            * num_places: integer. Num of available job offers.
             * lang_policy: requested languages in order to work at this site
                 0 -> only L1 (so both 0, 1 agents may work here)
                 1 -> both L1 and L2 ( only 1 agents may work here )
                 2 -> only L2 (so both 1, 2 agents may work here)
     """
-    def __init__(self, clust, pos, num_places, skill_level=0, lang_policy=1):
+    def __init__(self, clust, pos, num_places, skill_level=0, lang_policy=None):
         self.clust = clust
         self.pos = pos
         self.num_places=num_places
@@ -358,6 +360,7 @@ class Job:
 
     def look_for_employees(self):
         pass
+
 
     # TODO : update workers by department and send them to retirement when age reached
 

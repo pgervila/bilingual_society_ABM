@@ -17,12 +17,12 @@ class BaseAgent:
     k = np.log(10 / 9)
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None,
-                 city_idx=None, lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
+                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
         """ language => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
         self.info = {'age': age, 'language': language, 'sex': sex}
-        self.loc_info = {'home': home, 'city_idx': city_idx, 'school': school}
+        self.loc_info = {'home': home, 'school': school}
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
 
         # define container for languages' tracking and statistics
@@ -234,7 +234,7 @@ class BaseAgent:
                 # compute new memory retrievability R and current lang_knowledge from t, S values
                 self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
                 self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
-                                                          self.model.vocab_red)
+                                                                  self.model.vocab_red)
 
     def grow(self, new_class):
         """ It replaces current agent with a new agent subclass instance.
@@ -243,7 +243,7 @@ class BaseAgent:
             Args:
                 * new_class: class. Agent subclass that will replace the current one
         """
-        grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['age'])
+        grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
         # copy all current instance attributes to new agent instance
         for key, val in self.__dict__.items():
             setattr(grown_agent, key, val)
@@ -257,18 +257,19 @@ class BaseAgent:
             except nx.NetworkXError:
                 continue
         # remove agent from all locations where it belongs to
-        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'], self.loc_info['school']],
-                             ['occupants', 'employees', 'students']):
+        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'],
+                              self.loc_info['school'], self.loc_info['university']],
+                             ['occupants', 'employees', 'students', 'students']):
             try:
                 getattr(loc, attr).remove(self)
                 getattr(loc, attr).add(grown_agent)
                 loc.agents_in.remove(self)
                 loc.agents_in.add(grown_agent)
-            except:
+            except AttributeError:
                 continue
         # remove old instance and add new one to city
-        self.model.clusters_info[self.loc_info['city_idx']]['agents'].remove(self)
-        self.model.clusters_info[self.loc_info['city_idx']]['agents'].add(grown_agent)
+        self.model.clusters_info[self.loc_info['home'].clust]['agents'].remove(self)
+        self.model.clusters_info[self.loc_info['home'].clust]['agents'].add(grown_agent)
         # remove agent from grid and schedule
         self.model.grid._remove_agent(self.pos, self)
         self.model.schedule.remove(self)
@@ -291,20 +292,20 @@ class BaseAgent:
             self.model.remove_after_death(self)
 
     def __repr__(self):
-        return 'Lang_Agent_{0.unique_id!r}'.format(self)
+        return 'Lang_Agent_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust )
 
 
 class Baby(BaseAgent): # from 0 to 2 yo
 
     age_low, age_high = 0, 2
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
-                         lang_passive_thresh, import_ic)
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, lang_act_thresh=0.1,
+                 lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school,
+                         lang_act_thresh, lang_passive_thresh, import_ic)
         self.school_parent = np.random.choice([self.info['close_family']['mother'],
                                                self.info['close_family']['father']],
-                                              p=[0.7,0.3])
+                                              p=[0.7, 0.3])
 
     def get_conversation_lang(self):
         """ Adapt to baby exceptions"""
@@ -367,7 +368,7 @@ class Baby(BaseAgent): # from 0 to 2 yo
 
     def register_to_school(self):
         # find closest school in cluster
-        clust_info = self.model.geo.clusters_info[self.loc_info['city_idx']]
+        clust_info = self.model.geo.clusters_info[self.loc_info['home'].clust]
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
@@ -428,10 +429,10 @@ class Child(BaseAgent): #from 2 to 10
 
     age_low, age_high = 2, 10
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx,
-                         lang_act_thresh, lang_passive_thresh, import_ic)
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, lang_act_thresh=0.1,
+                 lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, lang_act_thresh, lang_passive_thresh,
+                         import_ic)
 
         self.school_parent = np.random.choice([self.info['close_family']['mother'],
                                                self.info['close_family']['father']],
@@ -616,10 +617,10 @@ class Adolescent(Child): # from 10 to 18
 
     age_low, age_high = 10, 18
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
-                         lang_passive_thresh, import_ic)
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, lang_act_thresh=0.1,
+                 lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, lang_act_thresh, lang_passive_thresh,
+                         import_ic)
 
     def move_random(self):
         """ Take a random step into any surrounding cell
@@ -717,11 +718,9 @@ class Young(Adolescent): # from 18 to 30
 
     age_low, age_high = 18, 30
 
-    def __init__(self, model, unique_id, language, sex, age=0, married=False, num_children=None,
-                 home=None, university=None, job=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, city_idx, lang_act_thresh,
-                         lang_passive_thresh, import_ic)
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, lang_act_thresh=0.1,
+                 lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, lang_passive_thresh, import_ic)
         self.info['married'] = married
         self.info['num_children'] = num_children
         self.loc_info['job'] = job
@@ -741,13 +740,13 @@ class Young(Adolescent): # from 18 to 30
 
         job1 = self.loc_info['job']
         home1 = self.loc_info['home']
-        clust1_ix = self.loc_info['city_idx']
+        clust1_ix = self.loc_info['home'].clust
         free_homes_clust1 = [home for home in self.model.geo.clusters_info[clust1_ix]['homes']
                              if not home.occupants]
         if ags:
             if marriage:
                 job2 = ags.loc_info['job']
-                clust2_ix = ags.loc_info['city_idx']
+                clust2_ix = ags.loc_info['home'].clust
                 if job2:
                     job_dist_fun = lambda home: (pdist([job1.pos, home.pos]) +
                                                  pdist([job2.pos, home.pos]))[0]
@@ -789,7 +788,6 @@ class Young(Adolescent): # from 18 to 30
             new_home = sorted_homes[home_ix]
             new_home.assign_to_agent(self)
 
-
     def look_for_partner(self, avg_years=6, age_diff=10, thresh_comm_lang=0.3):
         """ Find partner every avg_years if agent is not married yet. Marrying agents
             must have a sufficiently high knowledge of common language
@@ -820,10 +818,6 @@ class Young(Adolescent): # from 18 to 30
                             self.move_to_new_home(ag)
                             break
 
-
-
-
-
     def reproduce(self, day_prob=0.001):
         # TODO : check appropriate day_prob . Shouldn'it be 0.0015 ? to have > 1 child/per parent
         if (self.info['num_children'] < 4) and (self.info['married']) and (random.random() < day_prob):
@@ -845,14 +839,13 @@ class Young(Adolescent): # from 18 to 30
                 lang = 2
 
             # find closest school to parent home
-            city_idx = self.loc_info['city_idx']
-            clust_schools_coords = [sc.pos for sc in self.model.geo.clusters_info[city_idx]['schools']]
+            clust_ix = self.loc_info['home'].clust
+            clust_schools_coords = [sc.pos for sc in self.model.geo.clusters_info[clust_ix]['schools']]
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate baby agent
             sex = 'M' if random.random() > 0.5 else 'F'
-            baby = Baby(self.model, id_, lang, sex, home=self.loc_info['home'],
-                     school=closest_school_idx, city_idx=self.loc_info['city_idx'])
+            baby = Baby(self.model, id_, lang, sex, home=self.loc_info['home'], school=closest_school_idx)
             # Add agent to model
             self.model.geo.add_agents_to_grid_and_schedule(baby)
             self.model.nws.add_ags_to_networks(baby)
@@ -868,9 +861,9 @@ class Young(Adolescent): # from 18 to 30
 
     def look_for_job(self):
         # loop through shuffled job centers list until a job is found
-        np.random.shuffle(self.model.clusters_info[self.loc_info['city_idx']]['jobs'])
-        for job_c in self.model.clusters_info[self.loc_info['city_idx']]['jobs']:
-            if job_c.num_places:
+        np.random.shuffle(self.model.clusters_info[self.loc_info['home'].clust]['jobs'])
+        for job_c in self.model.clusters_info[self.loc_info['home'].clust]['jobs']:
+            if job_c.num_places and self.info['language'] in job_c.info['lang_policy']:
                 job_c.num_places -= 1
                 self.loc_info['job'] = job_c
                 self.grow(Worker)
@@ -895,10 +888,12 @@ class Young(Adolescent): # from 18 to 30
 
 class Adult(Young): # from 30 to 65
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
-                         lang_passive_thresh, import_ic)
+    age_low, age_high = 30, 65
+
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, lang_act_thresh=0.1,
+                 lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, lang_act_thresh, lang_passive_thresh,
+                         import_ic)
 
     def reproduce(self, day_prob=0.005):
         if self.info['age'] < 40 * 36:
@@ -916,8 +911,11 @@ class Adult(Young): # from 30 to 65
     def stage_3(self):
         pass
 
-    def stage_4(self):
-        if self.info['age'] == 36 * 65:
+    def stage_4(self, ix_agent, num_days=7):
+        self.speak_to_random_friend(ix_agent)
+        if not self.info['married'] and self.info['job']:
+            self.look_for_partner()
+        if self.info['age'] == self.model.steps_per_year * self.age_high:
             self.grow(Pensioner)
 
 
@@ -931,10 +929,10 @@ class Teacher(Adult):
 
 class Pensioner(Adult): # from 65 to death
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, city_idx=None,
-                 lang_act_thresh=0.1, lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, school, city_idx, lang_act_thresh,
-                         lang_passive_thresh, import_ic)
+    def __init__(self, model, unique_id, language, sex, age=0, home=None, school=None, lang_act_thresh=0.1,
+                 lang_passive_thresh=0.025, import_ic=False):
+        super().__init__(model, unique_id, language, sex, age, home, school, lang_act_thresh, lang_passive_thresh,
+                         import_ic)
 
     def stage_1(self):
         pass
@@ -954,13 +952,13 @@ class LanguageAgent:
     k = np.log(10 / 9)
 
     def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025, age=0,
-                 num_children=0, ag_home=None, ag_school=None, ag_job=None, city_idx=None, import_IC=False):
+                 num_children=0, ag_home=None, ag_school=None, ag_job=None, import_IC=False):
         self.model = model
         self.unique_id = unique_id
         # language values: 0, 1, 2 => spa, bil, cat
         self.info = {'language': language, 'age': age, 'num_children': num_children} # TODO : group marital/parental info in dict ??
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
-        self.loc_info = {'home': ag_home, 'school': ag_school, 'job': ag_job, 'city_idx': city_idx}
+        self.loc_info = {'home': ag_home, 'school': ag_school, 'job': ag_job}
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda:defaultdict(dict))
@@ -1069,14 +1067,14 @@ class LanguageAgent:
             id_ = self.model.set_available_ids.pop()
             lang = self.info['language']
             # find closest school to parent home
-            city_idx = self.loc_info['city_idx']
-            clust_schools_coords = [sc.pos for sc in self.model.geo.clusters_info[city_idx]['schools']]
+            clust_ix = self.loc_info['home'].clust
+            clust_schools_coords = [sc.pos for sc in self.model.geo.clusters_info[clust_ix]['schools']]
             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
                                             for sc_coord in clust_schools_coords])
             # instantiate new agent
             a = LanguageAgent(self.model, id_, lang, ag_home=self.loc_info['home'],
-                              ag_school=self.model.geo.clusters_info[city_idx]['schools'][closest_school_idx],
-                              ag_job=None, city_idx=self.loc_info['city_idx'])
+                              ag_school=self.model.geo.clusters_info[clust_ix]['schools'][closest_school_idx],
+                              ag_job=None)
             # Add agent to model
             self.model.geo.add_agents_to_grid_and_schedule(a)
             self.model.nws.add_ags_to_networks(a)
@@ -1102,8 +1100,8 @@ class LanguageAgent:
     def look_for_job(self):
         """ Method for agent to look for a job """
         # loop through shuffled job centers list until a job is found
-        np.random.shuffle(self.model.geo.clusters_info[self.loc_info['city_idx']]['jobs'])
-        for job_c in self.model.geo.clusters_info[self.loc_info['city_idx']]['jobs']:
+        np.random.shuffle(self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs'])
+        for job_c in self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs']:
             if job_c.num_places:
                 job_c.num_places -= 1
                 self.loc_info['job'] = job_c

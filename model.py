@@ -293,7 +293,7 @@ class LanguageModel(Model):
             except:
                 continue
         # remove agent from city
-        self.geo.clusters_info[agent.loc_info['city_idx']]['agents'].remove(agent)
+        self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].remove(agent)
         # remove agent from grid and schedule
         self.grid._remove_agent(agent.pos, agent)
         self.schedule.remove(agent)

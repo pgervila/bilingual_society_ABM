@@ -7,7 +7,7 @@ from itertools import product
 from collections import defaultdict
 from math import ceil
 # IMPORT AGENTS AND  ENTITIES
-from agent import LanguageAgent
+from agent import Adolescent, Adult
 import agent, city_objects
 reload(sys.modules['agent'])
 reload(sys.modules['city_objects'])
@@ -189,7 +189,7 @@ class GeoMapper:
             num_places_job_c = np.clip(num_places_job_c, min_places, max_places)
 
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
-                self.clusters_info[clust_idx]['jobs'].append(Job(clust_idx, (x, y), num_places))
+                self.clusters_info[clust_idx]['jobs'].append(Job(clust_idx, (x, y), num_places, lang_policy=[0, 1]))
 
     def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
@@ -291,12 +291,12 @@ class GeoMapper:
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
-                ag1 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[0], city_idx=clust_idx)
-                ag2 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[1], city_idx=clust_idx)
+                ag1 = Adult(self.model, lang_ags_ids.pop(), family_langs[0], family_sexes[0])
+                ag2 = Adult(self.model, lang_ags_ids.pop(), family_langs[1], family_sexes[1])
 
                 # instantiate 2 adolescents with neither school nor home assigned
-                ag3 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[2], city_idx=clust_idx)
-                ag4 = LanguageAgent(self.model, lang_ags_ids.pop(), family_langs[3], city_idx=clust_idx)
+                ag3 = Adolescent(self.model, lang_ags_ids.pop(), family_langs[2], family_sexes[2])
+                ag4 = Adolescent(self.model, lang_ags_ids.pop(), family_langs[3], family_sexes[3])
 
                 # add agents to clust_info, schedule, grid and networks
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
@@ -311,10 +311,9 @@ class GeoMapper:
             if num_left_agents:
                 for lang in langs_per_clust[clust_idx][-num_left_agents:]:
                     sex = ['M' if random.random() < 0.5 else 'F']
-                    ag = LanguageAgent(self.model, lang_ags_ids.pop(), lang, sex, city_idx=clust_idx)
+                    ag = Adult(self.model, lang_ags_ids.pop(), lang, sex)
                     clust_info['agents'].append(ag)
                     self.add_agents_to_grid_and_schedule(ag)
-
 
     def map_lang_agents_GM(self):
         """ Method to instantiate all agents according to requested linguistic order """
@@ -325,12 +324,12 @@ class GeoMapper:
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.model.family_size)):
                 # instantiate 2 adults with neither job nor home assigned
-                ag1 = LanguageAgent(self.model, ids.pop(), family_langs[0], city_idx=clust_idx)
-                ag2 = LanguageAgent(self.model, ids.pop(), family_langs[1], city_idx=clust_idx)
+                ag1 = LanguageAgent(self.model, ids.pop(), family_langs[0])
+                ag2 = LanguageAgent(self.model, ids.pop(), family_langs[1])
 
                 # instantiate 2 adolescents with neither school nor home assigned
-                ag3 = LanguageAgent(self.model, ids.pop(), family_langs[2], city_idx=clust_idx)
-                ag4 = LanguageAgent(self.model, ids.pop(), family_langs[3], city_idx=clust_idx)
+                ag3 = LanguageAgent(self.model, ids.pop(), family_langs[2])
+                ag4 = LanguageAgent(self.model, ids.pop(), family_langs[3])
 
                 # add agents to clust_info, schedule, grid and networks
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
@@ -341,7 +340,7 @@ class GeoMapper:
             num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
                 for lang in langs_per_clust[clust_idx][-num_left_agents:]:
-                    ag = LanguageAgent(self.model, ids.pop(), lang, city_idx=clust_idx)
+                    ag = LanguageAgent(self.model, ids.pop(), lang)
                     clust_info['agents'].append(ag)
                     self.add_agents_to_grid_and_schedule(ag)
 
