@@ -88,14 +88,10 @@ class LanguageModel(Model):
         """ Method to find out lang of interaction between two given agents """
         # compute lang knowledge for each agent
         age1, age2 = ag1.info['age'], ag2.info['age']
-        pct11 = max(ag1.lang_stats['L1']['pct'][age1],
-                    ag1.lang_stats['L12']['pct'][age1])
-        pct12 = max(ag1.lang_stats['L21']['pct'][age1],
-                    ag1.lang_stats['L2']['pct'][age1])
-        pct21 = max(ag2.lang_stats['L1']['pct'][age2],
-                    ag2.lang_stats['L12']['pct'][age2])
-        pct22 = max(ag2.lang_stats['L21']['pct'][age2],
-                    ag2.lang_stats['L2']['pct'][age2])
+        pct11 = ag1.lang_stats['L1']['pct'][age1]
+        pct12 = ag1.lang_stats['L2']['pct'][age1]
+        pct21 = ag2.lang_stats['L1']['pct'][age2]
+        pct22 = ag2.lang_stats['L2']['pct'][age2]
         if (ag1.info['language'], ag2.info['language']) in [(0, 0), (0, 1), (1, 0)]:
             lang = 0
         elif (ag1.info['language'], ag2.info['language']) in [(2, 1), (1, 2), (2, 2)]:
@@ -108,9 +104,39 @@ class LanguageModel(Model):
             else:
                 lang = 0
         if ret_pcts:
-            return lang, [pct11, pct12, pct21, pct22]
+            return lang, np.array([pct11, pct12, pct21, pct22])
         else:
             return lang
+
+    def get_newborn_lang(self, consort1, consort2):
+        """ ALGO to assess which language each parent will speak to newborn child and
+            which language cathegory the newborn will have at birth
+            Args:
+                * """
+
+        # TODO : implement a more elaborated decision process
+
+        lang_consorts, pcts = self.define_lang_interaction(consort1, consort2, ret_pcts=True)
+
+        langs_with_parents = []
+        for pcs, parent in zip([pcts[:2], pcts[2:]], [consort1, consort2]):
+            par_lang = parent.info['language']
+            if par_lang in [0, 2]:
+                lang_with_parent = 0 if par_lang == 0 else 1
+            else:
+                lang_with_parent = np.random.choice([0, 1], p=pcs / pcs.sum())
+            langs_with_parents.append(lang_with_parent)
+        lang_with_father = langs_with_parents[0] if consort1.info['sex'] == 'M' else langs_with_parents[1]
+        lang_with_mother = langs_with_parents[1] if consort2.info['sex'] == 'M' else langs_with_parents[0]
+
+        if [lang_with_father, lang_with_mother] in [0, 0]:
+            newborn_lang = 0
+        elif [lang_with_father, lang_with_mother] in [[0, 1], [1, 0]]:
+            newborn_lang = 1
+        else:
+            newborn_lang = 2
+
+        return newborn_lang, lang_with_father, lang_with_mother
 
     def run_conversation(self, ag_init, others, bystander=None, num_days=10):
         """ Method that models conversation between ag_init and others

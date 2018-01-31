@@ -328,11 +328,15 @@ class University:
     """ class that defines a University object for tertiary studies """
 
     def __init__(self, model, pos, clust, age_range=(19, 23),
-                 lang_policy=[0, 1], min_age_teacher=35):
+                 lang_policy=None, min_age_teacher=35):
         self.model = model
         self.pos = pos
         self.info = {'clust': clust, 'lang_policy': lang_policy, 'students': set(),
                      'employees': set(), 'age_range': age_range, 'min_age_teacher': min_age_teacher}
+        if lang_policy:
+            self.info['lang_policy'] = lang_policy
+        else:
+            self.info['lang_policy'] = [0, 1]
         self.faculties = {key: Faculty(key, self, model) for key in string.ascii_letters[:5]}
 
     def __repr__(self):
@@ -360,7 +364,6 @@ class Job:
 
     def look_for_employees(self):
         pass
-
 
     # TODO : update workers by department and send them to retirement when age reached
 
