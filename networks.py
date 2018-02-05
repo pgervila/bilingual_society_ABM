@@ -1,3 +1,4 @@
+import random
 import numpy as np
 from scipy.spatial.distance import pdist
 import networkx as nx
@@ -44,6 +45,33 @@ class Networks:
                    self.friendship_network,
                    self.family_network]:
             nw.add_nodes_from(ags)
+
+    def get_lang_fam_members(self, family):
+        """ Find out lang of interaction btw family members in a 4-members family
+            Args:
+                * family: list of family agents
+            Output:
+                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: list of integers
+        """
+        # language between consorts
+        consorts_lang_params = self.model.get_conv_params([family[0], family[1]])
+        lang_consorts = consorts_lang_params['lang_group']
+
+        # language of children with parents
+        lang_with_father = consorts_lang_params['fav_langs'][0]
+        lang_with_mother = consorts_lang_params['fav_langs'][1]
+
+        # siblings
+        avg_lang = (lang_with_father + lang_with_mother) / 2
+        if avg_lang == 0:
+            lang_siblings = 0
+        elif avg_lang == 1:
+            lang_siblings = 1
+        else:
+            siblings_lang_params = self.model.get_conv_params([family[2], family[3]])
+            lang_siblings = siblings_lang_params['lang_group']
+
+        return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
     def define_family_networks(self, parents_age_range=(38, 48), children_age_range=(8, 18)):
         """
@@ -128,19 +156,9 @@ class Networks:
                     school.info['students'].add(child)
 
                 # find out lang of interaction btw family members
-                # consorts
-                lang_consorts, pcts = self.model.define_lang_interaction(family[0], family[1], ret_pcts=True)
-                # language of children with father, mother
-                lang_with_father = np.argmax(pcts[:2])
-                lang_with_mother = np.argmax(pcts[2:])
-                # siblings
-                avg_lang = (lang_with_father + lang_with_mother) / 2
-                if avg_lang == 0:
-                    lang_siblings = 0
-                elif avg_lang == 1:
-                    lang_siblings = 1
-                else:
-                    lang_siblings = self.model.define_lang_interaction(family[2], family[3])
+                (lang_consorts, lang_with_father,
+                 lang_with_mother, lang_siblings) = self.get_lang_fam_members(family)
+
                 # add family edges in family and known_people networks ( both are DIRECTED networks ! )
                 for (i, j) in [(0, 1), (1, 0)]:
                     self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
@@ -196,7 +214,10 @@ class Networks:
                             len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
                             coll not in self.friendship_network[ag] and
                             coll not in self.family_network[ag]):
-                    lang = self.model.define_lang_interaction(ag, coll)
+                    friends = [ag, coll]
+                    # who speaks first may determine communication lang
+                    random.shuffle(friends)
+                    lang = self.model.get_conv_params(friends)['lang_group']
                     self.friendship_network.add_edge(ag, coll, lang=lang, weight=np.random.randint(1, 10))
                     # known people network is directed graph !
                     self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)

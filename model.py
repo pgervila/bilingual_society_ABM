@@ -83,55 +83,56 @@ class LanguageModel(Model):
         # define dataviz
         self.data_viz = DataViz(self)
 
-    @staticmethod
-    def define_lang_interaction(ag1, ag2, ret_pcts=False):
-        """ Method to find out lang of interaction between two given agents """
-        # compute lang knowledge for each agent
-        age1, age2 = ag1.info['age'], ag2.info['age']
-        pct11 = ag1.lang_stats['L1']['pct'][age1]
-        pct12 = ag1.lang_stats['L2']['pct'][age1]
-        pct21 = ag2.lang_stats['L1']['pct'][age2]
-        pct22 = ag2.lang_stats['L2']['pct'][age2]
-        if (ag1.info['language'], ag2.info['language']) in [(0, 0), (0, 1), (1, 0)]:
-            lang = 0
-        elif (ag1.info['language'], ag2.info['language']) in [(2, 1), (1, 2), (2, 2)]:
-            lang = 1
-        elif (ag1.info['language'], ag2.info['language']) == (1, 1):
-            # Find weakest combination lang-agent, pick other lang as common one
-            idx_weakest = np.argmin([pct11, pct12, pct21, pct22])
-            if idx_weakest in [0, 2]:
-                lang = 1
-            else:
-                lang = 0
-        if ret_pcts:
-            return lang, np.array([pct11, pct12, pct21, pct22])
-        else:
-            return lang
+    # @staticmethod
+    # def define_lang_interaction(ag1, ag2, ret_pcts=False):
+    #     """ Method to find out lang of interaction between two given agents """
+    #
+    #     agents_langs = set(ag1.info['language'], ag2.info['language'])
+    #
+    #     if agents_langs in [{0}, {0, 1}]:
+    #         lang = 0
+    #     elif agents_langs in [{1, 2}, {2}]:
+    #         lang = 1
+    #     elif agents_langs == {1}:
+    #         # compute lang knowledge for each agent
+    #         pcts_ag1 = ag1.get_langs_pcts()
+    #         pcts_ag2 = ag2.get_langs_pcts()
+    #         # Find weakest combination lang-agent, pick other lang as common one
+    #         idx_weakest = np.argmin(pcts_ag1 + pcts_ag2)
+    #         if idx_weakest in [0, 2]:
+    #             lang = 1
+    #         else:
+    #             lang = 0
+    #     if ret_pcts:
+    #         return lang, np.array(pcts_ag1 + pcts_ag2)
+    #     else:
+    #         return lang
 
-    def get_newborn_lang(self, consort1, consort2):
-        """ ALGO to assess which language each parent will speak to newborn child and
-            which language cathegory the newborn will have at birth
+    def get_newborn_lang(self, parent1, parent2):
+        """
+            ALGO to assess which language each parent will speak to newborn child and
+            which language category the newborn will have at birth
             Args:
-                * """
-
+                * parent1: newborn parent agent
+                * parent2 : other newborn parent agent
+        """
         # TODO : implement a more elaborated decision process
-
-        lang_consorts, pcts = self.define_lang_interaction(consort1, consort2, ret_pcts=True)
-
+        pcts = np.array(parent1.get_langs_pcts() + parent2.get_langs_pcts())
         langs_with_parents = []
-        for pcs, parent in zip([pcts[:2], pcts[2:]], [consort1, consort2]):
+        for pcs, parent in zip([pcts[:2], pcts[2:]], [parent1, parent2]):
             par_lang = parent.info['language']
             if par_lang in [0, 2]:
                 lang_with_parent = 0 if par_lang == 0 else 1
             else:
                 lang_with_parent = np.random.choice([0, 1], p=pcs / pcs.sum())
             langs_with_parents.append(lang_with_parent)
-        lang_with_father = langs_with_parents[0] if consort1.info['sex'] == 'M' else langs_with_parents[1]
-        lang_with_mother = langs_with_parents[1] if consort2.info['sex'] == 'M' else langs_with_parents[0]
+        lang_with_father = langs_with_parents[0] if parent1.info['sex'] == 'M' else langs_with_parents[1]
+        lang_with_mother = langs_with_parents[1] if parent2.info['sex'] == 'M' else langs_with_parents[0]
 
-        if [lang_with_father, lang_with_mother] in [0, 0]:
+        langs_with_parents = set(langs_with_parents)
+        if langs_with_parents == {0}:
             newborn_lang = 0
-        elif [lang_with_father, lang_with_mother] in [[0, 1], [1, 0]]:
+        elif langs_with_parents == {0, 1}:
             newborn_lang = 1
         else:
             newborn_lang = 2
@@ -184,13 +185,14 @@ class LanguageModel(Model):
             conversation length.
         It implements MAXIMIN language rule from Van Parijs
         Args:
-            * ags : list of agent class instances. All agents that take part in conversation
+            * ags : list of all agent class instances that take part in conversation
         Returns:
-            * conv_params dict with following keys:
-                * lang: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
+            * conv_params dict with following keys and values:
+                * lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
                 * mute_type: integer. Agent lang type that is unable to speak in conversation
                 * bilingual: boolean. True if conv is held in more than one language
                 * long: boolean. True if conv is long
+                * fav_langs: list of integers in [0, 1].
         """
 
         # redefine separate agents for readability
@@ -199,25 +201,27 @@ class LanguageModel(Model):
 
         # set output default parameters
         conv_params = dict(multilingual=False, mute_type=None, long=True)
-        # define lists with agent competences and preferences in each language
-        l1_pcts = [ag.lang_stats['L1']['pct'][ag.info['age']] for ag in ags]
-        l2_pcts = [ag.lang_stats['L2']['pct'][ag.info['age']] for ag in ags]
+
         # get lists of favorite language per agent and set of language types involved
-        fav_lang_per_agent = list(np.argmax([l1_pcts, l2_pcts], axis=0))
         ags_lang_types = set([ag.info['language'] for ag in ags])
 
+        # define lists with agent competences and preferences in each language
+        fav_langs_and_pcts = [ag.get_dominant_lang(ret_pcts=True) for ag in ags]
+        fav_lang_per_agent, (l1_pcts, l2_pcts) = list(zip(*fav_langs_and_pcts))
+
         # define current case
-        if ags_lang_types in [{0}, {0, 1}]: # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
+        # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
+        if ags_lang_types in [{0}, {0, 1}]:
             lang_group = 0
-            conv_params.update({'lang_group': lang_group})
+            conv_params['lang_group'] = lang_group
+        elif ags_lang_types in [{1, 2}, {2}]:
+            lang_group = 1
+            conv_params['lang_group'] = lang_group
         elif ags_lang_types == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
             # who starts conversation matters, but also average lang spoken with already known agents
-            if l1_pcts[0] == l2_pcts[0]:
-                lang_init = 1 if random.random() > 0.5 else 0
-            else:
-                lang_init = np.argmax([l1_pcts[0], l2_pcts[0]])
+            lang_init = fav_lang_per_agent[0]
             # TODO : why known agents only checked for this option ??????????????
             langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
                                        for ag in others
@@ -226,10 +230,7 @@ class LanguageModel(Model):
                 lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
             else:
                 lang_group = lang_init
-            conv_params.update({'lang_group': lang_group})
-        elif ags_lang_types in [{1, 2}, {2}]:
-            lang_group = 1
-            conv_params.update({'lang_group': lang_group})
+            conv_params['lang_group'] = lang_group
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
@@ -293,6 +294,7 @@ class LanguageModel(Model):
             conv_params['lang_group'] = [conv_params['lang_group']] * len(ags)
 
         conv_params['min_group_age'] = min([ag.info['age'] for ag in ags])
+        conv_params['fav_langs'] = fav_lang_per_agent
 
         return conv_params
 

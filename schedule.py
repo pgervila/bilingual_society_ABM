@@ -17,8 +17,16 @@ class StagedActivationModif(StagedActivation):
                 # update last-time word use vector
                 agent.lang_stats[lang]['t'][~agent.day_mask[lang]] += 1
                 # set current lang knowledge
-                agent.lang_stats[lang]['pct'][agent.info['age']] = (np.where(agent.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                                    agent.model.vocab_red)
+                # compute current language knowledge in percentage after 't' update
+                pct_threshold = 0.9
+                if lang in ['L1', 'L12']:
+                    real_lang_knowledge = np.maximum(self.lang_stats['L1']['R'], self.lang_stats['L12']['R'])
+                    self.lang_stats['L1']['pct'][self.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+                                                                      self.model.vocab_red)
+                else:
+                    real_lang_knowledge = np.maximum(self.lang_stats['L2']['R'], self.lang_stats['L21']['R'])
+                    self.lang_stats['L2']['pct'][self.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+                                                                      self.model.vocab_red)
                 # reset day mask
                 agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
             # Update lang switch

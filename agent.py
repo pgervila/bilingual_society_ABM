@@ -103,6 +103,37 @@ class BaseAgent:
         self._set_null_lang_attrs('L12', S_0, t_0)
         self._set_null_lang_attrs('L21', S_0, t_0)
 
+    def get_langs_pcts(self):
+        pct_lang1 = self.lang_stats['L1']['pct'][self.info['age']]
+        pct_lang2 = self.lang_stats['L2']['pct'][self.info['age']]
+        return pct_lang1, pct_lang2
+
+    def get_dominant_lang(self, ret_pcts=False):
+        pcts = self.get_langs_pcts()
+        dominant_lang = np.argmax(pcts)
+        if ret_pcts:
+            return dominant_lang, pcts
+        else:
+            return dominant_lang
+
+    def update_lang_switch(self, switch_threshold=0.2):
+        """Switch to a new linguistic regime when threshold is reached
+           If language knowledge falls below switch_threshold value, agent
+           becomes monolingual
+           This method is called from schedule at each step"""
+
+        if self.info['language'] == 0:
+            if self.lang_stats['L2']['pct'][self.info['age']] >= switch_threshold:
+                self.info['language'] = 1
+        elif self.info['language'] == 2:
+            if self.lang_stats['L1']['pct'][self.info['age']] >= switch_threshold:
+                self.info['language'] = 1
+        elif self.info['language'] == 1:
+            if self.lang_stats['L1']['pct'][self.info['age']] < switch_threshold:
+                self.info['language'] == 2
+            elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
+                self.info['language'] == 0
+
     def grow(self, new_class):
         """ It replaces current agent with a new agent subclass instance.
             It removes current instance from all networks, lists, sets in model and adds new instance
@@ -187,11 +218,14 @@ class ListenerAgent(BaseAgent):
                 self.model.run_conversation(ag_1, ag_2, bystander=self)
         else:
             # make other agent speak and 'self' agent get the listened vocab
-            if to_agent in self.model.known_people_network[self]:
-                lang = self.model.known_people_network[self][to_agent]['lang']
+            if self in self.model.known_people_network[to_agent]:
+                lang = self.model.known_people_network[to_agent][self]['lang']
             else:
-                # TODO: update acquaintances
-                lang = self.model.define_lang_interaction(self, to_agent)
+                conv_params = self.model.get_conv_params([to_agent, self])
+                if conv_params['bilingual']:
+                    lang = conv_params['lang_group'][0]
+                else:
+                    lang = conv_params['lang_group']
             words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs,
                                         num_days=num_days)
             for lang_key, lang_words in words:
@@ -510,24 +544,23 @@ class Baby(ListenerAgent):
 
     age_low, age_high = 0, 2
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
-                 lang_passive_thresh=0.025, import_ic=False):
+    def __init__(self, model, unique_id, language, sex,
+                 father, mother, lang_with_father, lang_with_mother,
+                 age=0, home=None, lang_act_thresh=0.1, lang_passive_thresh=0.025,
+                 import_ic=False):
+
         super().__init__(model, unique_id, language, sex, age, home, lang_act_thresh,
                          lang_passive_thresh, import_ic)
 
-        self.set_family_links()
+        self.set_family_links(father, mother, lang_with_father, lang_with_mother)
 
         self.school_parent = np.random.choice([self.info['close_family']['mother'],
                                                self.info['close_family']['father']],
                                               p=[0.7, 0.3])
 
-    def get_conversation_lang(self):
-        """ Adapt to baby exceptions"""
-        pass
-
     def set_family_links(self, father, mother, lang_with_father, lang_with_mother):
         """
-            Method to define family links and interaction language of a newborn baby at BIRTH .
+            Method to define family links and interaction language of a nw agent.
             Corresponding edges are created in family network
             Args:
                 * father: agent instance. The baby's father
@@ -535,49 +568,64 @@ class Baby(ListenerAgent):
                 * lang_with_father: integer [0, 1]. Defines lang with father
                 * lang_with_mother: integer [0, 1]. Defines lang with mother
         """
+        #TODO : should it be a model method ??
         fam_nw = self.model.nws.family_network
-        fam_nw.add_edge(father, self, fam_link='child', lang=lang_with_father)
-        fam_nw.add_edge(self, father, fam_link='father', lang=lang_with_father)
-        fam_nw.add_edge(mother, self, fam_link='child', lang=lang_with_mother)
-        fam_nw.add_edge(self, father, fam_link='mother', lang=lang_with_mother)
+        k_people_nw = self.model.nws.known_people_network
+        # Define family links with parents
+        for (i, j, fam_link) in [(self, father, 'father'), (father, self, 'child')]:
+            fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_father)
+            k_people_nw.add_edge(i, j, family=True, lang=lang_with_father)
+        for (i, j, fam_link) in [(self, mother, 'mother'), (mother, self, 'child')]:
+            fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_mother)
+            k_people_nw.add_edge(i, j, family=True, lang=lang_with_mother)
+        # Define links with agent siblings if any
+        siblings = [agent for agent, labels in fam_nw[mother].items()
+                    if labels['fam_link'] == 'child' and agent != self]
+        for sibling in siblings:
+            lang_with_sibling = sibling.get_dominant_lang()
+            for (i, j, fam_link) in [(self, sibling, 'sibling'), (sibling, self, 'sibling')]:
+                fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_sibling)
+                k_people_nw.add_edge(i, j, family=True, lang=lang_with_sibling)
         # rest of family will if possible speak same language with baby as their link agent to the baby
         for elder, lang in zip([father, mother], [lang_with_father, lang_with_mother]):
             for agent, labels in fam_nw[elder].items():
-                lang_labels = ['L1', 'L12'] if lang == 0 else ['L2', 'L21']
-                if True in [agent.lang_stats[l]['pct'][agent.info['age']] > agent.lang_act_thresh
-                            for l in lang_labels]:
+                lang_label = 'L1' if lang == 0 else 'L2'
+                if agent.lang_stats[lang_label]['pct'][agent.info['age']] > agent.lang_act_thresh:
                     com_lang = lang
                 else:
                     com_lang = 1 if lang == 0 else 0
                 if labels["fam_link"] == 'father':
-                    fam_nw.add_edge(self, agent, fam_link='grandfather',
-                                                       lang=com_lang )
-                    fam_nw.add_edge(agent, self, fam_link='grandchild',
-                                                       lang=com_lang)
+                    for (i, j, fam_link) in [(self, agent, 'grandfather'), (agent, self, 'grandchild')]:
+                        fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
                 elif labels["fam_link"] == 'mother':
-                    fam_nw.add_edge(self, agent, fam_link='grandmother', lang=com_lang)
-                    fam_nw.add_edge(agent, self, fam_link='grandchild', lang=com_lang)
+                    for (i, j, fam_link) in [(self, agent, 'grandmother'), (agent, self, 'grandchild')]:
+                        fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
                 elif labels["fam_link"] == 'sibling':
                     fam_nw.add_edge(self, agent,
                                     fam_link='uncle' if agent.info['sex'] == 'M' else 'aunt',
                                     lang=com_lang)
                     fam_nw.add_edge(agent, self, fam_link='nephew', lang=com_lang)
+                    for (i, j) in [(self, agent), (agent, self)]:
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
                     if agent.info['married']:
                         consort = [key for key, value in fam_nw[agent].items()
                                    if value['fam_link'] == 'consort'][0]
                         fam_nw.add_edge(self, consort,
                                         fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
                         fam_nw.add_edge(consort, self, fam_link='nephew', lang=com_lang)
+                        for (i, j) in [(self, consort), (consort, self)]:
+                            k_people_nw.add_edge(i, j, family=True, lang=com_lang)
                 elif labels["fam_link"] == 'nephew':
                     fam_nw.add_edge(self, agent, fam_link='cousin', lang=com_lang)
                     fam_nw.add_edge(agent, self, fam_link='cousin', lang=com_lang)
-        self.info['close_family'] = {}
-        self.info['close_family']['mother'] = [ag for ag in fam_nw[self]
-                                               if fam_nw[self][ag]['fam_link'] == 'mother'][0]
-        self.info['close_family']['father'] = [ag for ag in fam_nw[self]
-                                               if fam_nw[self][ag]['fam_link'] == 'father'][0]
-        self.info['close_family']['siblings'] = [ag for ag in fam_nw[self]
-                                                 if fam_nw[self][ag]['fam_link'] == 'sibling']
+                    for (i, j) in [(self, agent), (agent, self)]:
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+        self.info['close_family'] = dict()
+        self.info['close_family']['mother'] = mother
+        self.info['close_family']['father'] = father
+        self.info['close_family']['siblings'] = siblings
         # TODO modify self.info['teacher'] = random.choice(self.loc_info['school'].info['teachers'])
 
     def register_to_school(self):
@@ -647,6 +695,7 @@ class Child(SchoolAgent): #from 2 to 10
                  lang_passive_thresh=0.025, import_ic=False):
         super().__init__(model, unique_id, language, sex, age, home, lang_act_thresh, lang_passive_thresh, import_ic)
 
+        # set up close family
         self.school_parent = np.random.choice([self.info['close_family']['mother'],
                                                self.info['close_family']['father']],
                                               p=[0.7, 0.3])
@@ -901,13 +950,14 @@ class Young(IndepAgent): # from 18 to 30
                             self.move_to_new_home(ag)
                             break
 
-    def reproduce(self, day_prob=0.001):
+    def reproduce(self, day_prob=0.001, max_num_children=4):
         """ give birth to a new agent if conditions and likelihoods are met """
 
         # TODO : check appropriate day_prob . Shouldn'it be 0.0015 ? to have > 1 child/per parent
 
         # TODO: check method integration with creation of 'Baby' class
-        if (self.info['num_children'] < 4) and (self.info['married']) and (random.random() < day_prob):
+        if (self.info['num_children'] < max_num_children and self.info['married'] and
+            random.random() < day_prob):
             id_baby = self.model.set_available_ids.pop()
             # find consort
             consort = [agent for agent, labels in self.model.family_network[self].items()
@@ -916,19 +966,17 @@ class Young(IndepAgent): # from 18 to 30
             newborn_lang, lang_with_father, lang_with_mother = self.model.get_newborn_lang(self, consort)
             # Determine baby's sex
             sex = 'M' if random.random() > 0.5 else 'F'
+            father, mother = (self, consort) if self.info['sex'] == 'M' else (consort, self)
             # Make baby instance
-            baby = Baby(self.model, id_baby, newborn_lang, sex, home=self.loc_info['home'])
+            baby = Baby(self.model, id_baby, newborn_lang, sex,
+                        father, mother, lang_with_father, lang_with_mother,
+                        home=self.loc_info['home'])
             # Add agent to model
             self.model.geo.add_agents_to_grid_and_schedule(baby)
             self.model.nws.add_ags_to_networks(baby)
             # Update num of children for both self and consort
             self.info['num_children'] += 1
             consort.info['num_children'] += 1
-            # set up family links
-            if self.info['sex'] == 'M':
-                baby.set_family_links(self, consort, lang_with_father, lang_with_mother)
-            else:
-                baby.set_family_links(consort, self, lang_with_father, lang_with_mother)
 
     def look_for_job(self):
         # loop through shuffled job centers list until a job is found
@@ -969,8 +1017,8 @@ class Adult(Young): # from 30 to 65
                  lang_passive_thresh=0.025, import_ic=False):
         super().__init__(model, unique_id, language, sex, age, home, lang_act_thresh, lang_passive_thresh, import_ic)
 
-    def reproduce(self, day_prob=0.005):
-        if self.info['age'] < 40 * 36:
+    def reproduce(self, day_prob=0.005, limit_age=40):
+        if self.info['age'] <= limit_age * self.model.steps_per_year:
             super().reproduce()
 
     def look_for_partner(self, avg_years=4, age_diff=10, thresh_comm_lang=0.3):
