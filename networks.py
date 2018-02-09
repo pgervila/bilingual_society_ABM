@@ -5,7 +5,7 @@ import networkx as nx
 import bisect
 
 
-class Networks:
+class NetworkBuilder:
     """ Class to deal with everything that has to do with networks in model"""
 
     def __init__(self, model):
@@ -17,21 +17,17 @@ class Networks:
         # setup
         self.create_networks()
         self.add_ags_to_networks(self.model.schedule.agents)
-        self.define_family_networks()
-        self.define_friendship_networks()
+
 
     def create_networks(self):
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
         self.known_people_network = nx.DiGraph()
-        # self.known_people_network.add_edge('A','B', lang_spoken = 'cat')
-        # self.known_people_network.add_edge('A','C', lang_spoken = 'spa')
-        # self.known_people_network['A']['C']['lang_spoken']
-        # self.known_people_network['B']['A'] = 'cat'
         # INITIALIZE FRIENDSHIP NETWORK
-        self.friendship_network = nx.Graph()  # sort by friendship intensity
+        self.friendship_network = nx.Graph()
+        # sort by friendship intensity
         #       sorted(self.friendship_network[n_1].items(),
-        #                    key=lambda edge: edge[1]['link_strength'],
-        #                    reverse = True)
+        #              key=lambda edge: edge[1]['link_strength'],
+        #              reverse = True)
         # INITIALIZE FAMILY NETWORK
         self.family_network = nx.DiGraph()
 
@@ -45,6 +41,10 @@ class Networks:
                    self.friendship_network,
                    self.family_network]:
             nw.add_nodes_from(ags)
+
+    def build_networks(self):
+        self.define_family_networks()
+        self.define_friendship_networks()
 
     def get_lang_fam_members(self, family):
         """ Find out lang of interaction btw family members in a 4-members family
@@ -73,7 +73,7 @@ class Networks:
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
-    def define_family_networks(self, parents_age_range=(38, 48), children_age_range=(8, 18)):
+    def define_family_networks(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
             It assumes distribution of languages in clusters has already been sorted at cluster level or
@@ -159,6 +159,7 @@ class Networks:
                 (lang_consorts, lang_with_father,
                  lang_with_mother, lang_siblings) = self.get_lang_fam_members(family)
 
+                # initialize family network
                 # add family edges in family and known_people networks ( both are DIRECTED networks ! )
                 for (i, j) in [(0, 1), (1, 0)]:
                     self.family_network.add_edge(family[i], family[j], fam_link='consort', lang=lang_consorts)
@@ -200,10 +201,10 @@ class Networks:
         # TODO : Apply small world graph to relevant nodes using networkx
         friends_per_agent = np.random.randint(1, 5, size=self.model.num_people)
         for ag, num_friends in zip(self.model.schedule.agents, friends_per_agent):
-            if ag.loc_info['job'] and len(self.friendship_network[ag]) < num_friends:
+            if 'job' in ag.loc_info and len(self.friendship_network[ag]) < num_friends:
                 ag_occupation = ag.loc_info['job']
                 colleagues = 'employees'
-            elif ag.loc_info['school'] and len(self.friendship_network[ag]) < num_friends:
+            elif 'school' in ag.loc_info and len(self.friendship_network[ag]) < num_friends:
                 ag_occupation = ag.loc_info['school']
                 colleagues = 'students'
             else:

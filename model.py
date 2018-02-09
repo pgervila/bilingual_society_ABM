@@ -24,7 +24,7 @@ reload(sys.modules['geomapping'])
 reload(sys.modules['networks'])
 reload(sys.modules['dataprocess'])
 from geomapping import GeoMapper
-from networks import Networks
+from networks import NetworkBuilder
 from dataprocess import DataProcessor, DataViz
 
 
@@ -77,7 +77,8 @@ class LanguageModel(Model):
 
         # define model geomapping and model networks
         self.geo = GeoMapper(self, num_clusters)
-        self.nws = Networks(self)
+        self.nws = NetworkBuilder(self)
+        self.nws.build_networks()
         # define datacollector and dataprocessor
         self.data_process = DataProcessor(self)
         # define dataviz
@@ -230,7 +231,10 @@ class LanguageModel(Model):
                 lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
             else:
                 lang_group = lang_init
+
             conv_params['lang_group'] = lang_group
+
+
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
@@ -349,7 +353,7 @@ class LanguageModel(Model):
         for _ in range(steps):
             self.step()
             if recording_steps_period:
-                if not self.schedule.steps%recording_steps_period:
+                if not self.schedule.steps % recording_steps_period:
                     self.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
             pbar.update()
 

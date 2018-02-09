@@ -134,46 +134,55 @@ class BaseAgent:
             elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
                 self.info['language'] == 0
 
-    def grow(self, new_class):
+    def evolve(self, new_class, ret_output=False):
         """ It replaces current agent with a new agent subclass instance.
             It removes current instance from all networks, lists, sets in model and adds new instance
             to them instead.
             Args:
                 * new_class: class. Agent subclass that will replace the current one
+                * ret_ouput: boolean. True if grown_agent needs to be returned as output
         """
         grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
+        #import ipdb; ipdb.set_trace()
         # copy all current instance attributes to new agent instance
         for key, val in self.__dict__.items():
             setattr(grown_agent, key, val)
+
         # relabel network nodes
         relabel_key = {self: grown_agent}
-        for network in [self.model.family_network,
-                        self.model.known_people_network,
-                        self.model.friendship_network]:
+        for network in [self.model.nws.family_network,
+                        self.model.nws.known_people_network,
+                        self.model.nws.friendship_network]:
             try:
                 nx.relabel_nodes(network, relabel_key, copy=False)
             except nx.NetworkXError:
                 continue
+
         # remove agent from all locations where it belongs to
-        for loc, attr in zip([self.loc_info['home'], self.loc_info['job'],
-                              self.loc_info['school'], self.loc_info['university']],
-                             ['occupants', 'employees', 'students', 'students']):
+        loc_people_dict = {'home': 'occupants', 'job': 'employees',
+                           'school': 'students', 'university': 'students'}
+        for key, loc in self.loc_info.items():
+            attr = loc_people_dict[key]
+            loc.info[attr].remove(self)
+            loc.info[attr].add(grown_agent)
             try:
-                getattr(loc, attr).remove(self)
-                getattr(loc, attr).add(grown_agent)
                 loc.agents_in.remove(self)
                 loc.agents_in.add(grown_agent)
-            except AttributeError:
+            except KeyError:
                 continue
+
         # remove old instance and add new one to city
-        self.model.clusters_info[self.loc_info['home'].clust]['agents'].remove(self)
-        self.model.clusters_info[self.loc_info['home'].clust]['agents'].add(grown_agent)
+        self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].remove(self)
+        self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].append(grown_agent)
         # remove agent from grid and schedule
         self.model.grid._remove_agent(self.pos, self)
         self.model.schedule.remove(self)
         # add new_agent to grid and schedule
         self.model.grid.place_agent(grown_agent, self.pos)
         self.model.schedule.add(grown_agent)
+
+        if ret_output:
+            return grown_agent
 
     def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
         """ Method to randomly determine agent death or survival at each step
@@ -190,7 +199,7 @@ class BaseAgent:
             self.model.remove_after_death(self)
 
     def __repr__(self):
-        return 'Lang_Agent_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust )
+        return 'BaseAgent_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 
 class ListenerAgent(BaseAgent):
@@ -353,7 +362,8 @@ class SpeakerAgent(ListenerAgent):
                 * age_1: integer. Defines lower key age for slope change in num_words vs age curve
                 * age_2: integer. Defines higher key age for slope change in num_words vs age curve
                 * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
-                * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day"""
+                * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day
+        """
         # TODO : define 3 types of conv: short, average and long ( with close friends??)
         age_1, age_2 = [age * self.model.steps_per_year for age in [age_1, age_2]]
         real_vocab_size = scale_f * self.model.vocab_red
@@ -684,21 +694,30 @@ class Baby(ListenerAgent):
         # baby goes to bed early during week
         self.stage_1(num_days=3)
         if self.info['age'] == self.age_high * self.model.steps_per_year:
-            self.grow(Child)
+            self.evolve(Child)
+
+    def __repr__(self):
+        return 'Baby_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 
-class Child(SchoolAgent): #from 2 to 10
+class Child(SchoolAgent):
 
-    age_low, age_high = 2, 10
+    age_low, age_high = 2, 12
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
                  lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, lang_act_thresh, lang_passive_thresh, import_ic)
+        super().__init__(model, unique_id, language, sex, age, home,
+                         lang_act_thresh, lang_passive_thresh, import_ic)
 
         # set up close family
-        self.school_parent = np.random.choice([self.info['close_family']['mother'],
-                                               self.info['close_family']['father']],
-                                              p=[0.7, 0.3])
+        if 'close_family' not in self.info:
+            pass
+        else:
+            pass
+
+        # self.school_parent = np.random.choice([self.info['close_family']['mother'],
+        #                                        self.info['close_family']['father']],
+        #                                       p=[0.7, 0.3])
 
     def stage_1(self, *args, num_days=10):
         ags_at_home = self.loc_info['home'].agents_in.difference({self})
@@ -739,12 +758,15 @@ class Child(SchoolAgent): #from 2 to 10
     def stage_4(self, num_days=10):
         self.stage_1(num_days=num_days)
         if self.info['age'] == self.age_high * self.model.steps_per_year:
-            self.grow(Adolescent)
+            self.evolve(Adolescent)
+
+    def __repr__(self):
+        return 'Child_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 
-class Adolescent(IndepAgent, SchoolAgent): # from 10 to 18
+class Adolescent(IndepAgent, SchoolAgent):
 
-    age_low, age_high = 10, 18
+    age_low, age_high = 12, 18
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
                  lang_passive_thresh=0.025, import_ic=False):
@@ -839,24 +861,28 @@ class Adolescent(IndepAgent, SchoolAgent): # from 10 to 18
         num_out = random.randint(1, 5)
         self.speak_to_random_friend(ix_agent, num_days=num_out)
         if self.info['age'] == self.age_high:
-            self.grow(Young)
+            self.evolve(Young)
+
+    def __repr__(self):
+        return 'Adolescent_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 
-class Young(IndepAgent): # from 18 to 30
+class Young(IndepAgent):
 
     age_low, age_high = 18, 30
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
                  lang_passive_thresh=0.025, import_ic=False):
         super().__init__(model, unique_id, language, sex, age)
-        self.info['married'] = married
-        self.info['num_children'] = num_children
-        self.loc_info['job'] = job
-        self.loc_info['university'] = university
-        self.info['close_family']['consort'] = [ag for ag in self.model.family_network[self]
-                                                if self.model.family_network[self][ag]['fam_link'] == 'consort'][0]
-        self.info['close_family']['children'] = [ag for ag in self.model.family_network[self]
-                                                 if self.model.family_network[self][ag]['fam_link'] == 'child']
+
+
+        # self.info['married'] = married
+        # self.info['num_children'] = num_children
+        # self.loc_info['job'] = job
+        # self.info['close_family']['consort'] = [ag for ag in self.model.family_network[self]
+        #                                         if self.model.family_network[self][ag]['fam_link'] == 'consort'][0]
+        # self.info['close_family']['children'] = [ag for ag in self.model.family_network[self]
+        #                                          if self.model.family_network[self][ag]['fam_link'] == 'child']
 
     def move_to_new_home(self, *ags, marriage=True):
         """ Method to move self agent and other optional agents to a new home
@@ -870,7 +896,7 @@ class Young(IndepAgent): # from 18 to 30
         home1 = self.loc_info['home']
         clust1_ix = self.loc_info['home'].clust
         free_homes_clust1 = [home for home in self.model.geo.clusters_info[clust1_ix]['homes']
-                             if not home.occupants]
+                             if not home.info['occupants']]
         if ags:
             if marriage:
                 job2 = ags.loc_info['job']
@@ -891,7 +917,7 @@ class Young(IndepAgent): # from 18 to 30
                         else:
                             free_homes_clust2 = [home for home
                                                  in self.model.geo.clusters_info[clust2_ix]['homes']
-                                                 if not home.occupants]
+                                                 if not home.info['occupants']]
                             sorted_homes = sorted(free_homes_clust2, key=job_dist_fun)
                         new_home = sorted_homes[0]
                 else:
@@ -904,7 +930,7 @@ class Young(IndepAgent): # from 18 to 30
                 univ = self.loc_info['university']
                 clust_univ = univ.info['clust']
                 free_homes_univ_clust = [home for home in self.model.geo.clusters_info[clust_univ]['homes']
-                                         if not home.occupants]
+                                         if not home.info['occupants']]
                 job_dist_fun = lambda home: pdist([univ.pos, home.pos])[0]
                 sorted_homes = sorted(free_homes_univ_clust, key=job_dist_fun)
                 new_home = sorted_homes[0]
@@ -985,8 +1011,13 @@ class Young(IndepAgent): # from 18 to 30
             if job_c.num_places and self.info['language'] in job_c.info['lang_policy']:
                 job_c.num_places -= 1
                 self.loc_info['job'] = job_c
-                self.grow(Worker)
+                self.evolve(Worker)
                 break
+
+    def switch_job(self, new_job):
+            pass
+
+
 
     def stage_1(self, ix_agent, num_days=7):
         pass
@@ -1002,7 +1033,7 @@ class Young(IndepAgent): # from 18 to 30
         if not self.info['married'] and self.info['job']:
             self.look_for_partner()
         if self.info['age'] == self.age_high * self.model.steps_per_year:
-            self.grow(Adult)
+            self.evolve(Adult)
 
 
 class YoungUniv(IndepAgent, SchoolAgent):
@@ -1038,15 +1069,20 @@ class Adult(Young): # from 30 to 65
         if not self.info['married'] and self.info['job']:
             self.look_for_partner()
         if self.info['age'] == self.model.steps_per_year * self.age_high:
-            self.grow(Pensioner)
+            self.evolve(Pensioner)
+
+    def __repr__(self):
+        return 'Adult_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 
 class Worker(Adult):
-    pass
+    def __repr__(self):
+        return 'Worker_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 
 class Teacher(Adult):
-    pass
+    def __repr__(self):
+        return 'Teacher_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 
 class Pensioner(Adult): # from 65 to death
@@ -1066,6 +1102,9 @@ class Pensioner(Adult): # from 65 to death
 
     def stage_4(self):
         pass
+
+    def __repr__(self):
+        return 'Pensioner_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
 
 class LanguageAgent:
 

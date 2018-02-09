@@ -10,11 +10,10 @@ from agent import Teacher
 
 class Home:
     def __init__(self, clust, pos):
-
         self.clust = clust
         self.pos = pos
-        self.occupants = set()
         self.agents_in = set()
+        self.info = {'occupants': set()}
 
     def assign_to_agent(self, agent, *ags):
         """ assign the current home instance to each agent
@@ -23,7 +22,7 @@ class Home:
                 * ags: additional agents might be specified at once"""
         for ag in [agent, *ags]:
             ag.loc_info['home'] = self
-            self.occupants.add(ag)
+            self.info['occupants'].add(ag)
             self.agents_in.add(ag)
 
     def __repr__(self):
@@ -214,12 +213,18 @@ class School(EducationCenter):
         # assign class key to teachers and add teachers to grouped studs
         # TODO : sort employees by lang competence from lowest to highest
         for (k, t) in zip(courses_keys, hired_teachers):
-            # turn hired agent into Teacher
-            t.grow(Teacher)
-            self.grouped_studs[k]['teacher'] = t
-            t.loc_info['job'] = self
-            t.loc_info['course_key'] = k
-            self.info['employees'].add(t)
+            if isinstance(t, Teacher):
+                self.grouped_studs[k]['teacher'] = t
+                t.loc_info['job'] = self
+                t.loc_info['course_key'] = k
+                self.info['employees'].add(t)
+            else:
+                # turn hired agent into Teacher
+                new_t = t.evolve(Teacher, ret_output=True)
+                self.grouped_studs[k]['teacher'] = new_t
+                new_t.loc_info['job'] = self
+                new_t.loc_info['course_key'] = k
+                self.info['employees'].add(new_t)
 
     def assign_stud(self, student):
         super().assign_stud(student)
@@ -267,7 +272,7 @@ class School(EducationCenter):
                                                    self.grouped_studs[k1]['teacher'])
 
     def __repr__(self):
-        return 'School_{0.pos!r}'.format(self)
+        return 'School_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
 
 class Faculty(EducationCenter):
@@ -297,12 +302,12 @@ class Faculty(EducationCenter):
         # TODO : sort employees by lang competence from lowest to highest
         for (k, t) in zip(courses_keys, hired_teachers):
             # turn hired agent into Teacher
-            t.grow(Teacher)
-            self.grouped_studs[k]['teacher'] = t
-            t.loc_info['job'] = [self.univ, self.info['type']]
-            t.loc_info['course_key'] = k
-            self.info['employees'].add(t)
-            self.univ.info['employees'].add(t)
+            new_t = t.evolve(Teacher, ret_output=True)
+            self.grouped_studs[k]['teacher'] = new_t
+            new_t.loc_info['job'] = [self.univ, self.info['type']]
+            new_t.loc_info['course_key'] = k
+            self.info['employees'].add(new_t)
+            self.univ.info['employees'].add(new_t)
 
     def exit_studs(self, studs):
         for st in studs:
@@ -321,7 +326,7 @@ class Faculty(EducationCenter):
         student.loc_info['course_key'] = int(student.info['age'] / 36)
 
     def __repr__(self):
-        return 'Faculty_{0.pos!r}'.format(self)
+        return 'Faculty_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
 
 class University:
@@ -340,7 +345,7 @@ class University:
         self.faculties = {key: Faculty(key, self, model) for key in string.ascii_letters[:5]}
 
     def __repr__(self):
-        return 'University_{0.pos!r}'.format(self)
+        return 'University_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
 
 class Job:
@@ -368,4 +373,4 @@ class Job:
     # TODO : update workers by department and send them to retirement when age reached
 
     def __repr__(self):
-        return 'Job_{0.clust!r}_{0.pos!r}'.format(self)
+        return 'Job_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
