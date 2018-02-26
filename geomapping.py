@@ -6,11 +6,12 @@ from scipy.spatial.distance import pdist
 from itertools import product
 from collections import defaultdict
 from math import ceil
+
 # IMPORT AGENTS AND  ENTITIES
-from agent import Child, Adult
 import agent, city_objects
 reload(sys.modules['agent'])
 reload(sys.modules['city_objects'])
+from agent import Child, Adult
 from city_objects import Job, School, University, Home
 
 
@@ -23,11 +24,9 @@ class GeoMapper:
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
         self.set_clusters_info()
-        # setup agent and object mapping
-        self.map_model_objects()
 
     def map_model_objects(self):
-        """ Initialize and locate all model objects on 2-D grid """
+        """ Instantiate and position all model objects on 2-D grid """
         self.map_jobs()
         self.map_schools()
         self.map_universities()

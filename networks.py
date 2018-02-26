@@ -183,8 +183,7 @@ class NetworkBuilder:
                     ag.info['age']= np.random.randint(min_age, max_age)
                     ag.set_lang_ics()
                     home = clust_info['homes'][idx + 1]
-                    ag.loc_info['home'] = home
-                    home.agents_in.add(ag)
+                    home.assign_to_agent(ag)
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:

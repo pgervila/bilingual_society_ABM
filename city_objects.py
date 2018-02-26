@@ -19,7 +19,8 @@ class Home:
         """ assign the current home instance to each agent
             Args:
                 * agent: agent instance
-                * ags: additional agents might be specified at once"""
+                * ags: additional agents might be specified at once
+        """
         for ag in [agent, *ags]:
             ag.loc_info['home'] = self
             self.info['occupants'].add(ag)
@@ -259,7 +260,7 @@ class School(EducationCenter):
             del st.loc_info['course_key']
             st.look_for_job()
 
-    def teachers_course_swap(self):
+    def swap_teachers_courses(self):
         """ Every n years on average teachers are swapped between classes """
         # sort dict keys before iteration
         sorted_keys = sorted(list(self.grouped_studs.keys()))
@@ -373,4 +374,4 @@ class Job:
     # TODO : update workers by department and send them to retirement when age reached
 
     def __repr__(self):
-        return 'Job_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
+        return 'Job_{0.clust!r}_{0.pos!r}'.format(self)

@@ -6,7 +6,7 @@ from scipy.spatial.distance import pdist
 from collections import defaultdict
 
 #import private library to model lang zipf CDF
-from zipf_generator import Zipf_Mand_CDF_compressed, randZipf
+from zipf_generator import randZipf, Zipf_Mand_CDF_compressed
 
 
 class BaseAgent:
@@ -130,9 +130,9 @@ class BaseAgent:
                 self.info['language'] = 1
         elif self.info['language'] == 1:
             if self.lang_stats['L1']['pct'][self.info['age']] < switch_threshold:
-                self.info['language'] == 2
+                self.info['language'] = 2
             elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
-                self.info['language'] == 0
+                self.info['language'] = 0
 
     def evolve(self, new_class, ret_output=False):
         """ It replaces current agent with a new agent subclass instance.
@@ -143,7 +143,6 @@ class BaseAgent:
                 * ret_ouput: boolean. True if grown_agent needs to be returned as output
         """
         grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
-        #import ipdb; ipdb.set_trace()
         # copy all current instance attributes to new agent instance
         for key, val in self.__dict__.items():
             setattr(grown_agent, key, val)
@@ -162,14 +161,29 @@ class BaseAgent:
         loc_people_dict = {'home': 'occupants', 'job': 'employees',
                            'school': 'students', 'university': 'students'}
         for key, loc in self.loc_info.items():
-            attr = loc_people_dict[key]
-            loc.info[attr].remove(self)
-            loc.info[attr].add(grown_agent)
-            try:
-                loc.agents_in.remove(self)
-                loc.agents_in.add(grown_agent)
-            except KeyError:
-                continue
+            if key == 'course_key':
+                if isinstance(self, (Baby, Child, Adolescent)):
+                    self.loc_info['school'].grouped_studs[loc]['students'].remove(self)
+                    self.loc_info['school'].grouped_studs[loc]['students'].add(grown_agent)
+                    if self in self.loc_info['school'].agents_in:
+                        self.loc_info['school'].agents_in.remove(self)
+                elif isinstance(self, YoungUniv):
+                    loc1 = loc[0]
+                    loc2 = loc[1]
+                    fac = self.loc_info['university'][loc1]
+                    fac.grouped_studs[loc2]['students'].remove(self)
+                    fac.grouped_studs[loc2]['students'].add(grown_agent)
+                    if self in fac.agents_in:
+                        fac.agents_in.remove(self)
+            else:
+                attr = loc_people_dict[key]
+                loc.info[attr].remove(self)
+                loc.info[attr].add(grown_agent)
+                try:
+                    loc.agents_in.remove(self)
+                    loc.agents_in.add(grown_agent)
+                except KeyError:
+                    continue
 
         # remove old instance and add new one to city
         self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].remove(self)
@@ -199,7 +213,7 @@ class BaseAgent:
             self.model.remove_after_death(self)
 
     def __repr__(self):
-        return 'BaseAgent_{0.unique_id!r}_clust_{1!r}'.format(self, self.loc_info['home'].clust)
+        return 'BaseAgent_{0.unique_id!r}_clust_{1}'.format(self, self.loc_info['home'].clust)
 
 
 class ListenerAgent(BaseAgent):

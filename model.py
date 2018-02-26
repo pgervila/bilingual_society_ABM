@@ -55,8 +55,6 @@ class LanguageModel(Model):
         self.max_run_steps = max_run_steps
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
-        # self.clust_centers = None
-        # self.cluster_sizes = None
         self.random_seeds = np.random.randint(1, 10000, size=2)
 
 
@@ -75,8 +73,10 @@ class LanguageModel(Model):
                                               shuffle=True,
                                               shuffle_between_stages=False)
 
-        # define model geomapping and model networks
+        # instantiate and setup mapping of agents and city objects
         self.geo = GeoMapper(self, num_clusters)
+        self.geo.map_model_objects()
+        # instantiate and setup model networks
         self.nws = NetworkBuilder(self)
         self.nws.build_networks()
         # define datacollector and dataprocessor
