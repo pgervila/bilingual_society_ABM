@@ -365,6 +365,8 @@ class ListenerAgent(BaseAgent):
 
 class SpeakerAgent(ListenerAgent):
 
+    """ ListenerAgent class augmented with speaking-related methods"""
+
     def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
                                real_spoken_tokens_per_day=16000):
         """ Computes number of words spoken per conversation for a given age
@@ -497,6 +499,7 @@ class SpeakerAgent(ListenerAgent):
 
 
 class SchoolAgent(SpeakerAgent):
+    """ SpeakerAgent augmented with methods related to school activity"""
 
     def speak_at_school(self, school, course_key, num_days):
         # talk to school mates
@@ -505,8 +508,8 @@ class SchoolAgent(SpeakerAgent):
             num_mates = random.randint(1, len(mates))
             mates = random.sample(mates, num_mates)
             self.model.run_conversation(self, mates, num_days=num_days)
-        # talk to friends
-        for friend in self.model.nws.friendship_network:
+        # talk to friends # TODO check following lines
+        for friend in self.model.nws.friendship_network[self]:
             self.model.run_conversation(self, friend, num_days=num_days)
 
     def study_vocab(self, lang, delta_s_factor=0.25, num_words=100):
@@ -526,6 +529,8 @@ class SchoolAgent(SpeakerAgent):
 
 
 class IndepAgent(ListenerAgent):
+    """ ListenerAgent class augmented with methods that enable agent
+        to take independent actions """
 
     def move_random(self):
         """ Take a random step into any surrounding cell
@@ -563,7 +568,7 @@ class IndepAgent(ListenerAgent):
 class Baby(ListenerAgent):
 
     """ Agent from 0 to 2 years old.
-        It can only be initialized from 'reproduce' method in Young and Adult agents
+        It must be initialized only from 'reproduce' method in Young and Adult agent classes
     """
 
     age_low, age_high = 0, 2
@@ -718,10 +723,8 @@ class Child(SchoolAgent):
 
     age_low, age_high = 2, 12
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
-                 lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home,
-                         lang_act_thresh, lang_passive_thresh, import_ic)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         # set up close family
         if 'close_family' not in self.info:
@@ -782,39 +785,11 @@ class Adolescent(IndepAgent, SchoolAgent):
 
     age_low, age_high = 12, 18
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
-                 lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, lang_act_thresh, lang_passive_thresh, import_ic)
+    def __init__(self, *args, **kwargs):
+        # TODO: add extra args specific to this class if needed
+        super().__init__(*args, **kwargs)
 
-    def move_random(self):
-        """ Take a random step into any surrounding cell
-            All eight surrounding cells are available as choices
-            Current cell is not an output choice
 
-            Returns:
-                * modifies self.pos attribute
-        """
-        x, y = self.pos  # attr pos is defined when adding agent to schedule
-        possible_steps = self.model.grid.get_neighborhood((x, y),
-                                                          moore=True,
-                                                          include_center=False)
-        chosen_cell = random.choice(possible_steps)
-        self.model.grid.move_agent(self, chosen_cell)
-
-    def study_vocab(self, lang, delta_s_factor=0.25, num_words=100):
-        """ Method to update vocabulary without conversations
-        Args:
-            * lang: string. Language in which agent studies ['L1', 'L2']
-            * delta_s_factor: positive float < 1. Defines increase of mem stability
-                due to passive rehearsal as a fraction of that due to active rehearsal
-            * num_words : integer. Number of words studied
-        """
-        word_samples = randZipf(self.model.cdf_data['s'][self.info['age']], num_words)
-        # get unique words and counts
-        bcs = np.bincount(word_samples)
-        act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
-        studied_words = {lang: [act, act_c]}
-        self.update_lang_arrays(studied_words, delta_s_factor=delta_s_factor, speak=False)
 
     def pick_random_friend(self, ix_agent):
         # get current agent neighboring nodes ids
@@ -885,9 +860,8 @@ class Young(IndepAgent):
 
     age_low, age_high = 18, 30
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
-                 lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
         # self.info['married'] = married
@@ -1058,9 +1032,8 @@ class Adult(Young): # from 30 to 65
 
     age_low, age_high = 30, 65
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
-                 lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, lang_act_thresh, lang_passive_thresh, import_ic)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def reproduce(self, day_prob=0.005, limit_age=40):
         if self.info['age'] <= limit_age * self.model.steps_per_year:
@@ -1101,9 +1074,8 @@ class Teacher(Adult):
 
 class Pensioner(Adult): # from 65 to death
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
-                 lang_passive_thresh=0.025, import_ic=False):
-        super().__init__(model, unique_id, language, sex, age, home, lang_act_thresh, lang_passive_thresh, import_ic)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def stage_1(self):
         pass

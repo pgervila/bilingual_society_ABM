@@ -4,6 +4,8 @@ from scipy.spatial.distance import pdist
 import networkx as nx
 import bisect
 
+from agent import Child, Adult
+
 
 class NetworkBuilder:
     """ Class to deal with everything that has to do with networks in model"""
@@ -196,18 +198,20 @@ class NetworkBuilder:
 
     def define_friendship_networks(self):
         # TODO : Apply small world graph to relevant nodes using networkx
+        # TODO : change distribution to allow for extreme number of friends for a few agents
         friends_per_agent = np.random.randint(1, 5, size=self.model.num_people)
         for ag, num_friends in zip(self.model.schedule.agents, friends_per_agent):
-            if 'job' in ag.loc_info and len(self.friendship_network[ag]) < num_friends:
-                ag_occupation = ag.loc_info['job']
+            if isinstance(ag, Adult) and len(self.friendship_network[ag]) < num_friends:
+                info_occupation = ag.loc_info['job'].info
                 colleagues = 'employees'
-            elif 'school' in ag.loc_info and len(self.friendship_network[ag]) < num_friends:
-                ag_occupation = ag.loc_info['school']
+            elif isinstance(ag, Child) and len(self.friendship_network[ag]) < num_friends:
+                info_occupation = ag.loc_info['school'].grouped_studs[ag.loc_info['course_key']]
                 colleagues = 'students'
             else:
                 continue
-            for coll in getattr(ag_occupation, 'info')[colleagues].difference({ag}):
-                # check colleague lang distance and all frienship conditions
+
+            for coll in info_occupation[colleagues].difference({ag}):
+                # check colleague lang distance and all friendship conditions
                 if (abs(coll.info['language'] - ag.info['language']) <= 1 and
                             len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
                             coll not in self.friendship_network[ag] and

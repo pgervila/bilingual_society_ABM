@@ -380,3 +380,7 @@ class Job:
 
     def __repr__(self):
         return 'Job_{0.clust!r}_{0.pos!r}'.format(self)
+
+
+class Store:
+    pass
