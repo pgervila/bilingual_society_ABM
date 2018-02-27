@@ -37,11 +37,11 @@ class StagedActivationModif(StagedActivation):
         # compute adjacent matrices for family and friends
         Fam_Graph = nx.adjacency_matrix(self.model.nws.family_network,
                                         nodelist=self.agents).toarray()
-        self.model.nws.adj_mat_fam_nw = Fam_Graph/Fam_Graph.sum(axis=1, keepdims=True)
+        self.model.nws.adj_mat_fam_nw = Fam_Graph / Fam_Graph.sum(axis=1, keepdims=True)
 
         Friend_Graph = nx.adjacency_matrix(self.model.nws.friendship_network,
                                            nodelist=self.agents).toarray()
-        self.model.nws.adj_mat_friend_nw = Friend_Graph/Friend_Graph.sum(axis=1, keepdims=True)
+        self.model.nws.adj_mat_friend_nw = Friend_Graph / Friend_Graph.sum(axis=1, keepdims=True)
 
         for stage in self.stage_list:
             for ix_agent, agent in enumerate(self.agents):
@@ -69,5 +69,5 @@ class StagedActivationModif(StagedActivation):
                 for school in clust_info['schools']:
                     school.update_courses()
                     if not self.steps % 72: # every 2 years only, teachers swap
-                        school.teachers_course_swap()
+                        school.swap_teachers_courses()
         self.steps += 1

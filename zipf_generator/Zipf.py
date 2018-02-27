@@ -7,6 +7,7 @@ def Zipf_CDF(n, alpha):
     zeta = np.cumsum(zipf_law)
     return zeta / zeta[-1]
 
+
 def Zipf_Mandelbrot_CDF(n, alpha, beta=2.7):
     """Computes Zipf-Mandelbrot cumulative distribution function"""
     x = np.arange(1, n + 1) + beta
@@ -28,9 +29,6 @@ def Zipf_Mand_3S_CDF(n, alpha_1=1.16, alpha_2=1.48, alpha_3=1.866,
     mandelbrot_law_3S = np.concatenate((v1, v2, v3))
     zeta = np.cumsum(mandelbrot_law_3S)
     return zeta / zeta[-1]
-
-
-
 
 
 def Zipf_CDF_compressed(n, alpha, n_red=1000):

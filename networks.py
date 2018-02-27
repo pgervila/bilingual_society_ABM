@@ -76,11 +76,12 @@ class NetworkBuilder:
     def define_family_networks(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
-            It assumes distribution of languages in clusters has already been sorted at cluster level or
+            It assumes that the distribution of languages in clusters has already been sorted at cluster level or
             by groups of four to ensure linguistic affinity within families.
             Marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
         """
         for clust_idx, clust_info in self.model.geo.clusters_info.items():
+            # trick to iterate over groups of agents of size == self.model.family_size
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
                 # set ages of family members
                 min_age, max_age = parents_age_range
@@ -140,9 +141,7 @@ class NetworkBuilder:
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
-                            job.num_places -= 1
-                            parent.loc_info['job'] = job
-                            job.info['employees'].add(parent)
+                            job.hire_employee(parent)
                             break
 
                 # assign school to children
@@ -178,17 +177,16 @@ class NetworkBuilder:
             len_clust = len(clust_info['agents'])
             num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
-                for ag in clust_info['agents'][-num_left_agents:]:
+                for idx2, ag in enumerate(clust_info['agents'][-num_left_agents:]):
                     min_age, max_age = 40 * self.model.steps_per_year, 60 * self.model.steps_per_year
                     ag.info['age']= np.random.randint(min_age, max_age)
                     ag.set_lang_ics()
-                    home = clust_info['homes'][idx + 1]
+                    home = clust_info['homes'][idx + idx2 + 1]
                     home.assign_to_agent(ag)
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
-                            job.num_places -= 1
-                            ag.loc_info['job'] = job
+                            job.hire_employee(ag)
                             break
         # assign school jobs
         # Loop over schools to assign teachers

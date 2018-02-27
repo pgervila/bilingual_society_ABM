@@ -371,6 +371,11 @@ class Job:
     def look_for_employees(self):
         pass
 
+    def hire_employee(self, agent):
+        self.num_places -= 1
+        agent.loc_info['job'] = self
+        self.info['employees'].add(agent)
+
     # TODO : update workers by department and send them to retirement when age reached
 
     def __repr__(self):
