@@ -227,6 +227,72 @@ class NetworkBuilder:
                 if len(self.friendship_network[ag]) > num_friends - 1:
                     break
 
+    def set_family_links(self, agent, father, mother, lang_with_father, lang_with_mother):
+        """
+            Method to define family links and interaction language of a nw agent.
+            Corresponding edges are created in family and known people networks
+            Args:
+                * agent: agent instance. The agent on which links have to be defined
+                * father: agent instance. The agent's father
+                * mother: agent instance. The agent's mother
+                * lang_with_father: integer [0, 1]. Defines lang of agent with father
+                * lang_with_mother: integer [0, 1]. Defines lang of agent with mother
+        """
+        fam_nw = self.family_network
+        k_people_nw = self.known_people_network
+
+        # get agent siblings from mother before agent birth
+        siblings = mother.get_family_relatives('child')
+        # Define family links with parents
+        for (i, j, fam_link) in [(agent, father, 'father'), (father, agent, 'child')]:
+            fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_father)
+            k_people_nw.add_edge(i, j, family=True, lang=lang_with_father)
+        for (i, j, fam_link) in [(agent, mother, 'mother'), (mother, agent, 'child')]:
+            fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_mother)
+            k_people_nw.add_edge(i, j, family=True, lang=lang_with_mother)
+        # Define links with agent siblings if any
+        for sibling in siblings:
+            lang_with_sibling = sibling.get_dominant_lang()
+            for (i, j, fam_link) in [(agent, sibling, 'sibling'), (sibling, agent, 'sibling')]:
+                fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_sibling)
+                k_people_nw.add_edge(i, j, family=True, lang=lang_with_sibling)
+        # rest of family will if possible speak same language with baby as their link agent to the baby
+        for elder, lang in zip([father, mother], [lang_with_father, lang_with_mother]):
+            for relat, labels in fam_nw[elder].items():
+                lang_label = 'L1' if lang == 0 else 'L2'
+                if relat.lang_stats[lang_label]['pct'][relat.info['age']] > relat.lang_act_thresh:
+                    com_lang = lang
+                else:
+                    com_lang = 1 if lang == 0 else 0
+                if labels["fam_link"] == 'father':
+                    for (i, j, fam_link) in [(agent, relat, 'grandfather'), (relat, agent, 'grandchild')]:
+                        fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                elif labels["fam_link"] == 'mother':
+                    for (i, j, fam_link) in [(agent, relat, 'grandmother'), (relat, agent, 'grandchild')]:
+                        fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                elif labels["fam_link"] == 'sibling':
+                    fam_nw.add_edge(agent, relat,
+                                    fam_link='uncle' if relat.info['sex'] == 'M' else 'aunt',
+                                    lang=com_lang)
+                    fam_nw.add_edge(relat, agent, fam_link='nephew', lang=com_lang)
+                    for (i, j) in [(agent, relat), (relat, agent)]:
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                    if relat.info['married']:
+                        consort = [key for key, value in fam_nw[relat].items()
+                                   if value['fam_link'] == 'consort'][0]
+                        fam_nw.add_edge(agent, consort,
+                                        fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
+                        fam_nw.add_edge(consort, agent, fam_link='nephew', lang=com_lang)
+                        for (i, j) in [(agent, consort), (consort, agent)]:
+                            k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                elif labels["fam_link"] == 'nephew':
+                    fam_nw.add_edge(agent, relat, fam_link='cousin', lang=com_lang)
+                    fam_nw.add_edge(relat, agent, fam_link='cousin', lang=com_lang)
+                    for (i, j) in [(agent, relat), (relat, agent)]:
+                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+
     def plot_family_networks(self):
         """PLOT NETWORK with lang colors and position"""
         #        people_pos = [elem.pos for elem in self.schedule.agents if elem.agent_type == 'language']

@@ -300,6 +300,7 @@ class GeoMapper:
                 # add agents to clust_info, schedule, grid and networks
                 clust_info['agents'].extend([ag1, ag2, ag3, ag4])
                 self.add_agents_to_grid_and_schedule([ag1, ag2, ag3, ag4])
+                import ipdb; ipdb.set_trace()
 
                 # TODO : need to delete all original references to agent instances except for
                 # networks, grid, schedule
@@ -314,34 +315,6 @@ class GeoMapper:
                     clust_info['agents'].append(ag)
                     self.add_agents_to_grid_and_schedule(ag)
 
-    # def map_lang_agents_GM(self):
-    #     """ Method to instantiate all agents according to requested linguistic order """
-    #     # get lang distribution for each cluster
-    #     langs_per_clust = self.generate_lang_distrib()
-    #     # set agents ids
-    #     ids = set(range(self.model.num_people))
-    #     for clust_idx, clust_info in self.clusters_info.items():
-    #         for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.model.family_size)):
-    #             # instantiate 2 adults with neither job nor home assigned
-    #             ag1 = LanguageAgent(self.model, ids.pop(), family_langs[0])
-    #             ag2 = LanguageAgent(self.model, ids.pop(), family_langs[1])
-    #
-    #             # instantiate 2 adolescents with neither school nor home assigned
-    #             ag3 = LanguageAgent(self.model, ids.pop(), family_langs[2])
-    #             ag4 = LanguageAgent(self.model, ids.pop(), family_langs[3])
-    #
-    #             # add agents to clust_info, schedule, grid and networks
-    #             clust_info['agents'].extend([ag1, ag2, ag3, ag4])
-    #             self.add_agents_to_grid_and_schedule([ag1, ag2, ag3, ag4])
-    #
-    #         # set up agents left out of family partition of cluster
-    #         len_clust = clust_info['num_agents']
-    #         num_left_agents = len_clust % self.model.family_size
-    #         if num_left_agents:
-    #             for lang in langs_per_clust[clust_idx][-num_left_agents:]:
-    #                 ag = LanguageAgent(self.model, ids.pop(), lang)
-    #                 clust_info['agents'].append(ag)
-    #                 self.add_agents_to_grid_and_schedule(ag)
 
     def add_agents_to_grid_and_schedule(self, ags):
         """ Method to add a number of agents to grid, schedule and system networks

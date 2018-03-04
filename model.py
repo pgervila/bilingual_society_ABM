@@ -156,6 +156,7 @@ class LanguageModel(Model):
         ags = [ag_init]
         ags.extend(others) if (type(others) is list) else ags.append(others)
         # get all parameters of conversation
+        #import ipdb; ipdb.set_trace()
         conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
@@ -204,12 +205,13 @@ class LanguageModel(Model):
         conv_params = dict(multilingual=False, mute_type=None, long=True)
 
         # get lists of favorite language per agent and set of language types involved
+
         ags_lang_types = set([ag.info['language'] for ag in ags])
 
         # define lists with agent competences and preferences in each language
         fav_langs_and_pcts = [ag.get_dominant_lang(ret_pcts=True) for ag in ags]
-        fav_lang_per_agent, (l1_pcts, l2_pcts) = list(zip(*fav_langs_and_pcts))
-
+        fav_lang_per_agent, l_pcts = list(zip(*fav_langs_and_pcts))
+        l1_pcts, l2_pcts = list(zip(*l_pcts))
         # define current case
         # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
         if ags_lang_types in [{0}, {0, 1}]:
@@ -227,6 +229,7 @@ class LanguageModel(Model):
             langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
                                        for ag in others
                                        if ag in self.nws.known_people_network[ag_init]]
+            langs_with_known_agents = [e[0] if isinstance(e, list) else e for e in langs_with_known_agents]
             if langs_with_known_agents:
                 lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
             else:

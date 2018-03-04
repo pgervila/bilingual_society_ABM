@@ -20,13 +20,13 @@ class StagedActivationModif(StagedActivation):
                 # compute current language knowledge in percentage after 't' update
                 pct_threshold = 0.9
                 if lang in ['L1', 'L12']:
-                    real_lang_knowledge = np.maximum(self.lang_stats['L1']['R'], self.lang_stats['L12']['R'])
-                    self.lang_stats['L1']['pct'][self.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                      self.model.vocab_red)
+                    real_lang_knowledge = np.maximum(agent.lang_stats['L1']['R'], agent.lang_stats['L12']['R'])
+                    agent.lang_stats['L1']['pct'][agent.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+                                                                        agent.model.vocab_red)
                 else:
-                    real_lang_knowledge = np.maximum(self.lang_stats['L2']['R'], self.lang_stats['L21']['R'])
-                    self.lang_stats['L2']['pct'][self.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                      self.model.vocab_red)
+                    real_lang_knowledge = np.maximum(agent.lang_stats['L2']['R'], agent.lang_stats['L21']['R'])
+                    agent.lang_stats['L2']['pct'][agent.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+                                                                        agent.model.vocab_red)
                 # reset day mask
                 agent.day_mask[lang] = np.zeros(agent.model.vocab_red, dtype=np.bool)
             # Update lang switch

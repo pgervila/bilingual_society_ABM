@@ -282,13 +282,12 @@ class Faculty(EducationCenter):
         self.model = model
         self.univ = univ
         self.pos = self.univ.pos
+        self.agents_in = set()
         self.info = {'students': set(), 'employees': set(),
                      'lang_policy': univ.info['lang_policy'],
                      'age_range': univ.info['age_range'],
                      'min_age_teacher': univ.info['min_age_teacher'], 'type': fac,
                      'clust': univ.info['clust']}
-
-        self.agents_in = set()
         #self.grouped_studs = {k: defaultdict(set) for k in range(*self.info['age_range'])}
         self.grouped_studs = dict()
 
