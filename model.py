@@ -76,7 +76,7 @@ class LanguageModel(Model):
         # instantiate and setup mapping of agents and city objects
         self.geo = GeoMapper(self, num_clusters)
         self.geo.map_model_objects()
-        # instantiate and setup model networks
+        # instantiate and setup networks
         self.nws = NetworkBuilder(self)
         self.nws.build_networks()
         # define datacollector and dataprocessor
@@ -168,7 +168,7 @@ class LanguageModel(Model):
                 for listener in listeners:
                     listener.update_lang_arrays(spoken_words, speak=False)
         # update acquaintances
-        if type(others) is list:
+        if isinstance(others, list):
             for ix, ag in enumerate(others):
                 if ag.info['language'] != conv_params['mute_type']:
                     ag_init.update_acquaintances(ag, conv_params['lang_group'][0])

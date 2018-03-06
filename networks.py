@@ -75,7 +75,7 @@ class NetworkBuilder:
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
-    def define_family_networks(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
+    def define_family_networks(self):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
             It assumes that the distribution of languages in clusters has already been sorted at cluster level or
@@ -85,28 +85,19 @@ class NetworkBuilder:
         for clust_idx, clust_info in self.model.geo.clusters_info.items():
             # trick to iterate over groups of agents of size == self.model.family_size
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
-                # set ages of family members
-                min_age, max_age = parents_age_range
-                (family[0].info['age'],
-                 family[1].info['age']) = np.random.randint(min_age, max_age, 2) * self.model.steps_per_year
-                min_age, max_age = children_age_range
-                (family[2].info['age'],
-                 family[3].info['age']) = np.random.randint(min_age, max_age, 2) * self.model.steps_per_year
-                # assign same home to all family members
-                home = clust_info['homes'][idx]
-                # import ICs and assign home
+                # import ICs
                 # apply correlation between parents' and children's lang knowledge if parents bilinguals
                 if 1 in [m.info['language'] for m in family[:2]]:
                     key_parents = [] # define list to store parents' percentage knowledge
-                    for ix, member in enumerate(family):
-                        if ix < 2 and member.info['language'] == 1:
+                    for ix_member, member in enumerate(family):
+                        if ix_member < 2 and member.info['language'] == 1:
                             key = np.random.choice(self.model.ic_pct_keys)
                             key_parents.append(key)
                             member.set_lang_ics(biling_key=key)
-                        elif ix < 2:
+                        elif ix_member < 2:
                             lang_mono = member.info['language']
                             member.set_lang_ics()
-                        elif ix >= 2:
+                        elif ix_member >= 2:
                             if len(key_parents) == 1:
                                 if not lang_mono: # mono in lang 0
                                     key = (key_parents[0] + 100) / 2
@@ -119,12 +110,11 @@ class NetworkBuilder:
                                                    hi=len(self.model.ic_pct_keys) - 1)
                             ]
                             member.set_lang_ics(biling_key=key)
-                        home.assign_to_agent(member)
                 else: # monolingual parents
                     # check if children are bilingual
-                    if 1 in [m.info['language'] for m in family[2:4]]:
-                        for ix, member in enumerate(family):
-                            if ix < 2:
+                    if 1 in [m.info['language'] for m in family[2:]]:
+                        for ix_member, member in enumerate(family):
+                            if ix_member < 2:
                                 member.set_lang_ics()
                             else:
                                 if member.info['language'] == 1:
@@ -132,29 +122,9 @@ class NetworkBuilder:
                                     member.set_lang_ics(biling_key=90)
                                 else:
                                     member.set_lang_ics()
-                            home.assign_to_agent(member)
                     else:
                         for member in family:
                             member.set_lang_ics()
-                            home.assign_to_agent(member)
-
-                # assign job to parents
-                for parent in family[:2]:
-                    while True:
-                        job = np.random.choice(clust_info['jobs'])
-                        if job.num_places:
-                            job.hire_employee(parent)
-                            break
-
-                # assign school to children
-                # find closest school
-                # TODO : introduce also University for age > 18
-                idx_school = np.argmin([pdist([home.pos, school.pos])
-                                        for school in clust_info['schools']])
-                school = clust_info['schools'][idx_school]
-                for child in family[2:]:
-                    child.loc_info['school'] = school
-                    school.info['students'].add(child)
 
                 # find out lang of interaction btw family members
                 (lang_consorts, lang_with_father,
@@ -180,21 +150,9 @@ class NetworkBuilder:
             num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
                 for idx2, ag in enumerate(clust_info['agents'][-num_left_agents:]):
-                    min_age, max_age = 40 * self.model.steps_per_year, 60 * self.model.steps_per_year
-                    ag.info['age']= np.random.randint(min_age, max_age)
                     ag.set_lang_ics()
-                    home = clust_info['homes'][idx + idx2 + 1]
-                    home.assign_to_agent(ag)
-                    while True:
-                        job = np.random.choice(clust_info['jobs'])
-                        if job.num_places:
-                            job.hire_employee(ag)
-                            break
         # assign school jobs
-        # Loop over schools to assign teachers
-        for clust_idx, clust_info in self.model.geo.clusters_info.items():
-            for school in clust_info['schools']:
-                school.set_up_courses()
+        self.model.geo.assign_school_jobs()
 
     def define_friendship_networks(self):
         # TODO : Apply small world graph to relevant nodes using networkx

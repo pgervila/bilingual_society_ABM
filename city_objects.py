@@ -15,13 +15,16 @@ class Home:
         self.agents_in = set()
         self.info = {'occupants': set()}
 
-    def assign_to_agent(self, agent, *ags):
+    def assign_to_agent(self, agents):
         """ assign the current home instance to each agent
             Args:
-                * agent: agent instance
-                * ags: additional agents might be specified at once
+                * agents: agent instance or list of agent instances
         """
-        for ag in [agent, *ags]:
+
+        if not isinstance(agents, list):
+            agents = [agents]
+
+        for ag in agents:
             ag.loc_info['home'] = self
             self.info['occupants'].add(ag)
             self.agents_in.add(ag)

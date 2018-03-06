@@ -278,13 +278,12 @@ class GeoMapper:
                     clust[:len(clust_subsorted_by_fam)] = clust_subsorted_by_fam
         return langs_per_clust
 
-    def map_lang_agents(self):
+    def map_lang_agents(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
         """ Method to instantiate all agents according to requested linguistic order """
         # get lang distribution for each cluster
         langs_per_clust = self.generate_lang_distrib()
         # set agents ids
         lang_ags_ids = set(range(self.model.num_people))
-
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.model.family_size)):
                 # family sexes
@@ -296,24 +295,67 @@ class GeoMapper:
                 # instantiate 2 children with neither school nor home assigned
                 ag3 = Child(self.model, lang_ags_ids.pop(), family_langs[2], family_sexes[2])
                 ag4 = Child(self.model, lang_ags_ids.pop(), family_langs[3], family_sexes[3])
-
-                # add agents to clust_info, schedule, grid and networks
-                clust_info['agents'].extend([ag1, ag2, ag3, ag4])
-                self.add_agents_to_grid_and_schedule([ag1, ag2, ag3, ag4])
-                import ipdb; ipdb.set_trace()
-
-                # TODO : need to delete all original references to agent instances except for
-                # networks, grid, schedule
+                # set ages of family members
+                (ag1.info['age'],
+                 ag2.info['age']) = self.model.steps_per_year * np.random.randint(parents_age_range[0],
+                                                                                  parents_age_range[1],
+                                                                                  2)
+                (ag3.info['age'],
+                 ag4.info['age']) = self.model.steps_per_year * np.random.randint(children_age_range[0],
+                                                                                  children_age_range[1],
+                                                                                  2)
+                # assign same home to all family members to locate them at step=0
+                family_agents = [ag1, ag2, ag3, ag4]
+                home = clust_info['homes'][idx]
+                home.assign_to_agent(family_agents)
+                # add agents to clust_info, schedule and grid
+                clust_info['agents'].extend(family_agents)
+                self.add_agents_to_grid_and_schedule(family_agents)
+                # assign job to parents
+                for parent in family_agents[:2]:
+                    while True:
+                        job = np.random.choice(clust_info['jobs'])
+                        if job.num_places:
+                            job.hire_employee(parent)
+                            break
+                # assign school to children
+                # find closest school to home
+                # TODO : introduce also University for age > 18
+                home = clust_info['homes'][idx]
+                idx_school = np.argmin([pdist([home.pos, school.pos])
+                                        for school in clust_info['schools']])
+                school = clust_info['schools'][idx_school]
+                for child in family_agents[2:]:
+                    child.loc_info['school'] = school
+                    school.info['students'].add(child)
 
             # set up agents left out of family partition of cluster
             len_clust = clust_info['num_agents']
             num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
-                for lang in langs_per_clust[clust_idx][-num_left_agents:]:
+                for idx2, lang in enumerate(langs_per_clust[clust_idx][-num_left_agents:]):
                     sex = ['M' if random.random() < 0.5 else 'F']
                     ag = Adult(self.model, lang_ags_ids.pop(), lang, sex)
+                    ag.info['age'] = self.model.steps_per_year * np.random.randint(parents_age_range[0],
+                                                                                   parents_age_range[1])
                     clust_info['agents'].append(ag)
                     self.add_agents_to_grid_and_schedule(ag)
+                    # assign home
+                    home = clust_info['homes'][idx + idx2 + 1]
+                    home.assign_to_agent(ag)
+                    # assign job
+                    while True:
+                        job = np.random.choice(clust_info['jobs'])
+                        if job.num_places:
+                            job.hire_employee(ag)
+                            break
+
+    def assign_school_jobs(self):
+        # assign school jobs
+        # Loop over schools to assign teachers
+        for clust_idx, clust_info in self.clusters_info.items():
+            for school in clust_info['schools']:
+                school.set_up_courses()
 
 
     def add_agents_to_grid_and_schedule(self, ags):
@@ -323,7 +365,7 @@ class GeoMapper:
                     ags will be transformed into an iterable
         """
         # construct an iterable list out of all possible input structure
-        ags = [ags] if type(ags) != list else ags
+        ags = [ags] if not isinstance(ags, list) else ags
         # add agent to grid and schedule
         for ag in ags:
             self.model.schedule.add(ag)
