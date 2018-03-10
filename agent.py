@@ -57,7 +57,7 @@ class BaseAgent:
         # vocab pct
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                  self.model.vocab_red)
+                                                          self.model.vocab_red)
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
         """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
@@ -83,8 +83,9 @@ class BaseAgent:
         Args:
             * S_0: float <= 1. Initial memory intensity
             * t_0: last-activation days counter
-            * biling_key: integer from [10, 25, 50, 75, 90, 100]. Specify only if
-              specific bilingual level is needed as input
+            * biling_key: integer from [10, 25, 50, 75, 90, 100]. Numbers specify amount of time
+                agent has spoken given language throughout life.
+                Specify only if specific bilingual level is needed as input
         """
         if self.info['language'] == 0:
             self._set_lang_attrs('L1', '100_pct')
@@ -254,8 +255,8 @@ class ListenerAgent(BaseAgent):
                 self.model.run_conversation(ag_1, ag_2, bystander=self)
         else:
             # make other agent speak and 'self' agent get the listened vocab
-            if self in self.model.known_people_network[to_agent]:
-                lang = self.model.known_people_network[to_agent][self]['lang']
+            if self in self.model.nws.known_people_network[to_agent]:
+                lang = self.model.nws.known_people_network[to_agent][self]['lang']
             else:
                 conv_params = self.model.get_conv_params([to_agent, self])
                 if conv_params['bilingual']:
@@ -378,7 +379,7 @@ class ListenerAgent(BaseAgent):
 
 class SpeakerAgent(ListenerAgent):
 
-    """ ListenerAgent class augmented with speaking-related methods"""
+    """ ListenerAgent class augmented with speaking-related methods """
 
     def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
                                real_spoken_tokens_per_day=16000):
@@ -511,6 +512,14 @@ class SpeakerAgent(ListenerAgent):
               other not in self.model.nws.friendship_network[self]):
             self.model.nws.known_people_network[self][other]['num_meet'] += 1
 
+    def stage_1(self, num_days=10):
+        ags_at_home = self.loc_info['home'].agents_in.difference({self})
+        ags_at_home = [ag for ag in ags_at_home if isinstance(ag, SpeakerAgent)]
+        if ags_at_home:
+            self.model.run_conversation(self, ags_at_home)
+            for ag in np.random.choice(ags_at_home, size=min(2,len(ags_at_home)), replace=False):
+                self.model.run_conversation(self, ag)
+
 
 class SchoolAgent(SpeakerAgent):
     """ SpeakerAgent augmented with methods related to school activity """
@@ -566,8 +575,8 @@ class IndepAgent(SpeakerAgent):
         pass
         #self.model.grid.move_agent(self, school.pos)
 
-
     def pick_random_friend(self, ix_agent):
+        """ Description needed """
         # get current agent neighboring nodes ids
         adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
         # get agents ids and probs
@@ -597,7 +606,7 @@ class Baby(ListenerAgent):
 
         super().__init__(*args, **kwargs)
 
-        self.model.nws.set_family_links(father, mother, lang_with_father, lang_with_mother)
+        self.model.nws.set_family_links(self, father, mother, lang_with_father, lang_with_mother)
 
     def register_to_school(self):
         # find closest school in cluster
@@ -630,7 +639,8 @@ class Baby(ListenerAgent):
             course_key = self.loc_info['course_key']
             teacher = school.grouped_studs[course_key]['teacher']
             # check if school parent is available
-            school_parent = self.get_family_relative(random.choice('father', 'mother'))
+            school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
+            school_parent = self.get_family_relative(school_parent)
             if school_parent:
                 self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
                 self.model.run_conversation(teacher, school_parent, num_days=num_days)
@@ -643,17 +653,22 @@ class Baby(ListenerAgent):
         # parent comes to pick up and speaks with other parents. Then baby listens to parent on way back
         if self.info['age'] > self.model.steps_per_year:
             school = self.loc_info['school']
-            school_parent = self.get_family_relative(random.choice('father', 'mother'))
-            self.model.grid.move_agent(school_parent, school.pos)
+            # check if school parent is available
+            school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
+            school_parent = self.get_family_relative(school_parent)
+            if school_parent:
+                self.model.grid.move_agent(school_parent, school.pos)
+                self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'],
+                            num_days=num_days)
             course_key = self.loc_info['course_key']
-            parents = [stud.school_parent for stud in school.grouped_studs[course_key]['students']
-                       if stud.school_parent.pos == school.pos ]
-            if parents:
+            parents = [ag for ag in self.model.grid.get_cell_list_contents(school.pos)
+                       if isinstance(ag, Adult)]
+            if parents and school_parent:
                 num_peop = random.randint(1, min(len(parents), 4))
-                school_parent.start_conversation(with_agents=random.sample(parents, num_peop))
+                self.model.run_conversation(school_parent, random.sample(parents, num_peop))
             school.agents_in.remove(self)
-            self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
-        # TODO : pick random friends from parents. Set up meeting witht them
+
+        # TODO : pick random friends from parents. Set up meeting with them
 
     def stage_4(self):
         # baby goes to bed early during week
@@ -669,28 +684,20 @@ class Child(SchoolAgent):
     def __init__(self, *args, **kwargs):
         # TODO: add extra args specific to this class if needed
         super().__init__(*args, **kwargs)
-        # if parents:
-        #     self.info['close_family'] = dict()
-        #     self.info['close_family']['father'] = parents[0]
-        #     self.info['close_family']['mother'] = parents[1]
 
-        # # TODO : remove 'school_parent' , find better approach
-        # # set up school parents
-        # self.school_parent = np.random.choice([self.info['close_family']['mother'],
-        #                                        self.info['close_family']['father']],
-        #                                       p=[0.7, 0.3])
-
-    def stage_1(self, *args, num_days=10):
-        ags_at_home = self.loc_info['home'].agents_in.difference({self})
-        ags_at_home = [ag for ag in ags_at_home if isinstance(ag, SpeakerAgent)]
-        self.model.run_conversation(self, ags_at_home)
+    def stage_1(self, num_days=7):
+        SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, num_days=7):
         # go to daycare with mom or dad - 7 days out of 10
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
         school = self.loc_info['school']
         self.model.grid.move_agent(self, school.pos)
-        self.model.run_conversation(self, self.school_parent, num_days=num_days)
+        # check if school parent is available
+        school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
+        school_parent = self.get_family_relative(school_parent)
+        if school_parent:
+            self.model.run_conversation(self, school_parent, num_days=num_days)
         # TODO : a part of speech from teacher to all course(driven from teacher stage method),
         school.agents_in.add(self)
         # talk to teacher and mates
@@ -698,28 +705,31 @@ class Child(SchoolAgent):
         # talk with teacher
         teacher = school.grouped_studs[course_key]['teacher']
         self.model.run_conversation(teacher, self, num_days=num_days)
-        self.model.run_conversation(teacher, self.school_parent, num_days=2)
+        if school_parent:
+            self.model.run_conversation(teacher, school_parent, num_days=2)
         # talk with school mates
         self.speak_at_school(school, course_key, num_days)
         # week-ends time are modeled in PARENTS stages
 
     def stage_3(self, num_days=7):
         school = self.loc_info['school']
-        self.model.grid.move_agent(self.school_parent, school.pos)
+        school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
+        school_parent = self.get_family_relative(school_parent)
+        if school_parent:
+            self.model.grid.move_agent(school_parent, school.pos)
+            self.model.run_conversation(self, school_parent, num_days=num_days)
         course_key = self.loc_info['course_key']
-        parents = [stud.school_parent for stud in school.grouped_studs[course_key]['students']
-                   if stud.school_parent.pos == school.pos ]
-        if parents:
+        parents = [ag for ag in self.model.grid.get_cell_list_contents(school.pos)
+                   if isinstance(ag, Adult)]
+        if parents and school_parent:
             num_peop = random.randint(1, min(len(parents), 4))
-            self.school_parent.start_conversation(with_agents=random.sample(parents, num_peop))
+            self.model.run_conversation(school_parent, random.sample(parents, num_peop))
         school.agents_in.remove(self)
-        self.model.run_conversation(self, self.school_parent, num_days=num_days)
 
     def stage_4(self, num_days=10):
         self.stage_1(num_days=num_days)
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Adolescent)
-
 
 
 class Adolescent(IndepAgent, SchoolAgent):
@@ -759,8 +769,8 @@ class Adolescent(IndepAgent, SchoolAgent):
         self.speak_to_random_friend(ix_agent, num_days)
         # week-ends time are modeled in PARENTS stages
 
-    def stage_1(self, *args, num_days=7):
-        super().stage_1()
+    def stage_1(self, ix_agent, num_days=7):
+        SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent, num_days=7):
         school = self.loc_info['school']
@@ -792,19 +802,15 @@ class Adolescent(IndepAgent, SchoolAgent):
             self.evolve(Young)
 
 
-
 class Young(IndepAgent):
 
     age_low, age_high = 18, 30
 
     def __init__(self, *args, married=False, num_children=0, job=None, **kwargs):
         super().__init__(*args, **kwargs)
-
-
         self.info['married'] = married
         self.info['num_children'] = num_children
         self.loc_info['job'] = job
-
 
     def move_to_new_home(self, *ags, marriage=True):
         """ Method to move self agent and other optional agents to a new home
@@ -908,9 +914,9 @@ class Young(IndepAgent):
             random.random() < day_prob):
             id_baby = self.model.set_available_ids.pop()
             # find consort
-            consort = [agent for agent, labels in self.model.family_network[self].items()
+            consort = [agent for agent, labels in self.model.nws.family_network[self].items()
                        if labels["fam_link"] == 'consort'][0]
-            # find out baby language atribute and langs with parents
+            # find out baby language attribute and langs with parents
             newborn_lang, lang_with_father, lang_with_mother = self.model.get_newborn_lang(self, consort)
             # Determine baby's sex
             sex = 'M' if random.random() > 0.5 else 'F'
@@ -939,10 +945,8 @@ class Young(IndepAgent):
     def switch_job(self, new_job):
             pass
 
-
-
     def stage_1(self, ix_agent, num_days=7):
-        pass
+        SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent):
         pass
@@ -951,8 +955,8 @@ class Young(IndepAgent):
         pass
 
     def stage_4(self, ix_agent):
-        self.speak_to_random_friend(ix_agent)
-        if not self.info['married'] and self.info['job']:
+        self.speak_to_random_friend(ix_agent, num_days=5)
+        if not self.info['married'] and self.loc_info['job']:
             self.look_for_partner()
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Adult)
@@ -968,9 +972,6 @@ class Adult(Young): # from 30 to 65
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # if children:
-        #     self.info['close_family'] = dict()
-        #     self.info['close_family']['children'] = children
 
     def reproduce(self, day_prob=0.005, limit_age=40):
         if self.info['age'] <= limit_age * self.model.steps_per_year:
@@ -979,50 +980,51 @@ class Adult(Young): # from 30 to 65
     def look_for_partner(self, avg_years=4, age_diff=10, thresh_comm_lang=0.3):
         super().look_for_partner(avg_years=avg_years)
 
-    def stage_1(self):
+    def stage_1(self, ix_agent, num_days=7):
+        SpeakerAgent.stage_1(self, num_days=num_days)
+
+    def stage_2(self, ix_agent):
         pass
 
-    def stage_2(self):
-        pass
-
-    def stage_3(self):
+    def stage_3(self, ix_agent):
         pass
 
     def stage_4(self, ix_agent, num_days=7):
-        self.speak_to_random_friend(ix_agent)
-        if not self.info['married'] and self.info['job']:
+        self.speak_to_random_friend(ix_agent, num_days=5)
+        if not self.info['married'] and self.loc_info['job']:
             self.look_for_partner()
         if self.info['age'] == self.model.steps_per_year * self.age_high:
             self.evolve(Pensioner)
 
 
-
 class Worker(Adult):
-    def stage_1(self):
+
+    def stage_1(self, ix_agent, num_days=7):
+        super().stage_1(ix_agent, num_days=num_days)
+
+    def stage_2(self, ix_agent):
         pass
 
-    def stage_2(self):
+    def stage_3(self, ix_agent):
         pass
 
-    def stage_3(self):
-        pass
-
-    def stage_4(self):
-        pass
+    def stage_4(self, ix_agent):
+        super().stage_4(ix_agent, num_days=7)
 
 
 class Teacher(Adult):
-    def stage_1(self):
+
+    def stage_1(self, ix_agent, num_days=7):
+        super().stage_1(ix_agent, num_days=num_days)
+
+    def stage_2(self, ix_agent):
         pass
 
-    def stage_2(self):
+    def stage_3(self, ix_agent):
         pass
 
-    def stage_3(self):
-        pass
-
-    def stage_4(self):
-        pass
+    def stage_4(self, ix_agent):
+        super().stage_4(ix_agent, num_days=7)
 
 
 class Pensioner(Adult): # from 65 to death
@@ -1030,16 +1032,16 @@ class Pensioner(Adult): # from 65 to death
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def stage_1(self):
+    def stage_1(self, ix_agent, num_days=7):
+        super().stage_1(ix_agent, num_days=num_days)
+
+    def stage_2(self, ix_agent):
         pass
 
-    def stage_2(self):
+    def stage_3(self, ix_agent):
         pass
 
-    def stage_3(self):
-        pass
-
-    def stage_4(self):
+    def stage_4(self, ix_agent):
         pass
 
 

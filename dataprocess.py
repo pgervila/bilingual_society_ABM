@@ -11,16 +11,18 @@ import deepdish as dd
 class DataProcessor(DataCollector):
     def __init__(self, model):
         self.model = model
-        super().__init__(model_reporters={"count_spa": lambda dp: dp.get_lang_stats(0),
-                                          "count_bil": lambda dp: dp.get_lang_stats(1),
-                                          "count_cat": lambda dp: dp.get_lang_stats(2),
+        super().__init__(model_reporters={"pct_spa": lambda dp: dp.get_lang_stats(0),
+                                          "pct_bil": lambda dp: dp.get_lang_stats(1),
+                                          "pct_cat": lambda dp: dp.get_lang_stats(2),
                                           "total_num_agents": lambda dp: len(dp.model.schedule.agents),
-                                          "biling_evol": lambda dp: dp.get_bilingual_global_evol()
+                                          "pct_cat_in_biling": lambda dp: dp.get_bilingual_global_evol()
                                          },
-                         agent_reporters={"pct_cat_in_biling": lambda a: a.lang_stats['L2']['pct'][a.info['age']],
-                                          "pct_L21_in_biling": lambda a: a.lang_stats['L21']['pct'][a.info['age']],
-                                          "pct_spa_in_biling": lambda a: a.lang_stats['L1']['pct'][a.info['age']],
-                                          "pct_L12_in_biling": lambda a: a.lang_stats['L12']['pct'][a.info['age']]})
+                         agent_reporters={"pct_cat_knowledge": lambda a: a.lang_stats['L2']['pct'][a.info['age']],
+                                          "pct_L21_knowledge": lambda a: a.lang_stats['L21']['pct'][a.info['age']],
+                                          "pct_spa_knowledge": lambda a: a.lang_stats['L1']['pct'][a.info['age']],
+                                          "pct_L12_knowledge": lambda a: a.lang_stats['L12']['pct'][a.info['age']]
+                                          }
+                         )
 
     def collect(self):
         """ Collect all the data for the given model object. """

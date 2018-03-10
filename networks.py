@@ -1,3 +1,5 @@
+import sys
+from importlib import reload
 import random
 import numpy as np
 from scipy.spatial.distance import pdist
@@ -49,6 +51,7 @@ class NetworkBuilder:
         self.define_friendship_networks()
 
     def get_lang_fam_members(self, family):
+        # TODO : shouldn't it be a Model method ??
         """ Find out lang of interaction btw family members in a 4-members family
             Args:
                 * family: list of family agents
@@ -83,10 +86,13 @@ class NetworkBuilder:
             Marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
         """
         for clust_idx, clust_info in self.model.geo.clusters_info.items():
-            # trick to iterate over groups of agents of size == self.model.family_size
+            # trick to iterate over groups of agents of size = self.model.family_size
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
                 # import ICs
                 # apply correlation between parents' and children's lang knowledge if parents bilinguals
+
+                #TODO : make model method out of block to set langs ics
+
                 if 1 in [m.info['language'] for m in family[:2]]:
                     key_parents = [] # define list to store parents' percentage knowledge
                     for ix_member, member in enumerate(family):
@@ -200,7 +206,7 @@ class NetworkBuilder:
         k_people_nw = self.known_people_network
 
         # get agent siblings from mother before agent birth
-        siblings = mother.get_family_relatives('child')
+        siblings = mother.get_family_relative('child')
         # Define family links with parents
         for (i, j, fam_link) in [(agent, father, 'father'), (father, agent, 'child')]:
             fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_father)
@@ -218,7 +224,7 @@ class NetworkBuilder:
         for elder, lang in zip([father, mother], [lang_with_father, lang_with_mother]):
             for relat, labels in fam_nw[elder].items():
                 lang_label = 'L1' if lang == 0 else 'L2'
-                if relat.lang_stats[lang_label]['pct'][relat.info['age']] > relat.lang_act_thresh:
+                if relat.lang_stats[lang_label]['pct'][relat.info['age']] > relat.lang_thresholds['speak']:
                     com_lang = lang
                 else:
                     com_lang = 1 if lang == 0 else 0
