@@ -2,6 +2,7 @@
 import os, sys
 from importlib import reload
 import random
+import bisect
 import numpy as np
 import networkx as nx
 # import matplotlib
@@ -57,8 +58,7 @@ class LanguageModel(Model):
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.random_seeds = np.random.randint(1, 10000, size=2)
 
-
-        #define container for available ids
+        # define container for available ids
         self.set_available_ids = set(range(num_people, max_people_factor * num_people))
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
@@ -305,6 +305,81 @@ class LanguageModel(Model):
 
         return conv_params
 
+    def set_lang_ics_in_family(self, family):
+        """ Method to set linguistic initial conditions for each member of a family
+            Args:
+                family: list of 4 agents
+        """
+        # apply correlation between parents' and children's lang knowledge if parents bilinguals
+        # check if at least a parent is bilingual
+        if 1 in [m.info['language'] for m in family[:2]]:
+            # define list to store bilingual parents' percentage knowledge
+            key_parents = []
+            for ix_member, member in enumerate(family):
+                if ix_member < 2 and member.info['language'] == 1:
+                    key = np.random.choice(self.ic_pct_keys)
+                    key_parents.append(key)
+                    member.set_lang_ics(biling_key=key)
+                elif ix_member < 2:
+                    lang_mono = member.info['language']
+                    member.set_lang_ics()
+                elif ix_member >= 2:
+                    if len(key_parents) == 1:  # if only one bilingual parent
+                        if not lang_mono:  # mono in lang 0
+                            key = (key_parents[0] + 100) / 2
+                        else:  # mono in lang 1
+                            key = key_parents[0] / 2
+                    else:  # both parents are bilingual
+                        key = sum(key_parents) / len(key_parents)
+                    # find index of new key amongst available values
+                    idx_key = bisect.bisect_left(self.ic_pct_keys,
+                                                 key,
+                                                 hi=len(self.ic_pct_keys) - 1)
+                    key = self.ic_pct_keys[idx_key]
+                    member.set_lang_ics(biling_key=key)
+        else:  # monolingual parents
+            # check if children are bilingual
+            if 1 in [m.info['language'] for m in family[2:]]:
+                for ix_member, member in enumerate(family):
+                    if ix_member < 2:
+                        member.set_lang_ics()
+                    else:
+                        if member.info['language'] == 1:
+                            # logical that child has much better knowledge of parents lang
+                            member.set_lang_ics(biling_key=90)
+                        else:
+                            member.set_lang_ics()
+            else:
+                for member in family:
+                    member.set_lang_ics()
+
+    def get_lang_fam_members(self, family):
+        """ Find out lang of interaction btw family members in a 4-members family
+            Args:
+                * family: list of family agents
+            Output:
+                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: list of integers
+        """
+        # language between consorts
+        consorts_lang_params = self.get_conv_params([family[0], family[1]])
+        lang_consorts = consorts_lang_params['lang_group']
+
+        # language of children with parents
+        lang_with_father = consorts_lang_params['fav_langs'][0]
+        lang_with_mother = consorts_lang_params['fav_langs'][1]
+
+        # language between siblings
+        avg_lang = (lang_with_father + lang_with_mother) / 2
+        if avg_lang == 0:
+            lang_siblings = 0
+        elif avg_lang == 1:
+            lang_siblings = 1
+        else:
+            siblings_lang_params = self.get_conv_params([family[2], family[3]])
+            lang_siblings = siblings_lang_params['lang_group']
+
+        return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
+
     def remove_after_death(self, agent):
         """ Removes agent object from all places where it belongs.
             It makes sure no references to agent object are left after removal,
@@ -320,12 +395,14 @@ class LanguageModel(Model):
             except nx.NetworkXError:
                 continue
         # remove agent from all locations where it might be
-        for loc, attr in zip([agent.loc_info['home'], agent.loc_info['job'], agent.loc_info['school']],
-                             ['occupants','employees','students']):
+        loc_people_dict = {'home': 'occupants', 'job': 'employees',
+                           'school': 'students', 'university': 'students'}
+        for key, loc in agent.loc_info.items():
+            attr = loc_people_dict[key]
+            loc.info[attr].remove(agent)
             try:
-                getattr(loc, attr).remove(agent)
                 loc.agents_in.remove(agent)
-            except:
+            except KeyError:
                 continue
         # remove agent from city
         self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].remove(agent)
@@ -357,7 +434,7 @@ class LanguageModel(Model):
             self.step()
             if recording_steps_period:
                 if not self.schedule.steps % recording_steps_period:
-                    self.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
+                    self.data_viz.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
             pbar.update()
 
     def run_and_animate(self, steps, plot_type='imshow'):

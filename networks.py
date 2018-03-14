@@ -50,34 +50,6 @@ class NetworkBuilder:
         self.define_family_networks()
         self.define_friendship_networks()
 
-    def get_lang_fam_members(self, family):
-        # TODO : shouldn't it be a Model method ??
-        """ Find out lang of interaction btw family members in a 4-members family
-            Args:
-                * family: list of family agents
-            Output:
-                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: list of integers
-        """
-        # language between consorts
-        consorts_lang_params = self.model.get_conv_params([family[0], family[1]])
-        lang_consorts = consorts_lang_params['lang_group']
-
-        # language of children with parents
-        lang_with_father = consorts_lang_params['fav_langs'][0]
-        lang_with_mother = consorts_lang_params['fav_langs'][1]
-
-        # siblings
-        avg_lang = (lang_with_father + lang_with_mother) / 2
-        if avg_lang == 0:
-            lang_siblings = 0
-        elif avg_lang == 1:
-            lang_siblings = 1
-        else:
-            siblings_lang_params = self.model.get_conv_params([family[2], family[3]])
-            lang_siblings = siblings_lang_params['lang_group']
-
-        return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
-
     def define_family_networks(self):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
@@ -88,54 +60,11 @@ class NetworkBuilder:
         for clust_idx, clust_info in self.model.geo.clusters_info.items():
             # trick to iterate over groups of agents of size = self.model.family_size
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
-                # import ICs
-                # apply correlation between parents' and children's lang knowledge if parents bilinguals
-
-                #TODO : make model method out of block to set langs ics
-
-                if 1 in [m.info['language'] for m in family[:2]]:
-                    key_parents = [] # define list to store parents' percentage knowledge
-                    for ix_member, member in enumerate(family):
-                        if ix_member < 2 and member.info['language'] == 1:
-                            key = np.random.choice(self.model.ic_pct_keys)
-                            key_parents.append(key)
-                            member.set_lang_ics(biling_key=key)
-                        elif ix_member < 2:
-                            lang_mono = member.info['language']
-                            member.set_lang_ics()
-                        elif ix_member >= 2:
-                            if len(key_parents) == 1:
-                                if not lang_mono: # mono in lang 0
-                                    key = (key_parents[0] + 100) / 2
-                                else: # mono in lang 1
-                                    key = key_parents[0] / 2
-                            else:
-                                key = sum(key_parents) / len(key_parents)
-                            key = self.model.ic_pct_keys[
-                                bisect.bisect_left(self.model.ic_pct_keys, key,
-                                                   hi=len(self.model.ic_pct_keys) - 1)
-                            ]
-                            member.set_lang_ics(biling_key=key)
-                else: # monolingual parents
-                    # check if children are bilingual
-                    if 1 in [m.info['language'] for m in family[2:]]:
-                        for ix_member, member in enumerate(family):
-                            if ix_member < 2:
-                                member.set_lang_ics()
-                            else:
-                                if member.info['language'] == 1:
-                                    # logical that child has much better knowledge of parents lang
-                                    member.set_lang_ics(biling_key=90)
-                                else:
-                                    member.set_lang_ics()
-                    else:
-                        for member in family:
-                            member.set_lang_ics()
-
+                # set linguistic ICs to family
+                self.model.set_lang_ics_in_family(family)
                 # find out lang of interaction btw family members
                 (lang_consorts, lang_with_father,
-                 lang_with_mother, lang_siblings) = self.get_lang_fam_members(family)
-
+                 lang_with_mother, lang_siblings) = self.model.get_lang_fam_members(family)
                 # initialize family network
                 # add family edges in family and known_people networks ( both are DIRECTED networks ! )
                 for (i, j) in [(0, 1), (1, 0)]:

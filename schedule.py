@@ -12,24 +12,29 @@ import random
 class StagedActivationModif(StagedActivation):
     # TODO : add/separate agents by type ??? Is it a good idea ??
 
-    def step(self):
+    def step(self, pct_threshold=0.9):
         """ Executes all the stages for all agents. """
         for ag in self.agents[:]:
             ag.info['age'] += 1
             for lang in ['L1', 'L12', 'L21', 'L2']:
+
+
+                #save wc for each agent
+                ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
+
+
                 # update last-time word use vector
                 ag.lang_stats[lang]['t'][~ag.day_mask[lang]] += 1
                 # set current lang knowledge
                 # compute current language knowledge in percentage after 't' update
-                pct_threshold = 0.9
                 if lang in ['L1', 'L12']:
                     real_lang_knowledge = np.maximum(ag.lang_stats['L1']['R'], ag.lang_stats['L12']['R'])
                     ag.lang_stats['L1']['pct'][ag.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                        ag.model.vocab_red)
+                                                                  len(ag.model.cdf_data['s'][ag.info['age']]))
                 else:
                     real_lang_knowledge = np.maximum(ag.lang_stats['L2']['R'], ag.lang_stats['L21']['R'])
                     ag.lang_stats['L2']['pct'][ag.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                        ag.model.vocab_red)
+                                                                  len(ag.model.cdf_data['s'][ag.info['age']]))
                 # reset day mask
                 ag.day_mask[lang] = np.zeros(ag.model.vocab_red, dtype=np.bool)
             # Update lang switch
@@ -56,6 +61,14 @@ class StagedActivationModif(StagedActivation):
             if self.shuffle_between_stages:
                 random.shuffle(self.agents)
             self.time += self.stage_time
+
+
+        for ag in self.agents[:]:
+            for lang in ['L1', 'L12', 'L21', 'L2']:
+                ag.wc_final[lang] = ag.lang_stats[lang]['wc'].copy()
+
+
+
         # check reproduction, death : make shallow copy of agents list,
         # since we are potentially removing agents as we iterate
         for ag in self.agents[:]:
@@ -63,7 +76,7 @@ class StagedActivationModif(StagedActivation):
                 ag.reproduce()
             ag.random_death()
         # loop and update courses in schools and universities year after year
-        if not self.steps % 36:
+        if not self.steps % self.model.steps_per_year :
             for clust_idx, clust_info in self.model.geo.clusters_info.items():
                 if 'university' in clust_info:
                     for fac in clust_info['university'].faculties.values():
@@ -71,6 +84,6 @@ class StagedActivationModif(StagedActivation):
                             fac.update_courses()
                 for school in clust_info['schools']:
                     school.update_courses()
-                    if not self.steps % 72: # every 2 years only, teachers swap
+                    if not self.steps % 2 * self.model.steps_per_year:  # every 2 years only, teachers swap
                         school.swap_teachers_courses()
         self.steps += 1

@@ -288,11 +288,13 @@ class GeoMapper:
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
+                # lang ics will be set later on
                 ag1 = Adult(self.model, lang_ags_ids.pop(), family_langs[0], family_sexes[0],
                             married=True, num_children=2)
                 ag2 = Adult(self.model, lang_ags_ids.pop(), family_langs[1], family_sexes[1],
                             married=True, num_children=2)
                 # instantiate 2 children with neither school nor home assigned
+                # lang ics will be set later on
                 ag3 = Child(self.model, lang_ags_ids.pop(), family_langs[2], family_sexes[2])
                 ag4 = Child(self.model, lang_ags_ids.pop(), family_langs[3], family_sexes[3])
                 # set ages of family members

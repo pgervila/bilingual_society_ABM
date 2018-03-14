@@ -15,14 +15,18 @@ class DataProcessor(DataCollector):
                                           "pct_bil": lambda dp: dp.get_lang_stats(1),
                                           "pct_cat": lambda dp: dp.get_lang_stats(2),
                                           "total_num_agents": lambda dp: len(dp.model.schedule.agents),
-                                          "pct_cat_in_biling": lambda dp: dp.get_bilingual_global_evol()
+                                          "pct_cat_in_biling": lambda dp: dp.get_global_bilang_inner_evol()
                                          },
                          agent_reporters={"pct_cat_knowledge": lambda a: a.lang_stats['L2']['pct'][a.info['age']],
                                           "pct_L21_knowledge": lambda a: a.lang_stats['L21']['pct'][a.info['age']],
                                           "pct_spa_knowledge": lambda a: a.lang_stats['L1']['pct'][a.info['age']],
-                                          "pct_L12_knowledge": lambda a: a.lang_stats['L12']['pct'][a.info['age']]
+                                          "pct_L12_knowledge": lambda a: a.lang_stats['L12']['pct'][a.info['age']],
+                                          "tokens_per_day_spa": lambda a: (a.wc_final['L1'] - a.wc_init['L1']).sum(),
+                                          "tokens_per_day_cat": lambda a: (a.wc_final['L2'] - a.wc_init['L2']).sum()
                                           }
                          )
+
+        self.save_dir = ''
 
     def collect(self):
         """ Collect all the data for the given model object. """
@@ -37,22 +41,21 @@ class DataProcessor(DataCollector):
                     agent_records.append((agent.unique_id, reporter(agent)))
                 self.agent_vars[var].append(agent_records)
 
-    def get_lang_stats(self, i):
+    def get_lang_stats(self, lang_type):
         """Method to get counts of each type of lang agent
 
         Arguments:
-            * i : integer from [0,1,2] that specifies agent lang type
+            * lang_type : integer from [0,1,2] that specifies agent linguistic type
 
         Returns:
             * lang type count as percentage of total
 
         """
         ag_lang_list = [ag.info['language'] for ag in self.model.schedule.agents]
-        num_ag = len(ag_lang_list)
         lang_counts = Counter(ag_lang_list)
-        return lang_counts[i]/num_ag
+        return lang_counts[lang_type] / len(ag_lang_list)
 
-    def get_bilingual_global_evol(self):
+    def get_global_bilang_inner_evol(self):
         """Method to compute internal linguistic structure of all bilinguals,
         expressed as average amount of Catalan heard or spoken as % of total
 
@@ -69,6 +72,9 @@ class DataProcessor(DataCollector):
                 return 1
             else:
                 return 0
+
+    def get_tokens_per_day(self):
+        pass
 
     def get_agents_attrs_value(self, ag_attr, plot=False):
         """ Get value of specific attribute for all lang agents in model """
@@ -107,7 +113,8 @@ class DataProcessor(DataCollector):
         else:
             dd.io.save('model_data.h5', self.model_data)
 
-    def load_model_data(self, data_filename, key='/' ):
+    @staticmethod
+    def load_model_data(data_filename, key='/'):
         return dd.io.load(data_filename, key)
 
 

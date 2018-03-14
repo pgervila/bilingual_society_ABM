@@ -36,8 +36,14 @@ class BaseAgent:
             for lang in ['L1', 'L12', 'L21', 'L2']:
                 self._set_null_lang_attrs(lang)
 
+        self.wc_init = dict()
+        self.wc_final = dict()
+        for lang in ['L1', 'L12', 'L21', 'L2']:
+            self.wc_init[lang] = np.zeros(self.model.vocab_red)
+            self.wc_final[lang] = np.zeros(self.model.vocab_red)
+
     def _set_lang_attrs(self, lang, pct_key):
-        """ Private method that sets agent linguistic status for a GIVEN AGE
+        """ Private method that sets agent linguistic statistics for a GIVEN AGE
             Args:
                 * lang: string. It can take two different values: 'L1' or 'L2'
                 * pct_key: string. It must be of the form '%_pct' with % an integer
@@ -57,7 +63,7 @@ class BaseAgent:
         # vocab pct
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
+                                                          len(self.model.cdf_data['s'][self.info['age']]))
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
         """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
@@ -65,7 +71,7 @@ class BaseAgent:
            Args:
                * lang: string. It can take two different values: 'L1' or 'L2'
                * S_0: float. Initial value of memory stability
-               * t_0: integer. Initial value of time-elapsed ( in days) from last time words were encountered
+               * t_0: integer. Initial value of time-elapsed (in days) from last time words were encountered
         """
         self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0, dtype=np.float)
         self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0, dtype=np.float)
@@ -76,24 +82,25 @@ class BaseAgent:
         self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-                                                          self.model.vocab_red)
+                                                          len(self.model.cdf_data['s'][self.info['age']]))
 
-    def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
+    def set_lang_ics(self, s_0=0.01, t_0=1000, biling_key=None):
         """ set agent's linguistic Initial Conditions by calling set up methods
         Args:
-            * S_0: float <= 1. Initial memory intensity
-            * t_0: last-activation days counter
+            * s_0: float <= 1. Initial memory intensity
+            * t_0: elapsed days from last word-activation
             * biling_key: integer from [10, 25, 50, 75, 90, 100]. Numbers specify amount of time
-                agent has spoken given language throughout life.
-                Specify only if specific bilingual level is needed as input
+                agent has spoken given language throughout life. Specify only if specific bilingual level
+                is needed as input
         """
         if self.info['language'] == 0:
             self._set_lang_attrs('L1', '100_pct')
-            self._set_null_lang_attrs('L2', S_0, t_0)
+            self._set_null_lang_attrs('L2', s_0, t_0)
         elif self.info['language'] == 2:
-            self._set_null_lang_attrs('L1', S_0, t_0)
+            self._set_null_lang_attrs('L1', s_0, t_0)
             self._set_lang_attrs('L2', '100_pct')
         else: # BILINGUAL
+            # if key is not given, compute it randomly
             if not biling_key:
                 biling_key = np.random.choice(self.model.ic_pct_keys)
             L1_key = str(biling_key) + '_pct'
@@ -101,8 +108,8 @@ class BaseAgent:
             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
                 self._set_lang_attrs(lang, key)
         # always null conditions for transition languages
-        self._set_null_lang_attrs('L12', S_0, t_0)
-        self._set_null_lang_attrs('L21', S_0, t_0)
+        self._set_null_lang_attrs('L12', s_0, t_0)
+        self._set_null_lang_attrs('L21', s_0, t_0)
 
     def get_langs_pcts(self):
         pct_lang1 = self.lang_stats['L1']['pct'][self.info['age']]
@@ -370,11 +377,11 @@ class ListenerAgent(BaseAgent):
                 if lang in ['L1', 'L12']:
                     real_lang_knowledge = np.maximum(self.lang_stats['L1']['R'], self.lang_stats['L12']['R'])
                     self.lang_stats['L1']['pct'][self.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                      self.model.vocab_red)
+                                                                      len(self.model.cdf_data['s'][self.info['age']]))
                 else:
                     real_lang_knowledge = np.maximum(self.lang_stats['L2']['R'], self.lang_stats['L21']['R'])
                     self.lang_stats['L2']['pct'][self.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                      self.model.vocab_red)
+                                                                      len(self.model.cdf_data['s'][self.info['age']]))
 
 
 class SpeakerAgent(ListenerAgent):
@@ -525,7 +532,14 @@ class SchoolAgent(SpeakerAgent):
     """ SpeakerAgent augmented with methods related to school activity """
 
     def speak_at_school(self, school, course_key, num_days):
-        # talk to school mates
+        """ Method to talk with school mates and friends at school
+            Args:
+                * school: school instance
+                * course_key: integer. Identifies course
+                * num_days: integer
+        """
+        # TODO : filter by correlation in language preference
+
         mates = school.grouped_studs[course_key]['students'].difference({self})
         if mates:
             num_mates = random.randint(1, len(mates))
@@ -705,9 +719,13 @@ class Child(SchoolAgent):
         # talk with teacher
         teacher = school.grouped_studs[course_key]['teacher']
         self.model.run_conversation(teacher, self, num_days=num_days)
+        import ipdb;ipdb.set_trace()
+        self.listen(to_agent=teacher, min_age_interlocs=self.info['age'],
+                    num_days=num_days)
         if school_parent:
             self.model.run_conversation(teacher, school_parent, num_days=2)
         # talk with school mates
+        # TODO : filter by correlation in language preference
         self.speak_at_school(school, course_key, num_days)
         # week-ends time are modeled in PARENTS stages
 
