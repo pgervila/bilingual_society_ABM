@@ -156,7 +156,6 @@ class LanguageModel(Model):
         ags = [ag_init]
         ags.extend(others) if (type(others) is list) else ags.append(others)
         # get all parameters of conversation
-        #import ipdb; ipdb.set_trace()
         conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:

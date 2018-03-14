@@ -272,10 +272,10 @@ class ListenerAgent(BaseAgent):
                     lang = conv_params['lang_group']
             words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs,
                                         num_days=num_days)
-            for lang_key, lang_words in words:
-                words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
-                                       lang_words, assume_unique=True)
-                self.update_lang_arrays(words, speak=False, delta_s_factor=0.75)
+            # for lang_key, lang_words in words:
+            #     words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
+            #                            lang_words, assume_unique=True)
+            self.update_lang_arrays(words, speak=False, delta_s_factor=0.75)
 
         # TODO : implement 'listen to media' option
 
@@ -719,7 +719,6 @@ class Child(SchoolAgent):
         # talk with teacher
         teacher = school.grouped_studs[course_key]['teacher']
         self.model.run_conversation(teacher, self, num_days=num_days)
-        import ipdb;ipdb.set_trace()
         self.listen(to_agent=teacher, min_age_interlocs=self.info['age'],
                     num_days=num_days)
         if school_parent:
