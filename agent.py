@@ -112,13 +112,19 @@ class BaseAgent:
         self._set_null_lang_attrs('L21', s_0, t_0)
 
     def get_langs_pcts(self):
+        """ Method that returns pct knowledge in L1 and L2"""
         pct_lang1 = self.lang_stats['L1']['pct'][self.info['age']]
         pct_lang2 = self.lang_stats['L2']['pct'][self.info['age']]
         return pct_lang1, pct_lang2
 
     def get_dominant_lang(self, ret_pcts=False):
+        """ Method that returns dominant language after
+            computing pct knowledges in each language """
         pcts = self.get_langs_pcts()
-        dominant_lang = np.argmax(pcts)
+        if pcts[0] != pcts[1]:
+            dominant_lang = np.argmax(pcts)
+        else:
+            dominant_lang = 1 if random.random() >= 0.5 else 0
         if ret_pcts:
             return dominant_lang, pcts
         else:

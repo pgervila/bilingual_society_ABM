@@ -109,7 +109,8 @@ class LanguageModel(Model):
     #     else:
     #         return lang
 
-    def get_newborn_lang(self, parent1, parent2):
+    @staticmethod
+    def get_newborn_lang(parent1, parent2):
         """
             ALGO to assess which language each parent will speak to newborn child and
             which language category the newborn will have at birth
