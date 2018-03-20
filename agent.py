@@ -157,11 +157,12 @@ class BaseAgent:
                 * ret_ouput: boolean. True if grown_agent needs to be returned as output
         """
         grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
+
         # copy all current instance attributes to new agent instance
         for key, val in self.__dict__.items():
             setattr(grown_agent, key, val)
 
-        # relabel network nodes
+        # replace agent node in networks
         relabel_key = {self: grown_agent}
         for network in [self.model.nws.family_network,
                         self.model.nws.known_people_network,
@@ -171,43 +172,16 @@ class BaseAgent:
             except (KeyError, nx.NetworkXError):
                 continue
 
-        # remove agent from all locations where it belongs to
-        loc_people_dict = {'home': 'occupants', 'job': 'employees',
-                           'school': 'students', 'university': 'students'}
-        for key, loc in self.loc_info.items():
-            if key == 'course_key':
-                if isinstance(self, (Baby, Child, Adolescent)):
-                    self.loc_info['school'].grouped_studs[loc]['students'].remove(self)
-                    self.loc_info['school'].grouped_studs[loc]['students'].add(grown_agent)
-                    if self in self.loc_info['school'].agents_in:
-                        self.loc_info['school'].agents_in.remove(self)
-                elif isinstance(self, YoungUniv):
-                    loc1 = loc[0]
-                    loc2 = loc[1]
-                    fac = self.loc_info['university'][loc1]
-                    fac.grouped_studs[loc2]['students'].remove(self)
-                    fac.grouped_studs[loc2]['students'].add(grown_agent)
-                    if self in fac.agents_in:
-                        fac.agents_in.remove(self)
-            else:
-                attr = loc_people_dict[key]
-                loc.info[attr].remove(self)
-                loc.info[attr].add(grown_agent)
-                try:
-                    loc.agents_in.remove(self)
-                    loc.agents_in.add(grown_agent)
-                except KeyError:
-                    continue
-
-        # remove old instance and add new one to city
+        # remove and replace agent from all locations where it belongs to
+        self.model.remove_from_locations(self, replace=True, grown_agent=grown_agent)
+        # remove old instance from cluster and add new one
         self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].remove(self)
         self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].append(grown_agent)
-        # remove agent from grid and schedule
+        # replace agent in grid
         self.model.grid._remove_agent(self.pos, self)
-        self.model.schedule.remove(self)
-        # add new_agent to grid and schedule
         self.model.grid.place_agent(grown_agent, self.pos)
-        self.model.schedule.add(grown_agent)
+        # replace agent in schedule
+        self.model.schedule.replace_agent(self, grown_agent)
 
         if ret_output:
             return grown_agent
@@ -272,15 +246,12 @@ class ListenerAgent(BaseAgent):
                 lang = self.model.nws.known_people_network[to_agent][self]['lang']
             else:
                 conv_params = self.model.get_conv_params([to_agent, self])
-                if conv_params['bilingual']:
+                if conv_params['multilingual']:
                     lang = conv_params['lang_group'][0]
                 else:
                     lang = conv_params['lang_group']
             words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs,
                                         num_days=num_days)
-            # for lang_key, lang_words in words:
-            #     words = np.intersect1d(self.model.cdf_data['s'][self.info['age']],
-            #                            lang_words, assume_unique=True)
             self.update_lang_arrays(words, speak=False, delta_s_factor=0.75)
 
         # TODO : implement 'listen to media' option
@@ -757,24 +728,24 @@ class Child(SchoolAgent):
 
 class Adolescent(IndepAgent, SchoolAgent):
 
-    age_low, age_high = 12, 18
+    age_low, age_high = 13, 18
 
     def __init__(self, *args, **kwargs):
         # TODO: add extra args specific to this class if needed
         super().__init__(*args, **kwargs)
 
-    def pick_random_friend(self, ix_agent):
-        # get current agent neighboring nodes ids
-        adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
-        # get agents ids and probs
-        ags_ids = np.nonzero(adj_mat)[0]
-        probs = adj_mat[ags_ids]
-        picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
-        return picked_agent
+    # def pick_random_friend(self, ix_agent):
+    #     # get current agent neighboring nodes ids
+    #     adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
+    #     # get agents ids and probs
+    #     ags_ids = np.nonzero(adj_mat)[0]
+    #     probs = adj_mat[ags_ids]
+    #     picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
+    #     return picked_agent
 
-    def speak_to_random_friend(self, ix_agent, num_days):
-        random_friend = self.pick_random_friend(ix_agent)
-        self.model.run_conversation(self, random_friend, num_days=num_days)
+    # def speak_to_random_friend(self, ix_agent, num_days):
+    #     random_friend = self.pick_random_friend(ix_agent)
+    #     self.model.run_conversation(self, random_friend, num_days=num_days)
 
     def speak_at_school(self, school, ix_agent, num_days):
         # talk to teacher and mates
@@ -789,7 +760,8 @@ class Adolescent(IndepAgent, SchoolAgent):
             mates = random.sample(mates, num_mates)
             self.model.run_conversation(self, mates, num_days=num_days)
         # talk to close friends
-        self.speak_to_random_friend(ix_agent, num_days)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days)
         # week-ends time are modeled in PARENTS stages
 
     def stage_1(self, ix_agent, num_days=7):
@@ -800,11 +772,11 @@ class Adolescent(IndepAgent, SchoolAgent):
         self.model.grid.move_agent(self, school.pos)
         # TODO : a part of speech from teacher to all course(driven from teacher stage method)
         school.agents_in.add(self)
-        self.speak_at_school(school, num_days)
+        self.speak_at_school(school, ix_agent, num_days)
 
     def stage_3(self, ix_agent, num_days=7):
         school = self.loc_info['school']
-        self.speak_at_school(school, num_days)
+        self.speak_at_school(school, ix_agent, num_days)
         school.agents_in.remove(self)
         if school.info['lang_policy'] == [0, 1]:
             self.study_vocab('L1', num_words=100)
@@ -820,9 +792,10 @@ class Adolescent(IndepAgent, SchoolAgent):
         self.stage_1(ix_agent, num_days=num_days)
         # go out with friends at least once
         num_out = random.randint(1, 5)
-        self.speak_to_random_friend(ix_agent, num_days=num_out)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days=num_out)
         if self.info['age'] == self.age_high:
-            self.evolve(Young)
+            self.evolve(Young) # TODO : Young or UnivYoung
 
 
 class Young(IndepAgent):
@@ -978,7 +951,8 @@ class Young(IndepAgent):
         pass
 
     def stage_4(self, ix_agent):
-        self.speak_to_random_friend(ix_agent, num_days=5)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days=5)
         if not self.info['married'] and self.loc_info['job']:
             self.look_for_partner()
         if self.info['age'] == self.age_high * self.model.steps_per_year:
@@ -1013,7 +987,8 @@ class Adult(Young): # from 30 to 65
         pass
 
     def stage_4(self, ix_agent, num_days=7):
-        self.speak_to_random_friend(ix_agent, num_days=5)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days=5)
         if not self.info['married'] and self.loc_info['job']:
             self.look_for_partner()
         if self.info['age'] == self.model.steps_per_year * self.age_high:
@@ -1037,6 +1012,9 @@ class Worker(Adult):
 
 class Teacher(Adult):
 
+    def evolve(self, new_class, ret_output=False):
+        BaseAgent.evolve()
+
     def stage_1(self, ix_agent, num_days=7):
         super().stage_1(ix_agent, num_days=num_days)
 
@@ -1047,7 +1025,9 @@ class Teacher(Adult):
         pass
 
     def stage_4(self, ix_agent):
+        # TODO : trigger teacher replacement after pension
         super().stage_4(ix_agent, num_days=7)
+
 
 
 class Pensioner(Adult): # from 65 to death

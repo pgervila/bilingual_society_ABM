@@ -20,6 +20,7 @@ reload(sys.modules['schedule'])
 from schedule import StagedActivationModif
 
 # IMPORT MODEL LIBRARIES
+from agent import Baby, Child, Adolescent, YoungUniv, Teacher
 import geomapping, networks, dataprocess
 reload(sys.modules['geomapping'])
 reload(sys.modules['networks'])
@@ -192,7 +193,7 @@ class LanguageModel(Model):
             * conv_params dict with following keys and values:
                 * lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
                 * mute_type: integer. Agent lang type that is unable to speak in conversation
-                * bilingual: boolean. True if conv is held in more than one language
+                * multilingual: boolean. True if conv is held in more than one language
                 * long: boolean. True if conv is long
                 * fav_langs: list of integers in [0, 1].
         """
@@ -236,8 +237,6 @@ class LanguageModel(Model):
                 lang_group = lang_init
 
             conv_params['lang_group'] = lang_group
-
-
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
@@ -380,6 +379,40 @@ class LanguageModel(Model):
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
+    @staticmethod
+    def remove_from_locations(agent, replace=False, grown_agent=None):
+        # remove agent from all locations where it belongs to
+        loc_people_dict = {'home': 'occupants', 'job': 'employees',
+                           'school': 'students', 'university': 'students'}
+        for key, loc in agent.loc_info.items():
+            if key == 'course_key':
+                if isinstance(agent, (Baby, Child, Adolescent)):
+                    agent.loc_info['school'].grouped_studs[loc]['students'].remove(agent)
+                    if replace:
+                        agent.loc_info['school'].grouped_studs[loc]['students'].add(grown_agent)
+                    if agent in agent.loc_info['school'].agents_in:
+                        agent.loc_info['school'].agents_in.remove(agent)
+                elif isinstance(agent, YoungUniv):
+                    loc1 = loc[0]
+                    loc2 = loc[1]
+                    fac = agent.loc_info['university'][loc1]
+                    fac.grouped_studs[loc2]['students'].remove(agent)
+                    if agent in fac.agents_in:
+                        fac.agents_in.remove(agent)
+                elif isinstance(agent, Teacher):
+                    agent.loc_info['job'].grouped_studs[loc]['teacher'] = None
+            else:
+                attr = loc_people_dict[key]
+                loc.info[attr].remove(agent)
+                if replace:
+                    loc.info[attr].add(grown_agent)
+                try:
+                    loc.agents_in.remove(agent)
+                    if replace:
+                        loc.agents_in.add(grown_agent)
+                except KeyError:
+                    continue
+
     def remove_after_death(self, agent):
         """ Removes agent object from all places where it belongs.
             It makes sure no references to agent object are left after removal,
@@ -394,16 +427,8 @@ class LanguageModel(Model):
                 network.remove_node(agent)
             except nx.NetworkXError:
                 continue
-        # remove agent from all locations where it might be
-        loc_people_dict = {'home': 'occupants', 'job': 'employees',
-                           'school': 'students', 'university': 'students'}
-        for key, loc in agent.loc_info.items():
-            attr = loc_people_dict[key]
-            loc.info[attr].remove(agent)
-            try:
-                loc.agents_in.remove(agent)
-            except KeyError:
-                continue
+        # remove agent from all locations where it might have been
+        self.remove_from_locations(agent)
         # remove agent from city
         self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].remove(agent)
         # remove agent from grid and schedule

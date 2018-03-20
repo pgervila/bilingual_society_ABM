@@ -5,7 +5,7 @@ from math import ceil
 import string
 from scipy.spatial.distance import pdist
 
-from agent import Teacher
+from agent import Young, Teacher
 
 
 class Home:
@@ -235,7 +235,7 @@ class School(EducationCenter):
         student.loc_info['school'] = self
 
     def exit_studs(self, studs):
-        # sent studs from last year to univ or job market
+        """ Method to send studs from last year to univ or job market """
         universities = [clust_info['university']
                         for clust_info in self.model.geo.clusters_info.values()
                         if 'university' in clust_info]
@@ -248,6 +248,7 @@ class School(EducationCenter):
                                      size=ceil(0.5 * len(studs)),
                                      replace=False)
         for st in univ_stds:
+            # TODO : avoid repetitions and omissions with agent 'evolve' method
             self.info['students'].remove(st)
             st.loc_info['school'] = None
             fac_key = random.choice(string.ascii_letters[:5])
@@ -258,7 +259,7 @@ class School(EducationCenter):
         job_stds = set(studs).difference(set(univ_stds))
         for st in job_stds:
             self.info['students'].remove(st)
-            # st.grow() # TODO : activate time evolving agents before calling this method
+            st.evolve(Young)
             st.loc_info['school'] = None
             del st.loc_info['course_key']
             st.look_for_job()
