@@ -359,7 +359,6 @@ class GeoMapper:
             for school in clust_info['schools']:
                 school.set_up_courses()
 
-
     def add_agents_to_grid_and_schedule(self, ags):
         """ Method to add a number of agents to grid, schedule and system networks
             Arguments:
@@ -375,4 +374,20 @@ class GeoMapper:
                 self.model.grid.place_agent(ag, ag.loc_info['home'].pos)
             else:
                 self.model.grid.place_agent(ag, (0, 0))
+
+    def update_agent_clust_info(self, agent, curr_clust, update_type='remove',
+                                new_clust=None, grown_agent=None):
+        """ Update agent reference in clusters info """
+
+        self.clusters_info[curr_clust]['agents'].remove(agent)
+        if update_type == 'replace':
+            if grown_agent:
+                self.clusters_info[curr_clust]['agents'].append(grown_agent)
+            else:
+                raise Exception('grown_agent must be specified for replace option')
+        elif update_type == 'switch': # need old cluster, new cluster
+            if new_clust:
+                self.clusters_info[new_clust]['agents'].append(agent)
+            else:
+                raise Exception('new cluster must be specified for switch option')
 

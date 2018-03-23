@@ -379,8 +379,11 @@ class LanguageModel(Model):
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
-    @staticmethod
-    def remove_from_locations(agent, replace=False, grown_agent=None):
+
+    def remove_from_locations(self, agent, replace=False, grown_agent=None):
+        """ Method to remove agent instance from locations in agent loc_info dict attribute
+            Replacement by grown_agent will depend on self type"""
+        # TODO : should it be a geomapping method ?
         # remove agent from all locations where it belongs to
         loc_people_dict = {'home': 'occupants', 'job': 'employees',
                            'school': 'students', 'university': 'students'}
@@ -388,7 +391,7 @@ class LanguageModel(Model):
             if key == 'course_key':
                 if isinstance(agent, (Baby, Child, Adolescent)):
                     agent.loc_info['school'].grouped_studs[loc]['students'].remove(agent)
-                    if replace:
+                    if replace and not isinstance(agent, Adolescent):
                         agent.loc_info['school'].grouped_studs[loc]['students'].add(grown_agent)
                     if agent in agent.loc_info['school'].agents_in:
                         agent.loc_info['school'].agents_in.remove(agent)
@@ -404,14 +407,23 @@ class LanguageModel(Model):
             else:
                 attr = loc_people_dict[key]
                 loc.info[attr].remove(agent)
-                if replace:
-                    loc.info[attr].add(grown_agent)
-                try:
-                    loc.agents_in.remove(agent)
+                if key == 'school':
+                    if replace and not isinstance(agent, Adolescent):
+                        loc.info[attr].add(grown_agent)
+                elif key == 'home':
                     if replace:
-                        loc.agents_in.add(grown_agent)
-                except KeyError:
-                    continue
+                        loc.info[attr].add(grown_agent)
+                    try:
+                        loc.agents_in.remove(agent)
+                    except KeyError:
+                        continue
+
+        # remove old instance from cluster (and replace with new one if requested
+        self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].remove(agent)
+        if replace:
+            self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].append(grown_agent)
+
+
 
     def remove_after_death(self, agent):
         """ Removes agent object from all places where it belongs.

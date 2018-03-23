@@ -1,5 +1,6 @@
 # IMPORT LIBS
 import random
+import string
 import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
@@ -21,7 +22,10 @@ class BaseAgent:
         self.model = model
         self.unique_id = unique_id
         self.info = {'age': age, 'language': language, 'sex': sex}
-        self.loc_info = {'home': home}
+        self.loc_info = {'home': None}
+        if home:
+            home.assign_to_agent(self)
+
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
 
         # define container for languages' tracking and statistics
@@ -172,16 +176,16 @@ class BaseAgent:
             except (KeyError, nx.NetworkXError):
                 continue
 
-        # remove and replace agent from all locations where it belongs to
-        self.model.remove_from_locations(self, replace=True, grown_agent=grown_agent)
-        # remove old instance from cluster and add new one
-        self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].remove(self)
-        self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].append(grown_agent)
         # replace agent in grid
         self.model.grid._remove_agent(self.pos, self)
         self.model.grid.place_agent(grown_agent, self.pos)
         # replace agent in schedule
         self.model.schedule.replace_agent(self, grown_agent)
+
+        # remove and replace agent from ALL locations where it belongs to
+        self.model.remove_from_locations(self, replace=True, grown_agent=grown_agent)
+        # TODO : after replacing in locations, some old locations need to be deleted depending on
+        # TODO : type of growth pairs
 
         if ret_output:
             return grown_agent
@@ -508,15 +512,15 @@ class SpeakerAgent(ListenerAgent):
 class SchoolAgent(SpeakerAgent):
     """ SpeakerAgent augmented with methods related to school activity """
 
-    def speak_at_school(self, school, course_key, num_days):
+    def speak_at_school(self, num_days):
         """ Method to talk with school mates and friends at school
             Args:
-                * school: school instance
-                * course_key: integer. Identifies course
                 * num_days: integer
         """
         # TODO : filter by correlation in language preference
 
+        school = self.loc_info['school']
+        course_key = self.loc_info['course_key']
         mates = school.grouped_studs[course_key]['students'].difference({self})
         if mates:
             num_mates = random.randint(1, len(mates))
@@ -566,6 +570,7 @@ class IndepAgent(SpeakerAgent):
         pass
         #self.model.grid.move_agent(self, school.pos)
 
+
     def pick_random_friend(self, ix_agent):
         """ Description needed """
         # get current agent neighboring nodes ids
@@ -607,6 +612,10 @@ class Baby(ListenerAgent):
         school = clust_info['schools'][idx_school]
         # register
         school.assign_stud(self)
+
+    def evolve(self, new_class, ret_output=False):
+        super().evolve(new_class, ret_output)
+
 
     def stage_1(self, num_days=10):
         # listen to close family at home
@@ -672,9 +681,13 @@ class Child(SchoolAgent):
 
     age_low, age_high = 2, 12
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, school=None, **kwargs):
         # TODO: add extra args specific to this class if needed
         super().__init__(*args, **kwargs)
+        if school:
+            school.assign_stud(self)
+        else:
+            self.loc_info['school'] = school
 
     def stage_1(self, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -702,7 +715,7 @@ class Child(SchoolAgent):
             self.model.run_conversation(teacher, school_parent, num_days=2)
         # talk with school mates
         # TODO : filter by correlation in language preference
-        self.speak_at_school(school, course_key, num_days)
+        self.speak_at_school(num_days)
         # week-ends time are modeled in PARENTS stages
 
     def stage_3(self, num_days=7):
@@ -730,25 +743,16 @@ class Adolescent(IndepAgent, SchoolAgent):
 
     age_low, age_high = 13, 18
 
-    def __init__(self, *args, **kwargs):
-        # TODO: add extra args specific to this class if needed
+    def __init__(self, *args, school=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if school:
+            school.assign_stud(self)
+        else:
+            self.loc_info['school'] = school
 
-    # def pick_random_friend(self, ix_agent):
-    #     # get current agent neighboring nodes ids
-    #     adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
-    #     # get agents ids and probs
-    #     ags_ids = np.nonzero(adj_mat)[0]
-    #     probs = adj_mat[ags_ids]
-    #     picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
-    #     return picked_agent
-
-    # def speak_to_random_friend(self, ix_agent, num_days):
-    #     random_friend = self.pick_random_friend(ix_agent)
-    #     self.model.run_conversation(self, random_friend, num_days=num_days)
-
-    def speak_at_school(self, school, ix_agent, num_days):
+    def speak_at_school(self, ix_agent, num_days=7):
         # talk to teacher and mates
+        school = self.loc_info['school']
         course_key = self.loc_info['course_key']
         # talk with teacher
         teacher = school.grouped_studs[course_key]['teacher']
@@ -764,6 +768,28 @@ class Adolescent(IndepAgent, SchoolAgent):
             self.speak_to_random_friend(ix_agent, num_days)
         # week-ends time are modeled in PARENTS stages
 
+    def evolve(self, new_class, ret_output=False, univ=None):
+        grown_agent = super().evolve(new_class, ret_output=True)
+        # new agent will not go to school in any case
+        del grown_agent.loc_info['school']
+        # find out growth type
+        if isinstance(grown_agent, YoungUniv):
+            if univ:
+                fac_key = random.choice(string.ascii_letters[:5])
+                fac = univ.faculties[fac_key]
+                fac.assign_stud(grown_agent)
+                # agent moves to new home if he has to change cluster to attend univ
+                if fac.info['clust'] != grown_agent.loc_info['home'].clust:
+                    grown_agent.move_to_new_home()
+            else:
+                raise Exception('university instance must be provided to grow into a YoungUniv')
+        elif isinstance(grown_agent, Young):
+            del grown_agent.loc_info['course_key']
+            grown_agent.info.update({'married': False, 'num_children': 0})
+            grown_agent.loc_info['job'] = None
+        if ret_output:
+            return grown_agent
+
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
@@ -772,11 +798,11 @@ class Adolescent(IndepAgent, SchoolAgent):
         self.model.grid.move_agent(self, school.pos)
         # TODO : a part of speech from teacher to all course(driven from teacher stage method)
         school.agents_in.add(self)
-        self.speak_at_school(school, ix_agent, num_days)
+        self.speak_at_school(ix_agent, num_days)
 
     def stage_3(self, ix_agent, num_days=7):
         school = self.loc_info['school']
-        self.speak_at_school(school, ix_agent, num_days)
+        self.speak_at_school(ix_agent, num_days)
         school.agents_in.remove(self)
         if school.info['lang_policy'] == [0, 1]:
             self.study_vocab('L1', num_words=100)
@@ -795,7 +821,7 @@ class Adolescent(IndepAgent, SchoolAgent):
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=num_out)
         if self.info['age'] == self.age_high:
-            self.evolve(Young) # TODO : Young or UnivYoung
+            self.evolve(Young) # TODO : Young or UnivYoung, must be driven from School for all studs simultaneously
 
 
 class Young(IndepAgent):
@@ -808,64 +834,6 @@ class Young(IndepAgent):
         self.info['num_children'] = num_children
         self.loc_info['job'] = job
 
-    def move_to_new_home(self, *ags, marriage=True):
-        """ Method to move self agent and other optional agents to a new home
-            Args:
-            * ags: optional. Other agents instances
-            * marriage: boolean. Specifies if moving is because of marriage or not. If not,
-                it is assumed moving is because of university reasons
-        """
-
-        job1 = self.loc_info['job']
-        home1 = self.loc_info['home']
-        clust1_ix = self.loc_info['home'].clust
-        free_homes_clust1 = [home for home in self.model.geo.clusters_info[clust1_ix]['homes']
-                             if not home.info['occupants']]
-        if ags:
-            if marriage:
-                job2 = ags.loc_info['job']
-                clust2_ix = ags.loc_info['home'].clust
-                if job2:
-                    job_dist_fun = lambda home: (pdist([job1.pos, home.pos]) +
-                                                 pdist([job2.pos, home.pos]))[0]
-                    if clust1_ix == clust2_ix :
-                        sorted_homes = sorted(free_homes_clust1, key=job_dist_fun )
-                        new_home = sorted_homes[0]
-                    else:
-                        # each agent lives and works in different clusters
-                        # move to town with more job offers
-                        num_jobs_1 = len(self.model.geo.clusters_info[clust1_ix]['jobs'])
-                        num_jobs_2 = len(ags.model.geo.clusters_info[clust1_ix]['jobs'])
-                        if num_jobs_1 >= num_jobs_2:
-                            sorted_homes = sorted(free_homes_clust1, key=job_dist_fun)
-                        else:
-                            free_homes_clust2 = [home for home
-                                                 in self.model.geo.clusters_info[clust2_ix]['homes']
-                                                 if not home.info['occupants']]
-                            sorted_homes = sorted(free_homes_clust2, key=job_dist_fun)
-                        new_home = sorted_homes[0]
-                else:
-                    job_dist_fun = lambda home: pdist([job1.pos, home.pos])[0]
-                    sorted_homes = sorted(free_homes_clust1, key=job_dist_fun)
-                    home_ix = random.randint(1, int(len(sorted_homes) / 2))
-                    new_home = sorted_homes[home_ix]
-            else:
-                # find place close to university
-                univ = self.loc_info['university']
-                clust_univ = univ.info['clust']
-                free_homes_univ_clust = [home for home in self.model.geo.clusters_info[clust_univ]['homes']
-                                         if not home.info['occupants']]
-                job_dist_fun = lambda home: pdist([univ.pos, home.pos])[0]
-                sorted_homes = sorted(free_homes_univ_clust, key=job_dist_fun)
-                new_home = sorted_homes[0]
-            new_home.assign_to_agent(self, ags)
-        else:
-            # assign empty home relatively close to current job
-            sorted_homes = sorted(free_homes_clust1, key=lambda home: pdist([job1.pos, home.pos])[0])
-            home_ix = random.randint(1, int(len(sorted_homes) / 2))
-            new_home = sorted_homes[home_ix]
-            new_home.assign_to_agent(self)
-
     def look_for_partner(self, avg_years=6, age_diff=10, thresh_comm_lang=0.3):
         """ Find partner every avg_years if agent is not married yet. Marrying agents
             must have a sufficiently high knowledge of common language
@@ -875,7 +843,6 @@ class Young(IndepAgent):
                  * age_diff: integer. Max difference in real years between partners to get married
                  * thresh_comm_lang: float. Minimum required knowledge of common lang
         """
-
         # first check luck ( once every 10 years on average )
         if random.random() < 1 / (avg_years * self.model.steps_per_year):
             # find suitable partner amongst known people
@@ -937,9 +904,58 @@ class Young(IndepAgent):
                 self.loc_info['job'] = job_c
                 self.evolve(Worker)
                 break
+        # TODO : move to new home if agent has to change cluster
 
     def switch_job(self, new_job):
             pass
+
+    def move_to_new_home(self, *ags, marriage=True):
+        """ Method to move self agent and other optional agents to a new home
+            Args:
+            * ags: optional. Other agents instances
+            * marriage: boolean. Specifies if moving is because of marriage or not. If not,
+                it is assumed moving is because of job reasons
+        """
+        # TODO : improve if-else
+        job1 = self.loc_info['job']
+        clust1_ix = self.loc_info['home'].clust
+        free_homes_clust1 = [home for home in self.model.geo.clusters_info[clust1_ix]['homes']
+                             if not home.info['occupants']]
+        if ags:
+            if marriage:
+                job2 = ags.loc_info['job']
+                clust2_ix = ags.loc_info['home'].clust
+                if job2:
+                    job_dist_fun = lambda home: (pdist([job1.pos, home.pos]) + pdist([job2.pos, home.pos]))[0]
+                    if clust1_ix == clust2_ix :
+                        sorted_homes = sorted(free_homes_clust1, key=job_dist_fun )
+                        new_home = sorted_homes[0]
+                    else:
+                        # each agent lives and works in different clusters
+                        # move to town with more job offers
+                        num_jobs_1 = len(self.model.geo.clusters_info[clust1_ix]['jobs'])
+                        num_jobs_2 = len(ags.model.geo.clusters_info[clust1_ix]['jobs'])
+                        if num_jobs_1 >= num_jobs_2:
+                            sorted_homes = sorted(free_homes_clust1, key=job_dist_fun)
+                        else:
+                            free_homes_clust2 = [home for home
+                                                 in self.model.geo.clusters_info[clust2_ix]['homes']
+                                                 if not home.info['occupants']]
+                            sorted_homes = sorted(free_homes_clust2, key=job_dist_fun)
+                        new_home = sorted_homes[0]
+                else:
+                    job_dist_fun = lambda home: pdist([job1.pos, home.pos])[0]
+                    sorted_homes = sorted(free_homes_clust1, key=job_dist_fun)
+                    home_ix = random.randint(1, int(len(sorted_homes) / 2))
+                    new_home = sorted_homes[home_ix]
+            new_home.assign_to_agent(self, ags)
+        else:
+            # assign empty home relatively close to current job
+            sorted_homes = sorted(free_homes_clust1, key=lambda home: pdist([job1.pos, home.pos])[0])
+            home_ix = random.randint(1, int(len(sorted_homes) / 2))
+            new_home = sorted_homes[home_ix]
+            new_home.assign_to_agent(self)
+
 
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -960,7 +976,33 @@ class Young(IndepAgent):
 
 
 class YoungUniv(IndepAgent, SchoolAgent):
-    pass
+    age_low, age_high = 18, 24
+
+    def __init__(self, *args, university=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.info['university'] = university
+
+    def move_to_new_home(self):
+        """
+            Method to move self agent and other optional agents to a new home close to university
+            Args:
+        """
+
+        # move close to university
+        univ = self.loc_info['university']
+        clust_univ = univ.info['clust']
+        # find either an empty home or a home occupied by YoungUniv in univ cluster
+        free_homes_univ_clust = [home for home in self.model.geo.clusters_info[clust_univ]['homes']
+                                 if not home.info['occupants'] or
+                                 all([isinstance(x, YoungUniv) for x in home.info['occupants']])]
+        univ_dist_fun = lambda home: pdist([univ.pos, home.pos])[0]
+        sorted_homes = sorted(free_homes_univ_clust, key=univ_dist_fun)
+        new_home = sorted_homes[0]
+
+        new_home.assign_to_agent(self)
+
+
+
 
 
 class Adult(Young): # from 30 to 65
@@ -982,6 +1024,7 @@ class Adult(Young): # from 30 to 65
 
     def stage_2(self, ix_agent):
         pass
+    # TODO : model lunch time with colleagues
 
     def stage_3(self, ix_agent):
         pass

@@ -108,7 +108,6 @@ class StagedActivationModif(StagedActivation):
     #
     #     return post_lang_labels.difference(init_lang_labels)
 
-
     def replace_agent(self, old_agent, new_agent):
         ix_in_schedule = self.model.schedule.agents.index(old_agent)
         self.model.schedule.remove(old_agent)

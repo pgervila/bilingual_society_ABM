@@ -5,7 +5,7 @@ from math import ceil
 import string
 from scipy.spatial.distance import pdist
 
-from agent import Young, Teacher
+from agent import Young, YoungUniv, Teacher
 
 
 class Home:
@@ -16,18 +16,29 @@ class Home:
         self.info = {'occupants': set()}
 
     def assign_to_agent(self, agents):
-        """ assign the current home instance to each agent
+        """ Assign the current home instance to each agent
             Args:
                 * agents: agent instance or list of agent instances
         """
-
+        # convert agents to iterable if only a single agent in input
         if not isinstance(agents, list):
             agents = [agents]
-
         for ag in agents:
+            # check if agent already has a home
+            if ag.loc_info['home']:
+                old_clust = ag.loc_info['home'].clust
+                ag.loc_info['home'].info['occupants'].remove(ag)
+                # change cluster info reference to agent if new home is in another cluster
+                if self.clust != old_clust:
+                    ag.model.geo.update_agent_clust_info(update_type='switch',
+                                                         old_clust=old_clust, new_clust=self.clust)
+            # assign new home
             ag.loc_info['home'] = self
             self.info['occupants'].add(ag)
             self.agents_in.add(ag)
+
+
+        # TODO : remove agents from old homes and clusters, add to new clusters
 
     def __repr__(self):
         return 'Home_{0.clust!r}_{0.pos!r}'.format(self)
@@ -239,7 +250,7 @@ class School(EducationCenter):
         universities = [clust_info['university']
                         for clust_info in self.model.geo.clusters_info.values()
                         if 'university' in clust_info]
-        # get closest univ
+        # get closest university from school location
         idx_univ = np.argmin([pdist([self.pos, univ.pos])
                               for univ in universities])
         univ = universities[idx_univ]
@@ -248,21 +259,11 @@ class School(EducationCenter):
                                      size=ceil(0.5 * len(studs)),
                                      replace=False)
         for st in univ_stds:
-            # TODO : avoid repetitions and omissions with agent 'evolve' method
-            self.info['students'].remove(st)
-            st.loc_info['school'] = None
-            fac_key = random.choice(string.ascii_letters[:5])
-            fac = univ.faculties[fac_key]
-            fac.assign_stud(st)
-
+            st.evolve(YoungUniv, univ=univ)
         # rest of last year students to job market
         job_stds = set(studs).difference(set(univ_stds))
         for st in job_stds:
-            self.info['students'].remove(st)
             st.evolve(Young)
-            st.loc_info['school'] = None
-            del st.loc_info['course_key']
-            st.look_for_job()
 
     def swap_teachers_courses(self):
         """ Every n years on average teachers are swapped between classes """
