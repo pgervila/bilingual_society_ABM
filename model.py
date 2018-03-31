@@ -30,7 +30,6 @@ from networks import NetworkBuilder
 from dataprocess import DataProcessor, DataViz
 
 
-
 class LanguageModel(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
@@ -379,11 +378,11 @@ class LanguageModel(Model):
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
-
     def remove_from_locations(self, agent, replace=False, grown_agent=None):
         """ Method to remove agent instance from locations in agent loc_info dict attribute
             Replacement by grown_agent will depend on self type"""
         # TODO : should it be a geomapping method ?
+        # TODO: maybe more orderly/elegant to implement remove/replace method for each city_object
         # remove agent from all locations where it belongs to
         loc_people_dict = {'home': 'occupants', 'job': 'employees',
                            'school': 'students', 'university': 'students'}
@@ -396,34 +395,48 @@ class LanguageModel(Model):
                     if agent in agent.loc_info['school'].agents_in:
                         agent.loc_info['school'].agents_in.remove(agent)
                 elif isinstance(agent, YoungUniv):
-                    loc1 = loc[0]
-                    loc2 = loc[1]
-                    fac = agent.loc_info['university'][loc1]
-                    fac.grouped_studs[loc2]['students'].remove(agent)
+                    univ, fac_key = agent.loc_info['university']
+                    fac = univ.faculties[fac_key]
+                    fac.grouped_studs[loc]['students'].remove(agent)
                     if agent in fac.agents_in:
                         fac.agents_in.remove(agent)
                 elif isinstance(agent, Teacher):
-                    agent.loc_info['job'].grouped_studs[loc]['teacher'] = None
+                    if isinstance(agent.loc_info['job'], list):
+                        univ, fac_key = agent.loc_info['job']
+                        fac = univ.faculties[fac_key]
+                        fac.grouped_studs[loc]['teacher'] = None
+                    else:
+                        agent.loc_info['job'].grouped_studs[loc]['teacher'] = None
+            elif key == 'university':
+                attr = loc_people_dict[key]
+                univ, fac_key = loc
+                # remove from uni and fac
+                univ.info[attr].remove(agent)
+                univ.faculties[fac_key].info[attr].remove(agent)
             else:
                 attr = loc_people_dict[key]
-                loc.info[attr].remove(agent)
-                if key == 'school':
-                    if replace and not isinstance(agent, Adolescent):
-                        loc.info[attr].add(grown_agent)
-                elif key == 'home':
-                    if replace:
-                        loc.info[attr].add(grown_agent)
-                    try:
-                        loc.agents_in.remove(agent)
-                    except KeyError:
-                        continue
+                if key == 'job' and isinstance(loc, list):
+                    loc[0].info[attr].remove(agent)
+                # TODO : job replace for Young to Adult
+                else:
+                    loc.info[attr].remove(agent)
+                    if key == 'school':
+                        if replace and not isinstance(agent, Adolescent):
+                            loc.info[attr].add(grown_agent)
+                    elif key == 'home':
+                        if replace:
+                            loc.info[attr].add(grown_agent)
+                        try:
+                            loc.agents_in.remove(agent)
+                        except KeyError:
+                            continue
 
-        # remove old instance from cluster (and replace with new one if requested
-        self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].remove(agent)
+        # remove old instance from cluster (and replace with new one if requested)
         if replace:
-            self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].append(grown_agent)
-
-
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust,
+                                             update_type='replace', grown_agent=grown_agent)
+        else:
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust)
 
     def remove_after_death(self, agent):
         """ Removes agent object from all places where it belongs.
@@ -441,8 +454,6 @@ class LanguageModel(Model):
                 continue
         # remove agent from all locations where it might have been
         self.remove_from_locations(agent)
-        # remove agent from city
-        self.geo.clusters_info[agent.loc_info['home'].clust]['agents'].remove(agent)
         # remove agent from grid and schedule
         self.grid._remove_agent(agent.pos, agent)
         self.schedule.remove(agent)

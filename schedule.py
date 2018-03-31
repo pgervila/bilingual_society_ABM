@@ -52,8 +52,6 @@ class StagedActivationModif(StagedActivation):
                                            nodelist=self.agents).toarray()
         self.model.nws.adj_mat_friend_nw = np.nan_to_num(Friend_Graph / Friend_Graph.sum(axis=1, keepdims=True))
 
-        #FG = self.model.nws.adj_mat_friend_nw.copy()
-
         for stage in self.stage_list:
             for ix_ag, ag in enumerate(self.agents):
                 if isinstance(ag, IndepAgent):
@@ -63,20 +61,6 @@ class StagedActivationModif(StagedActivation):
             if self.shuffle_between_stages:
                 random.shuffle(self.agents)
             self.time += self.stage_time
-
-            # print(self.time)
-            # if not np.array_equal(FG, self.model.nws.adj_mat_friend_nw):
-            #     print('Problem with adjacency MATRIX !!!!!!!!!')
-            #     print(np.argwhere(FG != self.model.nws.adj_mat_friend_nw))
-            #     mod_ags = np.nonzero(np.invert((FG == self.model.nws.adj_mat_friend_nw).all(axis=1)))[0]
-            #     for myag in mod_ags:
-            #         # print(self.agents[myag].info)
-            #         print(self.agents[myag])
-            #         print(self.model.nws.friendship_network[self.agents[myag]])
-            #     print('ags lists are same', self.agents == ags_sched)
-            # print([ag for ag in self.agents if not self.model.nws.friendship_network[ag]])
-            # print('******')
-            # print(FG[myag][:10], self.model.nws.adj_mat_friend_nw[myag][:10])
 
         for ag in self.agents[:]:
             for lang in ['L1', 'L12', 'L21', 'L2']:

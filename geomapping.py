@@ -187,7 +187,8 @@ class GeoMapper:
             num_places_job_c = np.clip(num_places_job_c, min_places, max_places)
 
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
-                self.clusters_info[clust_idx]['jobs'].append(Job(clust_idx, (x, y), num_places, lang_policy=[0, 1]))
+                self.clusters_info[clust_idx]['jobs'].append(Job(clust_idx, (x, y),
+                                                                 num_places, lang_policy=[0, 1, 2]))
 
     def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
@@ -385,8 +386,8 @@ class GeoMapper:
                 self.clusters_info[curr_clust]['agents'].append(grown_agent)
             else:
                 raise Exception('grown_agent must be specified for replace option')
-        elif update_type == 'switch': # need old cluster, new cluster
-            if new_clust:
+        elif update_type == 'switch': # need curr cluster, new cluster
+            if new_clust is not None:
                 self.clusters_info[new_clust]['agents'].append(agent)
             else:
                 raise Exception('new cluster must be specified for switch option')

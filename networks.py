@@ -95,7 +95,11 @@ class NetworkBuilder:
         friends_per_agent = np.random.randint(1, 5, size=self.model.num_people)
         for ag, num_friends in zip(self.model.schedule.agents, friends_per_agent):
             if isinstance(ag, Adult) and len(self.friendship_network[ag]) < num_friends:
-                info_occupation = ag.loc_info['job'].info
+                if ag.loc_info['job']:
+                    info_occupation = ag.loc_info['job'].info
+
+                else:
+                    info_occupation = random.choice(self.model.geo.clusters_info['jobs'])
                 colleagues = 'employees'
             elif isinstance(ag, Child) and len(self.friendship_network[ag]) < num_friends:
                 info_occupation = ag.loc_info['school'].grouped_studs[ag.loc_info['course_key']]

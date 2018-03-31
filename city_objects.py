@@ -5,7 +5,7 @@ from math import ceil
 import string
 from scipy.spatial.distance import pdist
 
-from agent import Young, YoungUniv, Teacher
+from agent import Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
 
 
 class Home:
@@ -26,12 +26,12 @@ class Home:
         for ag in agents:
             # check if agent already has a home
             if ag.loc_info['home']:
-                old_clust = ag.loc_info['home'].clust
+                curr_clust = ag.loc_info['home'].clust
                 ag.loc_info['home'].info['occupants'].remove(ag)
                 # change cluster info reference to agent if new home is in another cluster
-                if self.clust != old_clust:
-                    ag.model.geo.update_agent_clust_info(update_type='switch',
-                                                         old_clust=old_clust, new_clust=self.clust)
+                if self.clust != curr_clust:
+                    ag.model.geo.update_agent_clust_info(ag, curr_clust=curr_clust,
+                                                         update_type='switch', new_clust=self.clust)
             # assign new home
             ag.loc_info['home'] = self
             self.info['occupants'].add(ag)
@@ -63,10 +63,11 @@ class EducationCenter:
         if not self.grouped_studs:
             list_studs = list(self.info['students'])
             if list_studs:
-                studs_sorted = sorted(list_studs, key=lambda x: int(x.info['age'] / 36))
+                studs_sorted = sorted(list_studs, key=lambda x: int(x.info['age'] / self.model.steps_per_year))
                 self.grouped_studs = dict([(c_key, {'students': set(gr_studs)})
                                            for c_key, gr_studs
-                                           in groupby(studs_sorted, lambda x: int(x.info['age'] / 36))
+                                           in groupby(studs_sorted,
+                                                      lambda x: int(x.info['age'] / self.model.steps_per_year))
                                            if c_key <= self.info['age_range'][1]])
                 # assign course key to students
                 for c_key, ags in self.grouped_studs.items():
@@ -93,7 +94,7 @@ class EducationCenter:
             clust_cands = [ag for ag in self.model.geo.clusters_info[ix]['agents']
                            if ag.info['language'] in self.info['lang_policy'] and
                            ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
-                           not isinstance(ag.loc_info['job'], (School, University))]
+                           not isinstance(ag, (Teacher, TeacherUniv))]
             random.shuffle(clust_cands)
             hired_teachers.extend(clust_cands)
             if len(hired_teachers) >= num_needed_teachers:
@@ -124,7 +125,7 @@ class EducationCenter:
         self.hire_teachers(self.grouped_studs.keys())
 
     def assign_stud(self, student):
-        course_key = int(student.info['age'] / 36)
+        course_key = int(student.info['age'] / self.model.steps_per_year)
         if course_key in self.grouped_studs:
             # if course already exists
             self.grouped_studs[course_key]['students'].add(student)
@@ -135,14 +136,19 @@ class EducationCenter:
         student.loc_info['course_key'] = course_key
 
     def update_courses(self, max_course_dist=3):
-        """ Method to update courses at the end of the year. It moves all students forward to
+        """
+            Method to update courses at the end of the year. It moves all students forward to
             next course and checks each new course has a corresponding teacher. It sends a percentage of
             last year students to university, rest to job market
-            * max_course_dist : integer. Maximum distance in years between courses to allow
-                teacher exchange"""
+            Args:
+                * max_course_dist : integer. Maximum distance in years between courses to allow
+                    teacher exchange
+        """
+
         if not self.grouped_studs:
             self.group_students_per_year()
         else:
+            # define empty set to update school groups
             updated_groups = {}
             # define set with keys for next year courses with students but without teacher
             missing_teachers_keys = set()
@@ -150,17 +156,25 @@ class EducationCenter:
                 # If course_id is smaller than maximum allowed age in school, rearrange
                 if c_id < self.info['age_range'][1]:
                     # move students forward to next class and delete students from current class
-                    updated_groups[c_id + 1] = {'students': course['students']} # TODO make set instead of list ??
-                    self.grouped_studs[c_id]['students'] = None
+                    updated_groups[c_id + 1] = {'students': course['students']}
+                    course['students'] = None
                     # check if c_id + 1 was already part of last year courses
                     if c_id + 1 not in self.grouped_studs:
                         # if it's a new course, add course id to missing teacher keys
                         missing_teachers_keys.add(c_id + 1)
+                    # check if teacher has to retire
+                    elif course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
+                        course['teacher'].evolve(Pensioner)
+                        missing_teachers_keys.add(c_id)
                     else:
                         # keep teacher
                         updated_groups[c_id + 1].update({'teacher': self.grouped_studs[c_id + 1]['teacher']})
                 else:
                     self.exit_studs(course['students'])
+                    # check if teacher has to retire
+                    if course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
+                        course['teacher'].evolve(Pensioner)
+                        missing_teachers_keys.add(c_id)
 
             # define set of teachers that are left with an empty class
             jobless_teachers_keys = {key for key in self.grouped_studs if key not in updated_groups}
@@ -259,7 +273,7 @@ class School(EducationCenter):
                                      size=ceil(0.5 * len(studs)),
                                      replace=False)
         for st in univ_stds:
-            st.evolve(YoungUniv, univ=univ)
+            st.evolve(YoungUniv, university=univ)
         # rest of last year students to job market
         job_stds = set(studs).difference(set(univ_stds))
         for st in job_stds:
@@ -283,7 +297,7 @@ class School(EducationCenter):
 
 class Faculty(EducationCenter):
 
-    def __init__(self, fac, univ, model):
+    def __init__(self, fac_type, univ, model):
         self.model = model
         self.univ = univ
         self.pos = self.univ.pos
@@ -291,7 +305,7 @@ class Faculty(EducationCenter):
         self.info = {'students': set(), 'employees': set(),
                      'lang_policy': univ.info['lang_policy'],
                      'age_range': univ.info['age_range'],
-                     'min_age_teacher': univ.info['min_age_teacher'], 'type': fac,
+                     'min_age_teacher': univ.info['min_age_teacher'], 'type': fac_type,
                      'clust': univ.info['clust']}
         #self.grouped_studs = {k: defaultdict(set) for k in range(*self.info['age_range'])}
         self.grouped_studs = dict()
@@ -307,7 +321,7 @@ class Faculty(EducationCenter):
         # TODO : sort employees by lang competence from lowest to highest
         for (k, t) in zip(courses_keys, hired_teachers):
             # turn hired agent into Teacher
-            new_t = t.evolve(Teacher, ret_output=True)
+            new_t = t.evolve(TeacherUniv, ret_output=True)
             self.grouped_studs[k]['teacher'] = new_t
             new_t.loc_info['job'] = [self.univ, self.info['type']]
             new_t.loc_info['course_key'] = k
@@ -315,23 +329,17 @@ class Faculty(EducationCenter):
             self.univ.info['employees'].add(new_t)
 
     def exit_studs(self, studs):
-        for st in studs:
-            self.info['students'].remove(st)
-            self.univ.info['students'].remove(st)
-            st.loc_info['university'] = None
-            del st.loc_info['course_key']
-            st.look_for_job()
-            # TODO : activate time evolving agents before calling this method
-            #st.grow()
+        for st in list(studs):
+            st.evolve(Young)
 
     def assign_stud(self, student):
         super().assign_stud(student)
         self.univ.info['students'].add(student)
         student.loc_info['university'] = [self.univ, self.info['type']]
-        student.loc_info['course_key'] = int(student.info['age'] / 36)
+        student.loc_info['course_key'] = int(student.info['age'] / self.model.steps_per_year)
 
     def __repr__(self):
-        return 'Faculty_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
+        return 'Faculty_{0[clust]!r}_{1.pos!r}_{0[type]!r}'.format(self.info, self)
 
 
 class University:
@@ -376,9 +384,10 @@ class Job:
         pass
 
     def hire_employee(self, agent):
-        self.num_places -= 1
-        agent.loc_info['job'] = self
-        self.info['employees'].add(agent)
+        if agent.info['language'] in self.info['lang_policy']:
+            self.num_places -= 1
+            agent.loc_info['job'] = self
+            self.info['employees'].add(agent)
 
     # TODO : update workers by department and send them to retirement when age reached
 
