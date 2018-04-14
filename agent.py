@@ -188,7 +188,7 @@ class BaseAgent:
         if ret_output:
             return grown_agent
 
-    def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
+    def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01, ret_out=False):
         """ Method to randomly determine agent death or survival at each step
             The fitted function provides the death likelihood for a given rounded age
             In order to get the death-probability per step we divide
@@ -201,6 +201,8 @@ class BaseAgent:
         """
         if random.random() < a * (np.exp(b * self.info['age']) + c) / self.model.steps_per_year:
             self.model.remove_after_death(self)
+            if ret_out:
+                return True
 
     def get_family_relative(self, fam_link):
         if fam_link not in ['mother', 'father', 'consort']:
@@ -527,7 +529,9 @@ class SchoolAgent(SpeakerAgent):
 
         school = self.loc_info['school']
         course_key = self.loc_info['course_key']
-        mates = school.grouped_studs[course_key]['students'].difference({self})
+        speak_ags_in_course = set([ag for ag in school.grouped_studs[course_key]['students']
+                               if isinstance(ag, SchoolAgent)])
+        mates = speak_ags_in_course.difference({self})
         if mates:
             num_mates = random.randint(1, len(mates))
             mates = random.sample(mates, num_mates)
@@ -597,17 +601,23 @@ class IndepAgent(SpeakerAgent):
 
 class Baby(ListenerAgent):
 
-    """ Agent from 0 to 2 years old.
+    """
+        Agent from 0 to 2 years old.
         It must be initialized only from 'reproduce' method in Young and Adult agent classes
     """
 
     age_low, age_high = 0, 2
 
-    def __init__(self, father, mother, lang_with_father, lang_with_mother, *args, **kwargs):
+    def __init__(self, father, mother, lang_with_father, lang_with_mother, *args, school=None, **kwargs):
 
         super().__init__(*args, **kwargs)
 
         self.model.nws.set_family_links(self, father, mother, lang_with_father, lang_with_mother)
+
+        if school:
+            school.assign_stud(self)
+        else:
+            self.loc_info['school'] = school
 
     def register_to_school(self):
         # find closest school in cluster
@@ -618,10 +628,6 @@ class Baby(ListenerAgent):
         # register
         school.assign_stud(self)
 
-    def evolve(self, new_class, ret_output=False):
-        super().evolve(new_class, ret_output)
-
-
     def stage_1(self, num_days=10):
         # listen to close family at home
         # all activities are DRIVEN by current agent
@@ -630,7 +636,7 @@ class Baby(ListenerAgent):
                            if isinstance(ag, SpeakerAgent)]
             for ag in ags_at_home:
                 self.listen(to_agent=ag, min_age_interlocs=self.info['age'], num_days=num_days)
-            if 'school' not in self.loc_info:
+            if 'school' not in self.loc_info or not self.loc_info['school']:
                 self.register_to_school()
 
     def stage_2(self, num_days=7):
@@ -860,6 +866,7 @@ class Young(IndepAgent):
                     if abs(ag.info['language'] - self.info['language']) <= 1:
                         # check both agents have sufficiently high level in common language
                         common_lang = link_description['lang']
+                        common_lang = 'L1' if common_lang == 0 else 'L2'
                         pct_1 = self.lang_stats[common_lang]['pct'][self.info['age']]
                         pct_2 = ag.lang_stats[common_lang]['pct'][ag.info['age']]
                         if pct_1 > thresh_comm_lang and pct_2 > thresh_comm_lang:
@@ -890,13 +897,14 @@ class Young(IndepAgent):
             # Determine baby's sex
             sex = 'M' if random.random() > 0.5 else 'F'
             father, mother = (self, consort) if self.info['sex'] == 'M' else (consort, self)
-            # Make baby instance
+            # Create baby instance
             baby = Baby(father, mother, lang_with_father, lang_with_mother,
                         self.model, id_baby, newborn_lang, sex,
                         home=self.loc_info['home'])
-            # Add agent to model
+            # Add agent to grid, schedule, network and clusters info
             self.model.geo.add_agents_to_grid_and_schedule(baby)
             self.model.nws.add_ags_to_networks(baby)
+            self.model.geo.clusters_info[self.loc_info['home'].clust]['agents'].append(baby)
             # Update num of children for both self and consort
             self.info['num_children'] += 1
             consort.info['num_children'] += 1
@@ -1025,6 +1033,18 @@ class YoungUniv(IndepAgent, SchoolAgent):
 
         new_home.assign_to_agent(self)
 
+    def stage_1(self, ix_agent, num_days=7):
+        SpeakerAgent.stage_1(self, num_days=num_days)
+
+    def stage_2(self, ix_agent):
+        pass
+
+    def stage_3(self, ix_agent):
+        pass
+
+    def stage_4(self, ix_agent):
+        pass
+
 
 class Adult(Young): # from 30 to 65
 
@@ -1095,8 +1115,9 @@ class Teacher(Adult):
 
     def random_death(self):
         school, course_key = self.loc_info['job'], self.loc_info['course_key']
-        super().random_death()
-        school.hire_teachers([course_key])
+        outcome = super().random_death(ret_out=True)
+        if outcome:
+            school.hire_teachers([course_key])
 
     def stage_1(self, ix_agent, num_days=7):
         super().stage_1(ix_agent, num_days=num_days)

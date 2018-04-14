@@ -162,13 +162,13 @@ class EducationCenter:
                     if c_id + 1 not in self.grouped_studs:
                         # if it's a new course, add course id to missing teacher keys
                         missing_teachers_keys.add(c_id + 1)
-                    # check if teacher has to retire
-                    elif course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
-                        course['teacher'].evolve(Pensioner)
-                        missing_teachers_keys.add(c_id)
                     else:
                         # keep teacher
                         updated_groups[c_id + 1].update({'teacher': self.grouped_studs[c_id + 1]['teacher']})
+                    # check if teacher has to retire
+                    if course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
+                        course['teacher'].evolve(Pensioner)
+                        missing_teachers_keys.add(c_id)
                 else:
                     self.exit_studs(course['students'])
                     # check if teacher has to retire
@@ -388,6 +388,7 @@ class Job:
             self.num_places -= 1
             agent.loc_info['job'] = self
             self.info['employees'].add(agent)
+            # TODO : check if home update needed for hired employee and their family ( school, consort job)
 
     # TODO : update workers by department and send them to retirement when age reached
 

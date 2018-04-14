@@ -33,7 +33,7 @@ def test_group_students_per_year(model):
 def test_school_set_up_and_update(model):
     i = np.random.randint(0, 3)
     school = model.geo.clusters_info[i]['schools'][0]
-    #school.update_courses()
+    # school.update_courses()
     # check that there are students and teacher for each existing course in school
     for (k, ags) in school.grouped_studs.items():
         assert ags['students']
@@ -44,7 +44,17 @@ def test_school_set_up_and_update(model):
             st.info['age'] += 36
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
+        s1_old = set(school.info['employees'])
+        s2_old = set([course['teacher'] 
+                        for ck, course in school.grouped_studs.items() 
+                        if 'teacher' in course])
+        assert s1_old == s2_old
         school.update_courses()
+        set_employees = set(school.info['employees'])
+        set_teachers = set([course['teacher'] 
+                        for ck, course in school.grouped_studs.items() 
+                        if 'teacher' in course])
+        assert set_employees == set_teachers
     studs = school.grouped_studs[18]['students']
     for st in school.info['students']:
         st.info['age'] += 36
@@ -108,7 +118,7 @@ def test_univ_set_up_and_update(model):
         assert 'course_key' not in stud.loc_info
 
 def test_hire_teachers(model):
-    i = np.random.randint(0,3)
+    i = np.random.randint(0, 3)
     school = model.geo.clusters_info[i]['schools'][0]
     rand_courses = np.random.choice(list(school.grouped_studs), 
                                     size=2, replace=False)
@@ -119,6 +129,12 @@ def test_hire_teachers(model):
         t = school.grouped_studs[rand_course]['teacher']
         assert t.loc_info['job'] == school
         assert t.loc_info['course_key'] == rand_course
+    
+    set_employees = set(school.info['employees'])
+    set_teachers = set([course['teacher'] 
+                        for ck, course in school.grouped_studs.items() 
+                        if 'teacher' in course])
+    assert set_employees == set_teachers
     
 def test_teachers_course_swap(model):
     for i in range(model.num_clusters):

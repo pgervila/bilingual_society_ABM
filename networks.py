@@ -97,7 +97,6 @@ class NetworkBuilder:
             if isinstance(ag, Adult) and len(self.friendship_network[ag]) < num_friends:
                 if ag.loc_info['job']:
                     info_occupation = ag.loc_info['job'].info
-
                 else:
                     info_occupation = random.choice(self.model.geo.clusters_info['jobs'])
                 colleagues = 'employees'

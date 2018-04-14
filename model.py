@@ -359,8 +359,9 @@ class LanguageModel(Model):
                 * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: list of integers
         """
         # language between consorts
+
         consorts_lang_params = self.get_conv_params([family[0], family[1]])
-        lang_consorts = consorts_lang_params['lang_group']
+        lang_consorts = consorts_lang_params['lang_group'][0]
 
         # language of children with parents
         lang_with_father = consorts_lang_params['fav_langs'][0]
@@ -374,7 +375,7 @@ class LanguageModel(Model):
             lang_siblings = 1
         else:
             siblings_lang_params = self.get_conv_params([family[2], family[3]])
-            lang_siblings = siblings_lang_params['lang_group']
+            lang_siblings = siblings_lang_params['lang_group'][0]
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
