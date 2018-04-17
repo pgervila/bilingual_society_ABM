@@ -84,30 +84,6 @@ class LanguageModel(Model):
         # define dataviz
         self.data_viz = DataViz(self)
 
-    # @staticmethod
-    # def define_lang_interaction(ag1, ag2, ret_pcts=False):
-    #     """ Method to find out lang of interaction between two given agents """
-    #
-    #     agents_langs = set(ag1.info['language'], ag2.info['language'])
-    #
-    #     if agents_langs in [{0}, {0, 1}]:
-    #         lang = 0
-    #     elif agents_langs in [{1, 2}, {2}]:
-    #         lang = 1
-    #     elif agents_langs == {1}:
-    #         # compute lang knowledge for each agent
-    #         pcts_ag1 = ag1.get_langs_pcts()
-    #         pcts_ag2 = ag2.get_langs_pcts()
-    #         # Find weakest combination lang-agent, pick other lang as common one
-    #         idx_weakest = np.argmin(pcts_ag1 + pcts_ag2)
-    #         if idx_weakest in [0, 2]:
-    #             lang = 1
-    #         else:
-    #             lang = 0
-    #     if ret_pcts:
-    #         return lang, np.array(pcts_ag1 + pcts_ag2)
-    #     else:
-    #         return lang
 
     @staticmethod
     def get_newborn_lang(parent1, parent2):
@@ -404,10 +380,12 @@ class LanguageModel(Model):
                 elif isinstance(agent, Teacher):
                     if isinstance(agent.loc_info['job'], list):
                         univ, fac_key = agent.loc_info['job']
-                        fac = univ.faculties[fac_key]
-                        fac.grouped_studs[loc]['teacher'] = None
+                        if loc:
+                            fac = univ.faculties[fac_key]
+                            fac.grouped_studs[loc]['teacher'] = None
                     else:
-                        agent.loc_info['job'].grouped_studs[loc]['teacher'] = None
+                        if loc:
+                            agent.loc_info['job'].grouped_studs[loc]['teacher'] = None
             elif key == 'university':
                 attr = loc_people_dict[key]
                 univ, fac_key = loc

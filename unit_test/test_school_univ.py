@@ -44,23 +44,21 @@ def test_school_set_up_and_update(model):
             st.info['age'] += 36
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
-        s1_old = set(school.info['employees'])
-        s2_old = set([course['teacher'] 
-                        for ck, course in school.grouped_studs.items() 
-                        if 'teacher' in course])
-        assert s1_old == s2_old
+#         s1_old = set(school.info['employees'])
+#         s2_old = set([course['teacher'] 
+#                       for ck, course in school.grouped_studs.items() 
+#                       if 'teacher' in course])
+#         assert s1_old == s2_old
         school.update_courses()
-        set_employees = set(school.info['employees'])
-        set_teachers = set([course['teacher'] 
-                        for ck, course in school.grouped_studs.items() 
-                        if 'teacher' in course])
-        assert set_employees == set_teachers
     studs = school.grouped_studs[18]['students']
     for st in school.info['students']:
         st.info['age'] += 36
     school.update_courses()
     i_max = np.argmax(model.geo.cluster_sizes)
     univ = model.geo.clusters_info[i_max]['university']
+    for (k, ags) in school.grouped_studs.items():
+        assert ags['students']
+        assert ags['teacher']
     # check some students are correctly enrolled in univ
     # check all working links with school are erased after completing education
     for stud in studs:
@@ -70,6 +68,15 @@ def test_school_set_up_and_update(model):
             assert stud.loc_info['university'][0] == univ
         else:
             assert 'course_key' not in stud.loc_info
+    
+    for _ in range(5):
+        for st in school.info['students']:
+            st.info['age'] += 36
+        school.update_courses()
+        for (k, ags) in school.grouped_studs.items():
+            assert ags['students']
+            assert ags['teacher']
+            assert ags['teacher'].loc_info['course_key'] == k
 
             
 def test_univ_set_up_and_update(model):
@@ -130,12 +137,6 @@ def test_hire_teachers(model):
         assert t.loc_info['job'] == school
         assert t.loc_info['course_key'] == rand_course
     
-    set_employees = set(school.info['employees'])
-    set_teachers = set([course['teacher'] 
-                        for ck, course in school.grouped_studs.items() 
-                        if 'teacher' in course])
-    assert set_employees == set_teachers
-    
 def test_teachers_course_swap(model):
     for i in range(model.num_clusters):
         school = model.geo.clusters_info[i]['schools'][0]
@@ -156,6 +157,6 @@ def test_assign_new_stud_to_course(model):
     new_stud_course = int(new_student.info['age'] / model.steps_per_year)
     assert new_student in school.grouped_studs[new_stud_course]['students']
     assert new_student.loc_info['course_key'] == new_stud_course
-    
-    
-    
+
+def test_dead_teacher(model):
+    pass

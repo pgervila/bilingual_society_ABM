@@ -830,6 +830,7 @@ class Adolescent(IndepAgent, SchoolAgent):
         # go out with friends at least once
         num_out = random.randint(1, 5)
         if self.model.nws.friendship_network[self]:
+            # TODO : add groups, more than one friend
             self.speak_to_random_friend(ix_agent, num_days=num_out)
 
 
@@ -912,8 +913,8 @@ class Young(IndepAgent):
     def look_for_job(self):
         # TODO : extend search to all clusters, but to a limited number per step
         # loop through shuffled job centers list until a job is found
-        np.random.shuffle(self.model.clusters_info[self.loc_info['home'].clust]['jobs'])
-        for job_c in self.model.clusters_info[self.loc_info['home'].clust]['jobs']:
+        np.random.shuffle(self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs'])
+        for job_c in self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs']:
             if job_c.num_places and self.info['language'] in job_c.info['lang_policy']:
                 job_c.num_places -= 1
                 job_c.hire_employee(self)
@@ -931,13 +932,14 @@ class Young(IndepAgent):
             * marriage: boolean. Specifies if moving is because of marriage or not. If not,
                 it is assumed moving is because of job reasons
         """
-        # TODO : improve if-else
+        # TODO : improve if-else, implement no marriage multiple agents case
         job1 = self.loc_info['job']
         clust1_ix = self.loc_info['home'].clust
         free_homes_clust1 = [home for home in self.model.geo.clusters_info[clust1_ix]['homes']
                              if not home.info['occupants']]
         if ags:
             if marriage:
+                ags = ags[0]
                 job2 = ags.loc_info['job']
                 clust2_ix = ags.loc_info['home'].clust
                 if job2:
@@ -963,7 +965,7 @@ class Young(IndepAgent):
                     sorted_homes = sorted(free_homes_clust1, key=job_dist_fun)
                     home_ix = random.randint(1, int(len(sorted_homes) / 2))
                     new_home = sorted_homes[home_ix]
-            new_home.assign_to_agent(self, ags)
+            new_home.assign_to_agent([self, ags])
         else:
             # assign empty home relatively close to current job
             sorted_homes = sorted(free_homes_clust1, key=lambda home: pdist([job1.pos, home.pos])[0])
@@ -976,7 +978,8 @@ class Young(IndepAgent):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        pass
+        if not self.loc_info['job']:
+            self.look_for_job()
 
     def stage_3(self, ix_agent):
         pass
@@ -1137,8 +1140,9 @@ class TeacherUniv(Teacher):
 
     def random_death(self):
         (univ, fac_key), course_key = self.loc_info['job'], self.loc_info['course_key']
-        super().random_death()
-        univ.faculties[fac_key].hire_teachers([course_key])
+        outcome = BaseAgent.random_death(self, ret_out=True)
+        if outcome:
+            univ.faculties[fac_key].hire_teachers([course_key])
 
 
 class Pensioner(Adult): # from 65 to death

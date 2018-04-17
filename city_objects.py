@@ -150,7 +150,7 @@ class EducationCenter:
         else:
             # define empty set to update school groups
             updated_groups = {}
-            # define set with keys for next year courses with students but without teacher
+            # define set with keys for next year courses that will have students but still have no teacher
             missing_teachers_keys = set()
             for (c_id, course) in self.grouped_studs.items():
                 # If course_id is smaller than maximum allowed age in school, rearrange
@@ -241,6 +241,7 @@ class School(EducationCenter):
         hired_teachers = self.find_teachers(courses_keys, ret_output=True)
         # assign class key to teachers and add teachers to grouped studs
         # TODO : sort employees by lang competence from lowest to highest
+        # TODO : set conditions for hiring according to students age. Higher age, higher requirements
         for (k, t) in zip(courses_keys, hired_teachers):
             if isinstance(t, Teacher):
                 self.grouped_studs[k]['teacher'] = t
