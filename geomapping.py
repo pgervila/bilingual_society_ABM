@@ -337,7 +337,7 @@ class GeoMapper:
             num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
                 for idx2, lang in enumerate(langs_per_clust[clust_idx][-num_left_agents:]):
-                    sex = ['M' if random.random() < 0.5 else 'F']
+                    sex = 'M' if random.random() < 0.5 else 'F'
                     ag = Adult(self.model, lang_ags_ids.pop(), lang, sex)
                     ag.info['age'] = self.model.steps_per_year * np.random.randint(parents_age_range[0],
                                                                                    parents_age_range[1])

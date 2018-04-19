@@ -38,7 +38,16 @@ class Home:
             self.agents_in.add(ag)
 
 
-        # TODO : remove agents from old homes and clusters, add to new clusters
+    # TODO : remove agents from old homes and clusters, add to new clusters
+
+    def replace_agent(self, agent, replace=False, grown_agent=None):
+        self.info['occupants'].remove(agent)
+        if replace:
+            self.info['occupants'].add(grown_agent)
+        try:
+            self.agents_in.remove(agent)
+        except KeyError:
+            pass
 
     def __repr__(self):
         return 'Home_{0.clust!r}_{0.pos!r}'.format(self)
@@ -74,7 +83,7 @@ class EducationCenter:
                     for st in ags['students']:
                         st.loc_info['course_key'] = c_key
 
-    def find_teachers(self, courses_keys, ret_output=False):
+    def find_teachers(self, courses_keys):
         """
         Hire teachers for the specified courses
             Args:
@@ -87,6 +96,15 @@ class EducationCenter:
         num_needed_teachers = len(courses_keys)
         school_clust_ix = self.info['clust']
         hired_teachers = []
+
+        # first check among teachers employed at school but without course_key assigned
+        # TODO : add more restrictive conditions for higher courses
+        free_staff_from_school = [ag for ag in self.info['employees'] if not ag.loc_info['course_key']]
+        hired_teachers.extend(free_staff_from_school)
+        if len(hired_teachers) >= num_needed_teachers:
+            hired_teachers = set(hired_teachers[:num_needed_teachers])
+            return hired_teachers
+
         # loop over clusters from closest to farthest from school
         for ix in self.model.geo.clusters_info[school_clust_ix]['closest_clusters']:
             # list cluster teacher candidates. Shuffle them to add randomness
@@ -104,8 +122,7 @@ class EducationCenter:
             else:
                 # continue looking for missing teachers in next cluster
                 continue
-        if ret_output:
-            return hired_teachers
+        return hired_teachers
 
     def hire_teachers(self, keys):
         """ This method will be fully implemented in subclasses"""
@@ -197,6 +214,7 @@ class EducationCenter:
                 for jlt_key in jobless_teachers_keys:
                     self.grouped_studs[jlt_key]['teacher'].loc_info['course_key'] = None
 
+            # assign update groups to grouped_studs class attribute
             self.grouped_studs = updated_groups
 
             # check if there are still missing teachers for some courses and hire them
@@ -238,7 +256,7 @@ class School(EducationCenter):
                 * courses_keys: list of integer(s). Identifies courses for which teachers are missing
                     through years of age of its students
         """
-        hired_teachers = self.find_teachers(courses_keys, ret_output=True)
+        hired_teachers = self.find_teachers(courses_keys)
         # assign class key to teachers and add teachers to grouped studs
         # TODO : sort employees by lang competence from lowest to highest
         # TODO : set conditions for hiring according to students age. Higher age, higher requirements
@@ -292,6 +310,9 @@ class School(EducationCenter):
              self.grouped_studs[k2]['teacher']) = (self.grouped_studs[k2]['teacher'],
                                                    self.grouped_studs[k1]['teacher'])
 
+    def replace_agent(self):
+        pass
+
     def __repr__(self):
         return 'School_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
@@ -317,7 +338,7 @@ class Faculty(EducationCenter):
                 * courses_keys: list of integer(s). Identifies courses for which teachers are missing
                     through years of age
         """
-        hired_teachers = self.find_teachers(courses_keys, ret_output=True)
+        hired_teachers = self.find_teachers(courses_keys)
         # assign class key to teachers and add teachers to grouped studs
         # TODO : sort employees by lang competence from lowest to highest
         for (k, t) in zip(courses_keys, hired_teachers):
@@ -398,4 +419,7 @@ class Job:
 
 
 class Store:
+    pass
+
+class BookStore(Store):
     pass

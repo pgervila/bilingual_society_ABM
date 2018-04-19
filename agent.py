@@ -205,6 +205,13 @@ class BaseAgent:
                 return True
 
     def get_family_relative(self, fam_link):
+        """
+            Retrieve agent instance from family network
+            that satisfies family link
+            Input:
+                * fam_link: string. String must be an edge label
+                as defined in family network
+        """
         if fam_link not in ['mother', 'father', 'consort']:
             return [ag for ag, labels in self.model.nws.family_network[self].items()
                     if labels['fam_link'] == fam_link]
@@ -863,7 +870,8 @@ class Young(IndepAgent):
                 link_description = self.model.nws.known_people_network[self][ag]
                 if ('num_meet' in link_description and link_description['num_meet'] > 10 and
                 ag.info['sex'] != self.info['sex'] and
-                abs(self.info['age'] - ag.info['age']) <= self.model.steps_per_year * age_diff):
+                abs(self.info['age'] - ag.info['age']) <= self.model.steps_per_year * age_diff and
+                isinstance(ag, Young) and not ag.info['married']):
                     if abs(ag.info['language'] - self.info['language']) <= 1:
                         # check both agents have sufficiently high level in common language
                         common_lang = link_description['lang']
@@ -1119,7 +1127,7 @@ class Teacher(Adult):
     def random_death(self):
         school, course_key = self.loc_info['job'], self.loc_info['course_key']
         outcome = super().random_death(ret_out=True)
-        if outcome:
+        if outcome and course_key:
             school.hire_teachers([course_key])
 
     def stage_1(self, ix_agent, num_days=7):
@@ -1141,7 +1149,7 @@ class TeacherUniv(Teacher):
     def random_death(self):
         (univ, fac_key), course_key = self.loc_info['job'], self.loc_info['course_key']
         outcome = BaseAgent.random_death(self, ret_out=True)
-        if outcome:
+        if outcome and course_key:
             univ.faculties[fac_key].hire_teachers([course_key])
 
 
