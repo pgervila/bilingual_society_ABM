@@ -1083,6 +1083,9 @@ class Adult(Young): # from 30 to 65
     def look_for_partner(self, avg_years=4, age_diff=10, thresh_comm_lang=0.3):
         super().look_for_partner(avg_years=avg_years)
 
+    def speak_with_colleagues(self):
+        pass
+
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
@@ -1104,23 +1107,15 @@ class Adult(Young): # from 30 to 65
 
 class Worker(Adult):
 
-    def stage_1(self, ix_agent, num_days=7):
-        super().stage_1(ix_agent, num_days=num_days)
-
-    def stage_2(self, ix_agent):
-        pass
-
-    def stage_3(self, ix_agent):
-        pass
-
-    def stage_4(self, ix_agent):
-        super().stage_4(ix_agent, num_days=7)
+    pass
 
 
 class Teacher(Adult):
 
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)
+        # TODO: need to delete 'course_key' when evolving to Pensioner
+        del grown_agent.loc_info['course_key']
         if ret_output:
             return grown_agent
 
@@ -1130,18 +1125,22 @@ class Teacher(Adult):
         if outcome and course_key:
             school.hire_teachers([course_key])
 
+    def speak_with_colleagues(self):
+        pass
+
     def stage_1(self, ix_agent, num_days=7):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        pass
+        school = self.loc_info['school']
+        self.model.grid.move_agent(self, school.pos)
 
     def stage_3(self, ix_agent):
-        pass
+        self.speak_to_random_friend(ix_agent, num_days=3)
 
     def stage_4(self, ix_agent):
         # TODO : trigger teacher replacement after pension
-        super().stage_4(ix_agent, num_days=7)
+        pass
 
 
 class TeacherUniv(Teacher):

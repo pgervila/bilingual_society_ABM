@@ -10,7 +10,7 @@ import agent
 import model
 reload(agent)
 reload(model)
-from agent import Child, Adolescent, Adult, Worker, Teacher
+from agent import Child, Adolescent, YoungUniv, Young, Adult, Worker, Teacher
 from model import LanguageModel
 
 @pytest.fixture(scope="module")
@@ -40,7 +40,7 @@ def test_school_set_up_and_update(model):
         assert ags['teacher']
     # check students older than 18 are out of school
     while 18 not in school.grouped_studs:
-        for st in school.info['students']:
+        for st in list(school.info['students'])[:]:
             st.info['age'] += 36
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
@@ -51,8 +51,10 @@ def test_school_set_up_and_update(model):
 #         assert s1_old == s2_old
         school.update_courses()
     studs = school.grouped_studs[18]['students']
-    for st in school.info['students']:
+    for st in list(school.info['students'])[:]:
         st.info['age'] += 36
+        if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
+            st.evolve(Adolescent)
     school.update_courses()
     i_max = np.argmax(model.geo.cluster_sizes)
     univ = model.geo.clusters_info[i_max]['university']
@@ -68,17 +70,34 @@ def test_school_set_up_and_update(model):
             assert stud.loc_info['university'][0] == univ
         else:
             assert 'course_key' not in stud.loc_info
+                
+    # test teacher retirement
     
-    for _ in range(5):
-        for st in school.info['students']:
+    rand_teacher = np.random.choice([t for t in school.info['employees'] 
+                                     if t.loc_info['course_key']])
+    while ( rand_teacher.info['age'] / 36 ) <= 65:
+        rand_teacher.info['age'] += 36
+    course_key = rand_teacher.loc_info['course_key']
+    school.update_courses()
+    if course_key in school.grouped_studs:
+        if school.grouped_studs[course_key]['students']:
+            assert school.grouped_studs[course_key]['teacher']
+        else:
+            assert not school.grouped_studs[course_key]['teacher']
+    
+    # test students exit
+    for _ in range(3):
+        for st in list(school.info['students'])[:]:
             st.info['age'] += 36
+            if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
+                st.evolve(Adolescent)
         school.update_courses()
         for (k, ags) in school.grouped_studs.items():
             assert ags['students']
             assert ags['teacher']
             assert ags['teacher'].loc_info['course_key'] == k
+    
 
-            
 def test_univ_set_up_and_update(model):
     # get agents from schools to send them to univ
     schools = [school for cl_info in model.geo.clusters_info.values() 
@@ -87,13 +106,15 @@ def test_univ_set_up_and_update(model):
         # all_studs = [x for ags in school.grouped_studs.values()
         #              for x in ags['students']]
         while school.info['age_range'][1] not in school.grouped_studs:
-            for st in list(school.info['students']):
+            for st in list(school.info['students'])[:]:
                 st.info['age'] += 36
                 if isinstance(st, Child) and st.info['age'] >= st.age_high * model.steps_per_year:
                     st.evolve(Adolescent)
             school.update_courses()
-        for st in list(school.info['students']):
+        for st in list(school.info['students'])[:]:
             st.info['age'] += 36
+            if isinstance(st, Child) and st.info['age'] >= st.age_high * model.steps_per_year:
+                st.evolve(Adolescent)
         school.update_courses()
     i_max = np.argmax(model.geo.cluster_sizes)
     univ = model.geo.clusters_info[i_max]['university']
@@ -103,8 +124,10 @@ def test_univ_set_up_and_update(model):
             assert ags['students']
             assert ags['teacher']
     for fac in univ.faculties.values():
-        for st in list(fac.info['students']):
+        for st in list(fac.info['students'])[:]:
             st.info['age'] += 36
+            if isinstance(st, YoungUniv) and st.info['age'] >= st.age_high * model.steps_per_year:
+                st.evolve(Young)
         fac.update_courses()
         for (k, ags) in fac.grouped_studs.items():
             assert ags['students']
@@ -113,7 +136,7 @@ def test_univ_set_up_and_update(model):
     fac = [fac for fac in univ.faculties.values() 
            if fac.info['students']][0]
     while univ.info['age_range'][1] not in fac.grouped_studs:
-        for st in list(fac.info['students']):
+        for st in list(fac.info['students'])[:]:
             st.info['age'] += 36
         fac.update_courses()
     jm_studs = fac.grouped_studs[univ.info['age_range'][1]]['students']
@@ -127,15 +150,18 @@ def test_univ_set_up_and_update(model):
 def test_hire_teachers(model):
     i = np.random.randint(0, 3)
     school = model.geo.clusters_info[i]['schools'][0]
-    rand_courses = np.random.choice(list(school.grouped_studs), 
-                                    size=2, replace=False)
-    for rand_course in rand_courses:
-        school.grouped_studs[rand_course]['teacher'] = None
-    school.hire_teachers(rand_courses)
-    for rand_course in rand_courses:
-        t = school.grouped_studs[rand_course]['teacher']
-        assert t.loc_info['job'] == school
-        assert t.loc_info['course_key'] == rand_course
+    if len(school.grouped_studs) >= 2:
+        rand_courses = np.random.choice(list(school.grouped_studs), 
+                                        size=2, replace=False)
+        for rand_course in rand_courses:
+            school.grouped_studs[rand_course]['teacher'] = None
+        school.hire_teachers(rand_courses)
+        for rand_course in rand_courses:
+            t = school.grouped_studs[rand_course]['teacher']
+            assert t.loc_info['job'] == school
+            assert t.loc_info['course_key'] == rand_course
+    else:
+        pass
     
 def test_teachers_course_swap(model):
     for i in range(model.num_clusters):

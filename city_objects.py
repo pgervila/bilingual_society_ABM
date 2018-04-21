@@ -167,43 +167,52 @@ class EducationCenter:
         else:
             # define empty set to update school groups
             updated_groups = {}
-            # define set with keys for next year courses that will have students but still have no teacher
-            missing_teachers_keys = set()
+            # define Teacher retirement age in years
+            retirement_age = Teacher.age_high * self.model.steps_per_year
             for (c_id, course) in self.grouped_studs.items():
                 # If course_id is smaller than maximum allowed age in school, rearrange
                 if c_id < self.info['age_range'][1]:
-                    # move students forward to next class and delete students from current class
+                    # move students forward to next course and delete students from current course
                     updated_groups[c_id + 1] = {'students': course['students']}
                     course['students'] = None
                     # check if c_id + 1 was already part of last year courses
                     if c_id + 1 not in self.grouped_studs:
-                        # if it's a new course, add course id to missing teacher keys
-                        missing_teachers_keys.add(c_id + 1)
+                        # set missing teacher for new course
+                        updated_groups[c_id + 1]['teacher'] = None
                     else:
-                        # keep teacher
-                        updated_groups[c_id + 1].update({'teacher': self.grouped_studs[c_id + 1]['teacher']})
-                    # check if teacher has to retire
-                    if course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
-                        course['teacher'].evolve(Pensioner)
-                        missing_teachers_keys.add(c_id)
+                        # keep teacher if he/she does not have to retire
+                        if self.grouped_studs[c_id + 1]['teacher']:
+                            if self.grouped_studs[c_id + 1]['teacher'].info['age'] < retirement_age:
+                                updated_groups[c_id + 1]['teacher'] = self.grouped_studs[c_id + 1]['teacher']
+                            else:
+                                updated_groups[c_id + 1]['teacher'] = None
+                        else:
+                            updated_groups[c_id + 1]['teacher'] = None
                 else:
                     self.exit_studs(course['students'])
-                    # check if teacher has to retire
-                    if course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
-                        course['teacher'].evolve(Pensioner)
-                        missing_teachers_keys.add(c_id)
+
+                # check if teacher has to retire
+                if course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
+                    course['teacher'].evolve(Pensioner)
 
             # define set of teachers that are left with an empty class
-            jobless_teachers_keys = {key for key in self.grouped_studs if key not in updated_groups}
+            jobless_teachers_keys = {key for key in self.grouped_studs
+                                     if key not in updated_groups and self.grouped_studs[key]['teacher']}
+
+            # define set of teachers still missing in updated_groups
+            missing_teachers_keys = {key for key in updated_groups
+                                     if not updated_groups[key]['teacher']}
+
             # define reallocating pairs dict {jobless_key: missing_key}
             # to reassign school jobless teachers to courses with students but without teacher
             pairs = {}
-            for jlt_key in jobless_teachers_keys:
-                for mt_key in missing_teachers_keys:
+            for jlt_key in list(jobless_teachers_keys):
+                for mt_key in list(missing_teachers_keys):
                     if abs(jlt_key - mt_key) < max_course_dist and mt_key not in pairs.values():
                         pairs.update({jlt_key: mt_key})
             for (jlt_key, mt_key) in pairs.items():
                 updated_groups[mt_key]['teacher'] = self.grouped_studs[jlt_key]['teacher']
+                updated_groups[mt_key]['teacher'].loc_info['course_key'] = mt_key
                 # update sets after reallocation
                 jobless_teachers_keys.remove(jlt_key)
                 missing_teachers_keys.remove(mt_key)
@@ -249,6 +258,13 @@ class School(EducationCenter):
                      'age_range': age_range, 'num_places': num_places,
                      'min_age_teacher': min_age_teacher}
         self.grouped_studs = dict()
+
+    def assign_teacher(self, teacher, course_key):
+        self.grouped_studs[course_key]['teacher'] = teacher
+        teacher.loc_info['course_key'] = course_key
+        if teacher not in self.info['employees']:
+            teacher.loc_info['job'] = self
+            self.info['employees'].add(teacher)
 
     def hire_teachers(self, courses_keys):
         """ Hire teachers for the specified courses

@@ -357,7 +357,8 @@ class LanguageModel(Model):
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None):
         """ Method to remove agent instance from locations in agent loc_info dict attribute
-            Replacement by grown_agent will depend on self type"""
+            Replacement by grown_agent will depend on self type
+        """
         # TODO : should it be a geomapping method ?
         # TODO: maybe more orderly/elegant to implement remove/replace method for each city_object
         # remove agent from all locations where it belongs to
@@ -396,6 +397,7 @@ class LanguageModel(Model):
                 attr = loc_people_dict[key]
                 if key == 'job' and isinstance(loc, list):
                     loc[0].info[attr].remove(agent)
+                    loc[0].faculties[loc[1]].info[attr].remove(agent)
                 # TODO : job replace for Young to Adult
                 else:
                     loc.info[attr].remove(agent)
