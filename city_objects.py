@@ -5,7 +5,7 @@ from math import ceil
 import string
 from scipy.spatial.distance import pdist
 
-from agent import Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
+from agent import Adolescent, Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
 
 
 class Home:
@@ -40,14 +40,20 @@ class Home:
 
     # TODO : remove agents from old homes and clusters, add to new clusters
 
-    def replace_agent(self, agent, replace=False, grown_agent=None):
+    def remove_agent(self, agent, replace=False, grown_agent=None):
+        """ Remove agent from home occupants. If requested,
+            replace agent with a specific new_agent
+            Args:
+                * agent: class instance. Agent to be removed
+                * replace: boolean. If True, agent will be replaced after removal
+                * grown_agent: class instance. Agent that will replace fromer agent in home occupants
+        """
+
         self.info['occupants'].remove(agent)
         if replace:
             self.info['occupants'].add(grown_agent)
-        try:
+        if agent in self.agents_in:
             self.agents_in.remove(agent)
-        except KeyError:
-            pass
 
     def __repr__(self):
         return 'Home_{0.clust!r}_{0.pos!r}'.format(self)
@@ -326,8 +332,33 @@ class School(EducationCenter):
              self.grouped_studs[k2]['teacher']) = (self.grouped_studs[k2]['teacher'],
                                                    self.grouped_studs[k1]['teacher'])
 
-    def replace_agent(self):
-        pass
+    def remove_student(self, agent, replace=False, grown_agent=None):
+        self.info['students'].remove(agent)
+        # replace agent only if it is not an adolescent
+        if replace and not isinstance(agent, Adolescent):
+            self.info['students'].add(grown_agent)
+
+        # course key
+        course_key = agent.loc_info['course_key']
+        agent.loc_info['school'].grouped_studs[course_key]['students'].remove(agent)
+
+        if replace and not isinstance(agent, Adolescent):
+            agent.loc_info['school'].grouped_studs[course_key]['students'].add(grown_agent)
+        if agent in agent.loc_info['school'].agents_in:
+            agent.loc_info['school'].agents_in.remove(agent)
+
+    def remove_teacher(self, teacher, replace=False, new_teacher=None):
+        self.info['employees'].remove(teacher)
+        if replace:
+            self.info['employees'].add(new_teacher)
+        # course_key
+        if 'course_key' in teacher.loc_info:
+            course_key = teacher.loc_info['course_key']
+            teacher.loc_info['job'].grouped_studs[course_key]['teacher'] = None
+            if replace:
+                teacher.loc_info['job'].grouped_studs[course_key]['teacher'] = new_teacher
+        # TODO : agents in
+
 
     def __repr__(self):
         return 'School_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
@@ -375,6 +406,28 @@ class Faculty(EducationCenter):
         self.univ.info['students'].add(student)
         student.loc_info['university'] = [self.univ, self.info['type']]
         student.loc_info['course_key'] = int(student.info['age'] / self.model.steps_per_year)
+
+    def remove_student(self, agent):
+
+        # remove from uni and fac
+        self.univ.info['students'].remove(agent)
+        self.info['students'].remove(agent)
+
+        # course_key
+        course_key = agent.loc_info['course_key']
+        self.grouped_studs[course_key]['students'].remove(agent)
+        if agent in self.agents_in:
+            self.agents_in.remove(agent)
+
+    def remove_teacher(self, teacher, replace=False, new_teacher=None):
+        self.univ.info['employees'].remove(teacher)
+        self.info['employees'].remove(teacher)
+
+        if 'course_key' in teacher.loc_info:
+            course_key = teacher.loc_info['course_key']
+            teacher.loc_info['job'].grouped_studs[course_key]['teacher'] = None
+            if replace:
+                teacher.loc_info['job'].grouped_studs[course_key]['teacher'] = new_teacher
 
     def __repr__(self):
         return 'Faculty_{0[clust]!r}_{1.pos!r}_{0[type]!r}'.format(self.info, self)
@@ -429,6 +482,13 @@ class Job:
             # TODO : check if home update needed for hired employee and their family ( school, consort job)
 
     # TODO : update workers by department and send them to retirement when age reached
+
+    def remove_employee(self, agent, replace=None, new_agent=None):
+        self.info['employees'].remove(agent)
+        if replace:
+            self.info['occupants'].add(new_agent)
+        if agent in self.agents_in:
+            self.agents_in.remove(agent)
 
     def __repr__(self):
         return 'Job_{0.clust!r}_{0.pos!r}'.format(self)

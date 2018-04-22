@@ -364,6 +364,7 @@ class LanguageModel(Model):
         # remove agent from all locations where it belongs to
         loc_people_dict = {'home': 'occupants', 'job': 'employees',
                            'school': 'students', 'university': 'students'}
+
         for key, loc in agent.loc_info.items():
             if key == 'course_key':
                 if isinstance(agent, (Baby, Child, Adolescent)):
@@ -400,17 +401,12 @@ class LanguageModel(Model):
                     loc[0].faculties[loc[1]].info[attr].remove(agent)
                 # TODO : job replace for Young to Adult
                 else:
-                    loc.info[attr].remove(agent)
                     if key == 'school':
-                        if replace and not isinstance(agent, Adolescent):
-                            loc.info[attr].add(grown_agent)
+                        school = agent.loc_info['school']
+                        school.remove_agent(agent, replace=replace, grown_agent=grown_agent)
                     elif key == 'home':
-                        if replace:
-                            loc.info[attr].add(grown_agent)
-                        try:
-                            loc.agents_in.remove(agent)
-                        except KeyError:
-                            continue
+                        home = agent.loc_info['home']
+                        home.remove_agent(agent, replace=replace, grown_agent=grown_agent)
 
         # remove old instance from cluster (and replace with new one if requested)
         if replace:
