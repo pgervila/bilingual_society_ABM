@@ -534,10 +534,9 @@ class SchoolAgent(SpeakerAgent):
         """
         # TODO : filter by correlation in language preference
 
-        school = self.loc_info['school']
-        course_key = self.loc_info['course_key']
+        school, course_key = self.loc_info['school']
         speak_ags_in_course = set([ag for ag in school.grouped_studs[course_key]['students']
-                               if isinstance(ag, SchoolAgent)])
+                                   if isinstance(ag, SchoolAgent)])
         mates = speak_ags_in_course.difference({self})
         if mates:
             num_mates = random.randint(1, len(mates))
@@ -594,12 +593,14 @@ class IndepAgent(SpeakerAgent):
         # get agents ids and probs
         ags_ids = np.nonzero(adj_mat)[0]
         probs = adj_mat[ags_ids]
-        picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
-        return picked_agent
+        if ags_ids.size:
+            picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
+            return picked_agent
 
     def speak_to_random_friend(self, ix_agent, num_days):
         random_friend = self.pick_random_friend(ix_agent)
-        self.model.run_conversation(self, random_friend, num_days=num_days)
+        if random_friend:
+            self.model.run_conversation(self, random_friend, num_days=num_days)
 
     def meet_agent(self):
         pass
@@ -624,7 +625,7 @@ class Baby(ListenerAgent):
         if school:
             school.assign_stud(self)
         else:
-            self.loc_info['school'] = school
+            self.loc_info['school'] = [school, None]
 
     def register_to_school(self):
         # find closest school in cluster
@@ -643,7 +644,7 @@ class Baby(ListenerAgent):
                            if isinstance(ag, SpeakerAgent)]
             for ag in ags_at_home:
                 self.listen(to_agent=ag, min_age_interlocs=self.info['age'], num_days=num_days)
-            if 'school' not in self.loc_info or not self.loc_info['school']:
+            if 'school' not in self.loc_info or not self.loc_info['school'][1]:
                 self.register_to_school()
 
     def stage_2(self, num_days=7):
@@ -651,10 +652,9 @@ class Baby(ListenerAgent):
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
         if self.info['age'] > self.model.steps_per_year:
             # move self to school and identify teacher
-            school = self.loc_info['school']
+            school, course_key = self.loc_info['school']
             self.model.grid.move_agent(self, school.pos)
             school.agents_in.add(self)
-            course_key = self.loc_info['course_key']
             teacher = school.grouped_studs[course_key]['teacher']
             # check if school parent is available
             school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
@@ -670,7 +670,7 @@ class Baby(ListenerAgent):
     def stage_3(self, num_days=7):
         # parent comes to pick up and speaks with other parents. Then baby listens to parent on way back
         if self.info['age'] > self.model.steps_per_year:
-            school = self.loc_info['school']
+            school, course_key = self.loc_info['school']
             # check if school parent is available
             school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
             school_parent = self.get_family_relative(school_parent)
@@ -678,7 +678,6 @@ class Baby(ListenerAgent):
                 self.model.grid.move_agent(school_parent, school.pos)
                 self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'],
                             num_days=num_days)
-            course_key = self.loc_info['course_key']
             parents = [ag for ag in self.model.grid.get_cell_list_contents(school.pos)
                        if isinstance(ag, Adult)]
             if parents and school_parent:
@@ -705,7 +704,7 @@ class Child(SchoolAgent):
         if school:
             school.assign_stud(self)
         else:
-            self.loc_info['school'] = school
+            self.loc_info['school'] = [school, None]
 
     def stage_1(self, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -713,7 +712,7 @@ class Child(SchoolAgent):
     def stage_2(self, num_days=7):
         # go to daycare with mom or dad - 7 days out of 10
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
-        school = self.loc_info['school']
+        school, course_key = self.loc_info['school']
         self.model.grid.move_agent(self, school.pos)
         # check if school parent is available
         school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
@@ -723,7 +722,6 @@ class Child(SchoolAgent):
         # TODO : a part of speech from teacher to all course(driven from teacher stage method),
         school.agents_in.add(self)
         # talk to teacher and mates
-        course_key = self.loc_info['course_key']
         # talk with teacher
         teacher = school.grouped_studs[course_key]['teacher']
         self.model.run_conversation(teacher, self, num_days=num_days)
@@ -737,13 +735,12 @@ class Child(SchoolAgent):
         # week-ends time are modeled in PARENTS stages
 
     def stage_3(self, num_days=7):
-        school = self.loc_info['school']
+        school, course_key = self.loc_info['school']
         school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
         school_parent = self.get_family_relative(school_parent)
         if school_parent:
             self.model.grid.move_agent(school_parent, school.pos)
             self.model.run_conversation(self, school_parent, num_days=num_days)
-        course_key = self.loc_info['course_key']
         parents = [ag for ag in self.model.grid.get_cell_list_contents(school.pos)
                    if isinstance(ag, Adult)]
         if parents and school_parent:
@@ -766,12 +763,11 @@ class Adolescent(IndepAgent, SchoolAgent):
         if school:
             school.assign_stud(self)
         else:
-            self.loc_info['school'] = school
+            self.loc_info['school'] = [school, None]
 
     def speak_at_school(self, ix_agent, num_days=7):
         # talk to teacher and mates
-        school = self.loc_info['school']
-        course_key = self.loc_info['course_key']
+        school, course_key  = self.loc_info['school']
         # talk with teacher
         teacher = school.grouped_studs[course_key]['teacher']
         self.model.run_conversation(teacher, self, num_days=2)
@@ -802,7 +798,6 @@ class Adolescent(IndepAgent, SchoolAgent):
             else:
                 raise Exception('university instance must be provided to grow into a YoungUniv')
         elif isinstance(grown_agent, Young):
-            del grown_agent.loc_info['course_key']
             grown_agent.info.update({'married': False, 'num_children': 0})
             grown_agent.loc_info['job'] = None
         if ret_output:
@@ -899,8 +894,7 @@ class Young(IndepAgent):
             random.random() < day_prob):
             id_baby = self.model.set_available_ids.pop()
             # find consort
-            consort = [agent for agent, labels in self.model.nws.family_network[self].items()
-                       if labels["fam_link"] == 'consort'][0]
+            consort = self.get_family_relative('consort')
             # find out baby language attribute and langs with parents
             newborn_lang, lang_with_father, lang_with_mother = self.model.get_newborn_lang(self, consort)
             # Determine baby's sex
@@ -1013,13 +1007,12 @@ class YoungUniv(IndepAgent, SchoolAgent):
             fac_key = random.choice(string.ascii_letters[:5])
             university.faculties[fac_key].assign_stud(self)
         else:
-            self.loc_info['university'] = None
+            self.loc_info['university'] = [university, fac_key, None]
 
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)
         # new agent will not go to university in any case
         del grown_agent.loc_info['university']
-        del grown_agent.loc_info['course_key']
         grown_agent.info.update({'married': False, 'num_children': 0})
         grown_agent.loc_info['job'] = None
         if ret_output:
@@ -1114,13 +1107,11 @@ class Teacher(Adult):
 
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)
-        # TODO: need to delete 'course_key' when evolving to Pensioner
-        del grown_agent.loc_info['course_key']
         if ret_output:
             return grown_agent
 
     def random_death(self):
-        school, course_key = self.loc_info['job'], self.loc_info['course_key']
+        school, course_key = self.loc_info['job']
         outcome = super().random_death(ret_out=True)
         if outcome and course_key:
             school.hire_teachers([course_key])
@@ -1132,8 +1123,13 @@ class Teacher(Adult):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        school = self.loc_info['school']
-        self.model.grid.move_agent(self, school.pos)
+        job = self.loc_info['job'][0]
+        self.model.grid.move_agent(self, job.pos)
+        job.agents_in.add(self)
+        # teacher speaks to entire course
+        # TODO : need method for one agent to speak, a group to listen
+
+        # teacher has lunch with colleagues
 
     def stage_3(self, ix_agent):
         self.speak_to_random_friend(ix_agent, num_days=3)
@@ -1146,7 +1142,7 @@ class Teacher(Adult):
 class TeacherUniv(Teacher):
 
     def random_death(self):
-        (univ, fac_key), course_key = self.loc_info['job'], self.loc_info['course_key']
+        univ, course_key, fac_key = self.loc_info['job']
         outcome = BaseAgent.random_death(self, ret_out=True)
         if outcome and course_key:
             univ.faculties[fac_key].hire_teachers([course_key])

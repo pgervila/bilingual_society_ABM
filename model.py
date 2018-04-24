@@ -20,7 +20,7 @@ reload(sys.modules['schedule'])
 from schedule import StagedActivationModif
 
 # IMPORT MODEL LIBRARIES
-from agent import Baby, Child, Adolescent, YoungUniv, Teacher
+from agent import Baby, Child, Adolescent, Young, YoungUniv, Teacher, TeacherUniv, Adult, Pensioner
 import geomapping, networks, dataprocess
 reload(sys.modules['geomapping'])
 reload(sys.modules['networks'])
@@ -360,53 +360,36 @@ class LanguageModel(Model):
             Replacement by grown_agent will depend on self type
         """
         # TODO : should it be a geomapping method ?
-        # TODO: maybe more orderly/elegant to implement remove/replace method for each city_object
         # remove agent from all locations where it belongs to
-        loc_people_dict = {'home': 'occupants', 'job': 'employees',
-                           'school': 'students', 'university': 'students'}
-
-        for key, loc in agent.loc_info.items():
-            if key == 'course_key':
-                if isinstance(agent, (Baby, Child, Adolescent)):
-                    agent.loc_info['school'].grouped_studs[loc]['students'].remove(agent)
-                    if replace and not isinstance(agent, Adolescent):
-                        agent.loc_info['school'].grouped_studs[loc]['students'].add(grown_agent)
-                    if agent in agent.loc_info['school'].agents_in:
-                        agent.loc_info['school'].agents_in.remove(agent)
-                elif isinstance(agent, YoungUniv):
-                    univ, fac_key = agent.loc_info['university']
-                    fac = univ.faculties[fac_key]
-                    fac.grouped_studs[loc]['students'].remove(agent)
-                    if agent in fac.agents_in:
-                        fac.agents_in.remove(agent)
-                elif isinstance(agent, Teacher):
-                    if isinstance(agent.loc_info['job'], list):
-                        univ, fac_key = agent.loc_info['job']
-                        if loc:
-                            fac = univ.faculties[fac_key]
-                            fac.grouped_studs[loc]['teacher'] = None
-                    else:
-                        if loc:
-                            agent.loc_info['job'].grouped_studs[loc]['teacher'] = None
-            elif key == 'university':
-                attr = loc_people_dict[key]
-                univ, fac_key = loc
-                # remove from uni and fac
-                univ.info[attr].remove(agent)
-                univ.faculties[fac_key].info[attr].remove(agent)
-            else:
-                attr = loc_people_dict[key]
-                if key == 'job' and isinstance(loc, list):
-                    loc[0].info[attr].remove(agent)
-                    loc[0].faculties[loc[1]].info[attr].remove(agent)
-                # TODO : job replace for Young to Adult
+        for key in agent.loc_info:
+            if key == 'school':
+                school = agent.loc_info['school'][0]
+                if isinstance(agent, (Baby, Child)):
+                    school.remove_student(agent, replace=replace, grown_agent=grown_agent)
                 else:
-                    if key == 'school':
-                        school = agent.loc_info['school']
-                        school.remove_agent(agent, replace=replace, grown_agent=grown_agent)
-                    elif key == 'home':
-                        home = agent.loc_info['home']
-                        home.remove_agent(agent, replace=replace, grown_agent=grown_agent)
+                    school.remove_student(agent)
+            elif key == 'home':
+                home = agent.loc_info['home']
+                home.remove_agent(agent, replace=replace, grown_agent=grown_agent)
+            elif key == 'job':
+                if isinstance(agent, TeacherUniv):
+                    univ, course_key, fac_key = agent.loc_info['job']
+                    if isinstance(grown_agent, Pensioner):
+                        univ.faculties[fac_key].remove_teacher(agent)
+                    else:
+                        univ.faculties[fac_key].remove_teacher(agent, replace=replace, new_teacher=grown_agent)
+                elif isinstance(agent, Teacher):
+                    school, course_key = agent.loc_info['job']
+                    if isinstance(grown_agent, Pensioner):
+                        school.remove_teacher(agent)
+                    else:
+                        school.remove_teacher(agent, replace=replace, new_teacher=grown_agent)
+                elif isinstance(agent, Young):
+                    job = agent.loc_info['job']
+                    job.remove_employee(agent, replace=replace, new_agent=grown_agent)
+            elif key == 'university':
+                univ, course_key, fac_key = agent.loc_info['university']
+                univ.faculties[fac_key].remove_student(agent)
 
         # remove old instance from cluster (and replace with new one if requested)
         if replace:
@@ -421,6 +404,11 @@ class LanguageModel(Model):
             so that garbage collector can free memory
             Call this function if death conditions for agent are verified
         """
+        # if dead agent was married, update marriage attribute from consort
+        if self.info['married']:
+            consort = agent.get_family_relative('consort')
+            consort.info['married'] = False
+
         # Remove agent from all networks
         for network in [self.nws.family_network,
                         self.nws.known_people_network,
