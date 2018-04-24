@@ -329,7 +329,7 @@ class GeoMapper:
                                         for school in clust_info['schools']])
                 school = clust_info['schools'][idx_school]
                 for child in family_agents[2:]:
-                    child.loc_info['school'] = school
+                    child.loc_info['school'] = [school, None]
                     school.info['students'].add(child)
 
             # set up agents left out of family partition of cluster

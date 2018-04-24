@@ -50,7 +50,7 @@ def test_school_set_up_and_update(model):
 #                       if 'teacher' in course])
 #         assert s1_old == s2_old
         school.update_courses()
-    studs = school.grouped_studs[18]['students']
+    studs = school.grouped_studs[18]['students'].copy()
     for st in list(school.info['students'])[:]:
         st.info['age'] += 36
         if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
@@ -62,22 +62,20 @@ def test_school_set_up_and_update(model):
         assert ags['students']
         assert ags['teacher']
     # check some students are correctly enrolled in univ
-    # check all working links with school are erased after completing education
+    # check all working links with school are erased after completing school education
     for stud in studs:
         assert stud not in school.info['students']
-        assert stud.loc_info['school'] == None
+        assert 'school' not in stud.loc_info
         if 'university' in stud.loc_info:
             assert stud.loc_info['university'][0] == univ
-        else:
-            assert 'course_key' not in stud.loc_info
                 
     # test teacher retirement
     
     rand_teacher = np.random.choice([t for t in school.info['employees'] 
-                                     if t.loc_info['course_key']])
+                                     if t.loc_info['job'][1]])
     while ( rand_teacher.info['age'] / 36 ) <= 65:
         rand_teacher.info['age'] += 36
-    course_key = rand_teacher.loc_info['course_key']
+    course_key = rand_teacher.loc_info['job'][1]
     school.update_courses()
     if course_key in school.grouped_studs:
         if school.grouped_studs[course_key]['students']:
@@ -95,7 +93,7 @@ def test_school_set_up_and_update(model):
         for (k, ags) in school.grouped_studs.items():
             assert ags['students']
             assert ags['teacher']
-            assert ags['teacher'].loc_info['course_key'] == k
+            assert ags['teacher'].loc_info['job'][1] == k
     
 
 def test_univ_set_up_and_update(model):
@@ -158,8 +156,8 @@ def test_hire_teachers(model):
         school.hire_teachers(rand_courses)
         for rand_course in rand_courses:
             t = school.grouped_studs[rand_course]['teacher']
-            assert t.loc_info['job'] == school
-            assert t.loc_info['course_key'] == rand_course
+            assert t.loc_info['job'][0] == school
+            assert t.loc_info['job'][1] == rand_course
     else:
         pass
     
@@ -182,7 +180,7 @@ def test_assign_new_stud_to_course(model):
     school.assign_stud(new_student)
     new_stud_course = int(new_student.info['age'] / model.steps_per_year)
     assert new_student in school.grouped_studs[new_stud_course]['students']
-    assert new_student.loc_info['course_key'] == new_stud_course
+    assert new_student.loc_info['school'][1] == new_stud_course
 
 def test_dead_teacher(model):
     pass

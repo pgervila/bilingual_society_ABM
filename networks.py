@@ -6,7 +6,7 @@ from scipy.spatial.distance import pdist
 import networkx as nx
 import bisect
 
-from agent import Child, Adult
+from agent import Child, Adult, Teacher
 
 
 class NetworkBuilder:
@@ -94,14 +94,20 @@ class NetworkBuilder:
         # TODO : change distribution to allow for extreme number of friends for a few agents
         friends_per_agent = np.random.randint(1, 5, size=self.model.num_people)
         for ag, num_friends in zip(self.model.schedule.agents, friends_per_agent):
-            if isinstance(ag, Adult) and len(self.friendship_network[ag]) < num_friends:
+            if type(ag) == Adult and len(self.friendship_network[ag]) < num_friends:
                 if ag.loc_info['job']:
                     info_occupation = ag.loc_info['job'].info
                 else:
-                    info_occupation = random.choice(self.model.geo.clusters_info['jobs'])
+                    clust = ag.loc_info['home'].clust
+                    info_occupation = random.choice(self.model.geo.clusters_info[clust]['jobs']).info
+                colleagues = 'employees'
+            elif isinstance(ag, Teacher):
+                if ag.loc_info['job'][0]:
+                    info_occupation = ag.loc_info['job'][0].info
                 colleagues = 'employees'
             elif isinstance(ag, Child) and len(self.friendship_network[ag]) < num_friends:
-                info_occupation = ag.loc_info['school'].grouped_studs[ag.loc_info['course_key']]
+                school, course_key = ag.loc_info['school']
+                info_occupation = school.grouped_studs[course_key]
                 colleagues = 'students'
             else:
                 continue
