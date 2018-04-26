@@ -187,7 +187,7 @@ class GeoMapper:
             num_places_job_c = np.clip(num_places_job_c, min_places, max_places)
 
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
-                self.clusters_info[clust_idx]['jobs'].append(Job(clust_idx, (x, y),
+                self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y),
                                                                  num_places, lang_policy=[0, 1, 2]))
 
     def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):

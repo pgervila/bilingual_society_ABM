@@ -6,7 +6,7 @@ from scipy.spatial.distance import pdist
 import networkx as nx
 import bisect
 
-from agent import Child, Adult, Teacher
+from agent import Child, Young, Adult, Teacher
 
 
 class NetworkBuilder:
@@ -131,7 +131,7 @@ class NetworkBuilder:
 
     def set_family_links(self, agent, father, mother, lang_with_father, lang_with_mother):
         """
-            Method to define family links and interaction language of a nw agent.
+            Method to define family links and interaction language of a new agent.
             Corresponding edges are created in family and known people networks
             Args:
                 * agent: agent instance. The agent on which links have to be defined
@@ -181,7 +181,7 @@ class NetworkBuilder:
                     fam_nw.add_edge(relat, agent, fam_link='nephew', lang=com_lang)
                     for (i, j) in [(agent, relat), (relat, agent)]:
                         k_people_nw.add_edge(i, j, family=True, lang=com_lang)
-                    if relat.info['married']:
+                    if isinstance(relat, Young) and relat.info['married']:
                         consort = [key for key, value in fam_nw[relat].items()
                                    if value['fam_link'] == 'consort'][0]
                         fam_nw.add_edge(agent, consort,

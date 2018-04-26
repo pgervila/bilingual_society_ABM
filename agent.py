@@ -220,6 +220,8 @@ class BaseAgent:
                 if labels['fam_link'] == fam_link:
                     return ag
 
+
+
     def __repr__(self):
         if self.loc_info['home']:
             return "".join([type(self).__name__,
@@ -561,6 +563,13 @@ class SchoolAgent(SpeakerAgent):
         studied_words = {lang: [act, act_c]}
         self.update_lang_arrays(studied_words, delta_s_factor=delta_s_factor, speak=False)
 
+    def random_death(self):
+        dead = super().random_death(ret_out=True)
+        school, course_key = self.loc_info['school']
+        # check if dead child was only student in course and cancel course if yes
+        if dead:
+            school.remove_course(course_key)
+
 
 class IndepAgent(SpeakerAgent):
     """ ListenerAgent class augmented with methods that enable agent
@@ -585,6 +594,24 @@ class IndepAgent(SpeakerAgent):
         """ Move to a given location (from another optionally given location) """
         pass
         #self.model.grid.move_agent(self, school.pos)
+
+    def speak_to_group(self, group, lang=None, long=True,
+                       biling_interloc=False, num_days=10):
+        """ Make agent speak to a group of listening people """
+
+        min_age_interlocs = min([ag.info['age'] for ag in group])
+        # TODO : use 'get_conv_params' to get the parameters ???
+
+        if not lang:
+            lang = self.model.get_conv_params([self] + group)['lang_group'][0]
+
+        spoken_words = self.pick_vocab(lang, long=long, min_age_interlocs=min_age_interlocs,
+                                       biling_interloc=biling_interloc, num_days=num_days)
+        self.update_lang_arrays(spoken_words, delta_s_factor=1)
+        for ag in group:
+            ag.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
+
+
 
     def pick_random_friend(self, ix_agent):
         """ Description needed """
@@ -635,6 +662,13 @@ class Baby(ListenerAgent):
         school = clust_info['schools'][idx_school]
         # register
         school.assign_stud(self)
+
+    def random_death(self):
+        dead = super().random_death(ret_out=True)
+        school, course_key = self.loc_info['school']
+        # check if dead baby was only student in course and cancel course if yes
+        if dead and course_key:
+            school.remove_course(course_key)
 
     def stage_1(self, num_days=10):
         # listen to close family at home
@@ -807,14 +841,14 @@ class Adolescent(IndepAgent, SchoolAgent):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent, num_days=7):
-        school = self.loc_info['school']
+        school, course_key = self.loc_info['school']
         self.model.grid.move_agent(self, school.pos)
         # TODO : a part of speech from teacher to all course(driven from teacher stage method)
         school.agents_in.add(self)
         self.speak_at_school(ix_agent, num_days)
 
     def stage_3(self, ix_agent, num_days=7):
-        school = self.loc_info['school']
+        school, course_key = self.loc_info['school']
         self.speak_at_school(ix_agent, num_days)
         school.agents_in.remove(self)
         if school.info['lang_policy'] == [0, 1]:
@@ -879,7 +913,9 @@ class Young(IndepAgent):
                             ag.info['married'] = True
                             fam_nw = self.model.nws.family_network
                             lang = self.model.nws.known_people_network[self][ag]['lang']
+                            # family network is directed Graph !!
                             fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
+                            fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
                             # find appartment to move in together
                             self.move_to_new_home(ag)
                             break
@@ -918,9 +954,7 @@ class Young(IndepAgent):
         np.random.shuffle(self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs'])
         for job_c in self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs']:
             if job_c.num_places and self.info['language'] in job_c.info['lang_policy']:
-                job_c.num_places -= 1
                 job_c.hire_employee(self)
-                # self.evolve(Worker)
                 break
         # TODO : move to new home if agent has to change cluster
 
@@ -935,14 +969,14 @@ class Young(IndepAgent):
                 it is assumed moving is because of job reasons
         """
         # TODO : improve if-else, implement no marriage multiple agents case
-        job1 = self.loc_info['job']
+        job1 = self.loc_info['job'][0] if isinstance(self.loc_info['job'], list) else self.loc_info['job']
         clust1_ix = self.loc_info['home'].clust
         free_homes_clust1 = [home for home in self.model.geo.clusters_info[clust1_ix]['homes']
                              if not home.info['occupants']]
         if ags:
             if marriage:
                 ags = ags[0]
-                job2 = ags.loc_info['job']
+                job2 = ags.loc_info['job'][0] if isinstance(ags.loc_info['job'], list) else ags.loc_info['job']
                 clust2_ix = ags.loc_info['home'].clust
                 if job2:
                     job_dist_fun = lambda home: (pdist([job1.pos, home.pos]) + pdist([job2.pos, home.pos]))[0]
@@ -967,7 +1001,12 @@ class Young(IndepAgent):
                     sorted_homes = sorted(free_homes_clust1, key=job_dist_fun)
                     home_ix = random.randint(1, int(len(sorted_homes) / 2))
                     new_home = sorted_homes[home_ix]
+            else:
+                # partner will find job in new cluster and children will change school
+                # TODO
+                pass
             new_home.assign_to_agent([self, ags])
+            # TODO : children will have to change school !!
         else:
             # assign empty home relatively close to current job
             sorted_homes = sorted(free_homes_clust1, key=lambda home: pdist([job1.pos, home.pos])[0])
@@ -975,6 +1014,15 @@ class Young(IndepAgent):
             new_home = sorted_homes[home_ix]
             new_home.assign_to_agent(self)
 
+    def speak_with_colleagues(self):
+        ag_init = None
+        others = []
+        self.model.run_conversation(ag_init, others, num_days=7)
+
+    def random_death(self):
+        dead = super().random_death(ret_out=True)
+        if dead and self.loc_info['job']:
+            self.loc_info['job'].look_for_employee()
 
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -1076,9 +1124,6 @@ class Adult(Young): # from 30 to 65
     def look_for_partner(self, avg_years=4, age_diff=10, thresh_comm_lang=0.3):
         super().look_for_partner(avg_years=avg_years)
 
-    def speak_with_colleagues(self):
-        pass
-
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
@@ -1112,9 +1157,17 @@ class Teacher(Adult):
 
     def random_death(self):
         school, course_key = self.loc_info['job']
-        outcome = super().random_death(ret_out=True)
-        if outcome and course_key:
+        dead = BaseAgent.random_death(self, ret_out=True)
+        if dead and course_key:
             school.hire_teachers([course_key])
+
+    def speak_to_class(self):
+        job, course_key = self.loc_info['job']
+        if course_key:
+            # teacher speaks to entire course
+            studs = list(job.grouped_studs[course_key]['students'])
+            if studs:
+                self.speak_to_group(studs, 0)
 
     def speak_with_colleagues(self):
         pass
@@ -1123,15 +1176,18 @@ class Teacher(Adult):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        job = self.loc_info['job'][0]
+        job, course_key = self.loc_info['job']
         self.model.grid.move_agent(self, job.pos)
         job.agents_in.add(self)
-        # teacher speaks to entire course
-        # TODO : need method for one agent to speak, a group to listen
+        self.speak_to_class()
+
 
         # teacher has lunch with colleagues
 
     def stage_3(self, ix_agent):
+        job, course_key = self.loc_info['job']
+        self.speak_to_class()
+
         self.speak_to_random_friend(ix_agent, num_days=3)
 
     def stage_4(self, ix_agent):
@@ -1143,9 +1199,31 @@ class TeacherUniv(Teacher):
 
     def random_death(self):
         univ, course_key, fac_key = self.loc_info['job']
-        outcome = BaseAgent.random_death(self, ret_out=True)
-        if outcome and course_key:
+        dead = BaseAgent.random_death(self, ret_out=True)
+        if dead and course_key:
             univ.faculties[fac_key].hire_teachers([course_key])
+
+    def speak_to_class(self):
+        job, course_key, fac_key = self.loc_info['job']
+        if course_key:
+            # teacher speaks to entire course
+            studs = list(job[fac_key].grouped_studs[course_key]['students'])
+            if studs:
+                self.speak_to_group(studs, 0)
+
+    def stage_2(self, ix_agent):
+        job, course_key, fac_key = self.loc_info['job']
+        self.model.grid.move_agent(self, job.pos)
+        job[fac_key].agents_in.add(self)
+        self.speak_to_class()
+
+        # teacher has lunch with colleagues
+
+    def stage_3(self, ix_agent):
+        job, course_key, fac_key = self.loc_info['job']
+        self.speak_to_class()
+
+        self.speak_to_random_friend(ix_agent, num_days=3)
 
 
 class Pensioner(Adult): # from 65 to death

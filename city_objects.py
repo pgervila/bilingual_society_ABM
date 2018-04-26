@@ -258,6 +258,8 @@ class EducationCenter:
         if agent in self.agents_in:
             self.agents_in.remove(agent)
 
+    def __getitem__(self, key):
+        return getattr(self, 'grouped_studs')[key]
 
 
 class School(EducationCenter):
@@ -382,6 +384,13 @@ class School(EducationCenter):
             for st in course['students']:
                 st.loc_info['school'][1] = c_id
 
+    def remove_course(self, course_key):
+        """ Remove school course if no students are left in it. Relocate teacher"""
+        if not self.grouped_studs['course_key']['students']:
+            courseless_teacher = self.grouped_studs[course_key]['teacher']
+            courseless_teacher.loc_info['job'][1] = None
+            del self.grouped_studs[course_key]
+
 
     def __repr__(self):
         return 'School_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
@@ -480,6 +489,9 @@ class University:
             self.info['lang_policy'] = [0, 1]
         self.faculties = {key: Faculty(key, self, model) for key in string.ascii_letters[:5]}
 
+    def __getitem__(self, fac_key):
+        return getattr(self, 'faculties')[fac_key]
+
     def __repr__(self):
         return 'University_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
@@ -495,7 +507,8 @@ class Job:
                 1 -> both L1 and L2 ( only 1 agents may work here )
                 2 -> only L2 (so both 1, 2 agents may work here)
     """
-    def __init__(self, clust, pos, num_places, skill_level=0, lang_policy=None):
+    def __init__(self, model, clust, pos, num_places, skill_level=0, lang_policy=None):
+        self.model = model
         self.clust = clust
         self.pos = pos
         self.num_places=num_places
@@ -503,8 +516,14 @@ class Job:
                      'skill_level': skill_level }
         self.agents_in = set()
 
-    def look_for_employees(self):
-        pass
+    def look_for_employee(self):
+        """ Look for employee that meets requirements """
+
+        # look for suitable agents in any cluster
+        for ag in self.model.schedule.agents:
+            if ag.info['language'] in self.lang_policy and isinstance(ag, Young) and not isinstance(ag, Teacher):
+                self.hire_employee(ag)
+                break
 
     def hire_employee(self, agent):
         if agent.info['language'] in self.info['lang_policy']:

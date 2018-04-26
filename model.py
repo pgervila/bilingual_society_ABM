@@ -138,11 +138,11 @@ class LanguageModel(Model):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, long=conv_params['long'], num_days=num_days)
                 # call 'self' agent update
-                ag.update_lang_arrays(spoken_words)
+                ag.update_lang_arrays(spoken_words, delta_s_factor=1)
                 # call listeners' updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
-                    listener.update_lang_arrays(spoken_words, speak=False)
+                    listener.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
         # update acquaintances
         if isinstance(others, list):
             for ix, ag in enumerate(others):
@@ -205,7 +205,8 @@ class LanguageModel(Model):
             langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
                                        for ag in others
                                        if ag in self.nws.known_people_network[ag_init]]
-            langs_with_known_agents = [e[0] if isinstance(e, list) else e for e in langs_with_known_agents]
+            langs_with_known_agents = [lang[0] if isinstance(lang, list) else lang
+                                       for lang in langs_with_known_agents]
             if langs_with_known_agents:
                 lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
             else:
@@ -384,6 +385,9 @@ class LanguageModel(Model):
                         school.remove_teacher(agent)
                     else:
                         school.remove_teacher(agent, replace=replace, new_teacher=grown_agent)
+                elif isinstance(agent, Adult):
+                    job = agent.loc_info['job']
+                    job.remove_employee(agent)
                 elif isinstance(agent, Young):
                     job = agent.loc_info['job']
                     job.remove_employee(agent, replace=replace, new_agent=grown_agent)
@@ -399,13 +403,14 @@ class LanguageModel(Model):
             self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust)
 
     def remove_after_death(self, agent):
-        """ Removes agent object from all places where it belongs.
+        """
+            Removes agent object from all places where it belongs.
             It makes sure no references to agent object are left after removal,
             so that garbage collector can free memory
             Call this function if death conditions for agent are verified
         """
         # if dead agent was married, update marriage attribute from consort
-        if self.info['married']:
+        if isinstance(agent, Young) and agent.info['married']:
             consort = agent.get_family_relative('consort')
             consort.info['married'] = False
 
