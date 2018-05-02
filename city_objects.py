@@ -27,7 +27,7 @@ class Home:
             # check if agent already has a home
             if ag.loc_info['home']:
                 curr_clust = ag.loc_info['home'].clust
-                ag.loc_info['home'].info['occupants'].remove(ag)
+                ag.loc_info['home'].remove_agent(ag)
                 # change cluster info reference to agent if new home is in another cluster
                 if self.clust != curr_clust:
                     ag.model.geo.update_agent_clust_info(ag, curr_clust=curr_clust,
@@ -36,9 +36,6 @@ class Home:
             ag.loc_info['home'] = self
             self.info['occupants'].add(ag)
             self.agents_in.add(ag)
-
-
-    # TODO : remove agents from old homes and clusters, add to new clusters
 
     def remove_agent(self, agent, replace=False, grown_agent=None):
         """ Remove agent from home occupants. If requested,
@@ -258,6 +255,13 @@ class EducationCenter:
         if agent in self.agents_in:
             self.agents_in.remove(agent)
 
+    def remove_course(self, course_key):
+        """ Remove school course if no students are left in it. Relocate teacher"""
+        if not self[course_key]['students']:
+            courseless_teacher = self[course_key]['teacher']
+            courseless_teacher.loc_info['job'][1] = None
+            del self[course_key]
+
     def __getitem__(self, key):
         return getattr(self, 'grouped_studs')[key]
 
@@ -384,12 +388,7 @@ class School(EducationCenter):
             for st in course['students']:
                 st.loc_info['school'][1] = c_id
 
-    def remove_course(self, course_key):
-        """ Remove school course if no students are left in it. Relocate teacher"""
-        if not self.grouped_studs['course_key']['students']:
-            courseless_teacher = self.grouped_studs[course_key]['teacher']
-            courseless_teacher.loc_info['job'][1] = None
-            del self.grouped_studs[course_key]
+
 
 
     def __repr__(self):
@@ -521,16 +520,17 @@ class Job:
 
         # look for suitable agents in any cluster
         for ag in self.model.schedule.agents:
-            if ag.info['language'] in self.lang_policy and isinstance(ag, Young) and not isinstance(ag, Teacher):
+            if ag.info['language'] in self.info['lang_policy'] and isinstance(ag, Young) and not isinstance(ag, Teacher):
                 self.hire_employee(ag)
                 break
 
-    def hire_employee(self, agent):
+    def hire_employee(self, agent, move_home=False):
         if agent.info['language'] in self.info['lang_policy']:
             self.num_places -= 1
             agent.loc_info['job'] = self
             self.info['employees'].add(agent)
-            # TODO : check if home update needed for hired employee and their family ( school, consort job)
+            if move_home:
+                agent.move_to_new_home(marriage=False)
 
     # TODO : update workers by department and send them to retirement when age reached
 
