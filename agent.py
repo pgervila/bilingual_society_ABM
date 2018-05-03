@@ -220,8 +220,6 @@ class BaseAgent:
                 if labels['fam_link'] == fam_link:
                     return ag
 
-
-
     def __repr__(self):
         if self.loc_info['home']:
             return "".join([type(self).__name__,
@@ -517,6 +515,22 @@ class SpeakerAgent(ListenerAgent):
               other not in self.model.nws.friendship_network[self]):
             self.model.nws.known_people_network[self][other]['num_meet'] += 1
 
+    def speak_to_random_subgroups(self, group, num_days=7):
+        """
+            Randomly select a subset of a given group
+            and speak to it. Then select a random member of the subgroup
+            and speak to that member
+        """
+        if group:
+            num_mates = random.randint(1, len(group))
+            # Choose 'num_mates' unique random mates
+            speak_group = random.sample(group, num_mates)
+            self.model.run_conversation(self, speak_group, num_days=num_days)
+            # talk to a single random mate
+            random_mate = np.random.choice(speak_group)
+            self.model.run_conversation(self, random_mate, num_days=num_days)
+
+
     def stage_1(self, num_days=10):
         ags_at_home = self.loc_info['home'].agents_in.difference({self})
         ags_at_home = [ag for ag in ags_at_home if isinstance(ag, SpeakerAgent)]
@@ -531,36 +545,32 @@ class SchoolAgent(SpeakerAgent):
 
     def get_school_and_course(self):
         """
-            Method to get the educational center and corresponding course for student agent,
-            regardless of whether he is at school or at university
+            Method to get school center and corresponding course for student agent
         """
-        if 'school' in self.loc_info:
-            educ_center, course_key = self.loc_info['school']
-        elif 'university' in self.loc_info:
-            educ_center, course_key, fac_key = self.loc_info['university']
-            educ_center = educ_center[fac_key]
+
+        educ_center, course_key = self.loc_info['school']
         return educ_center, course_key
 
-    def speak_at_school(self, num_days):
+    def speak_at_school(self, educ_center, course_key, num_days=7):
         """
             Method to talk with school mates and friends in an educational center,
             such as school or university
             Args:
-                * num_days: integer
+                * educ_center: instance of agent's educational center
+                * course_key: integer.
+                * num_days: integer.
         """
         # TODO : filter by correlation in language preference
 
-        educ_center, course_key = self.get_school_and_course()
         speak_ags_in_course = set([ag for ag in educ_center[course_key]['students']
                                    if isinstance(ag, SchoolAgent)])
+        # talk to random mates in group
         mates = speak_ags_in_course.difference({self})
-        if mates:
-            num_mates = random.randint(1, len(mates))
-            # Choose 'num_mates' unique random mates
-            mates = random.sample(mates, num_mates)
-            self.model.run_conversation(self, mates, num_days=num_days)
-
-
+        self.speak_to_random_subgroups(mates, num_days=num_days)
+        # talk to friends
+        for friend in self.model.nws.friendship_network[self]:
+            if friend in educ_center[course_key]['students']:
+                self.model.run_conversation(self, friend, num_days=num_days)
 
     def study_vocab(self, lang, delta_s_factor=0.25, num_words=100):
         """ Method to update vocabulary without conversations
@@ -763,11 +773,11 @@ class Child(SchoolAgent):
         else:
             self.loc_info['school'] = [school, None]
 
-    def speak_at_school(self, num_days):
-        super().speak_at_school(num_days=num_days)
-        # talk to friends
-        for friend in self.model.nws.friendship_network[self]:
-            self.model.run_conversation(self, friend, num_days=num_days)
+    def speak_at_school(self, school, course_key, num_days=7):
+        super().speak_at_school(school, course_key, num_days=num_days)
+        # talk with teacher
+        teacher = school[course_key]['teacher']
+        self.model.run_conversation(teacher, self, num_days=2)
 
     def stage_1(self, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -777,25 +787,18 @@ class Child(SchoolAgent):
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
         school, course_key = self.get_school_and_course()
         self.model.grid.move_agent(self, school.pos)
+        school.agents_in.add(self)
         # check if school parent is available
         school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
         school_parent = self.get_family_relative(school_parent)
         if school_parent:
+            teacher = school[course_key]['teacher']
             self.model.run_conversation(self, school_parent, num_days=num_days)
-        # TODO : a part of speech from teacher to all course(driven from teacher stage method),
-        school.agents_in.add(self)
-        # talk to teacher and mates
-        # talk with teacher
-        teacher = school.grouped_studs[course_key]['teacher']
-        self.model.run_conversation(teacher, self, num_days=num_days)
-        self.listen(to_agent=teacher, min_age_interlocs=self.info['age'],
-                    num_days=num_days)
-        if school_parent:
             self.model.run_conversation(teacher, school_parent, num_days=2)
-        # talk with school mates
-        # TODO : filter by correlation in language preference
-        self.speak_at_school(num_days)
-        # week-ends time are modeled in PARENTS stages
+        # talk with school mates, friends and teacher
+        # TODO : filter mate selection by correlation in language preference
+        self.speak_at_school(school, course_key, num_days=num_days)
+        # TODO : week-ends time are modeled in PARENTS stages
 
     def stage_3(self, num_days=7):
         school, course_key = self.get_school_and_course()
@@ -828,27 +831,29 @@ class Adolescent(IndepAgent, SchoolAgent):
         else:
             self.loc_info['school'] = [school, None]
 
-    def speak_at_school(self, ix_agent, num_days=7):
-
-
-        # get student school refs
-        school, course_key = self.loc_info['school']
-
-        # talk with school mates
-        mates = school[course_key]['students'].difference({self})
-        if mates:
-            num_mates = random.randint(1, len(mates))
-            mates = random.sample(mates, num_mates)
-            self.model.run_conversation(self, mates, num_days=num_days)
-
+    def speak_at_school(self, school, course_key, num_days=7):
+        super().speak_at_school(num_days=num_days)
         # talk with teacher
         teacher = school[course_key]['teacher']
-        self.model.run_conversation(teacher, self, num_days=2)
+        self.model.run_conversation(teacher, self, num_days=1)
 
-        # talk to close friends
-        if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days)
-        # week-ends time are modeled in PARENTS stages
+        # Define random group at school level with adjacent courses
+        # find index of agent course in sorted courses
+        sorted_courses = sorted(school.grouped_studs.keys())
+        idx = sorted_courses.index(course_key)
+        # find indexes of adjacent courses
+        if idx == 0:
+            idxs = [idx, idx + 1]
+        elif idx == len(sorted_courses) - 1:
+            idxs = [idx - 1, idx]
+        else:
+            idxs = [idx - 1, idx, idx + 1]
+        # get mates from adjacent courses
+        mates = {st for ix in idxs
+                 for st in school[sorted_courses[ix]]['students']
+                 if isinstance(st, SchoolAgent)}
+        mates = mates.difference(self)
+        self.speak_to_random_subgroups(mates, num_days=3)
 
     def evolve(self, new_class, ret_output=False, university=None):
         grown_agent = super().evolve(new_class, ret_output=True)
@@ -875,15 +880,14 @@ class Adolescent(IndepAgent, SchoolAgent):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent, num_days=7):
-        school, course_key = self.loc_info['school']
+        school, course_key = self.get_school_and_course()
         self.model.grid.move_agent(self, school.pos)
-        # TODO : a part of speech from teacher to all course(driven from teacher stage method)
         school.agents_in.add(self)
-        self.speak_at_school(ix_agent)
+        self.speak_at_school(school, course_key, num_days=num_days)
 
     def stage_3(self, ix_agent, num_days=7):
-        school, course_key = self.loc_info['school']
-        self.speak_at_school(ix_agent)
+        school, course_key = self.get_school_and_course()
+        self.speak_at_school(school, course_key, num_days=num_days)
         school.agents_in.remove(self)
         if school.info['lang_policy'] == [0, 1]:
             self.study_vocab('L1', num_words=100)
@@ -894,13 +898,16 @@ class Adolescent(IndepAgent, SchoolAgent):
         elif school.info['lang_policy'] == [1, 2]:
             self.study_vocab('L1', num_words=50)
             self.study_vocab('L2', num_words=100)
+        if self.model.nws.friendship_network[self]:
+            # TODO : add groups, more than one friend
+            self.speak_to_random_friend(ix_agent, num_days=5)
 
     def stage_4(self, ix_agent, num_days=7):
         self.stage_1(ix_agent, num_days=num_days)
         # go out with friends at least once
         num_out = random.randint(1, 5)
         if self.model.nws.friendship_network[self]:
-            # TODO : add groups, more than one friend
+            # TODO : add groups, more than one friend (friends of friends)
             self.speak_to_random_friend(ix_agent, num_days=num_out)
 
 
@@ -917,42 +924,58 @@ class Young(IndepAgent):
         else:
             self.loc_info['job'] = job
 
-    def look_for_partner(self, avg_years=6, age_diff=10, thresh_comm_lang=0.3):
+    def check_partner(self, cand_agent, max_age_diff=10, thresh_comm_lang=0.3):
+
+        # measure max age difference in steps
+        max_age_diff = self.model.steps_per_year * max_age_diff
+
+        # define boolean variables
+        link_description = self.model.nws.known_people_network[self][cand_agent]
+        sex_diff = cand_agent.info['sex'] != self.info['sex']
+        lang_diff = abs(cand_agent.info['language'] - self.info['language'])
+        age_diff = abs(self.info['age'] - cand_agent.info['age'])
+
+        # define knowledge of each agent in common language
+        common_lang = link_description['lang']
+        common_lang = 'L1' if common_lang == 0 else 'L2'
+        pct_1 = self.lang_stats[common_lang]['pct'][self.info['age']]
+        pct_2 = cand_agent.lang_stats[common_lang]['pct'][cand_agent.info['age']]
+
+        # define 4 conditions to marry
+        num_meetings_condition = 'num_meet' in link_description and link_description['num_meet'] > 10
+        diffs_condition = sex_diff and age_diff <= max_age_diff and lang_diff <= 1
+        pre_conditions = isinstance(cand_agent, Young) and not cand_agent.info['married']
+        lang_threshold_condition = pct_1 > thresh_comm_lang and pct_2 > thresh_comm_lang
+
+        if num_meetings_condition and diffs_condition and pre_conditions and lang_threshold_condition:
+            return True
+
+    def look_for_partner(self, avg_years=6, max_age_diff=10, thresh_comm_lang=0.3):
         """ Find partner every avg_years if agent is not married yet. Marrying agents
             must have a sufficiently high knowledge of common language
 
              Args:
                  * avg_years: integer. Real years on average to get a partner
-                 * age_diff: integer. Max difference in real years between partners to get married
+                 * max_age_diff: integer. Max difference in real years between partners to get married
                  * thresh_comm_lang: float. Minimum required knowledge of common lang
         """
         # first check luck ( once every 10 years on average )
         if random.random() < 1 / (avg_years * self.model.steps_per_year):
             # find suitable partner amongst known people
             for ag in self.model.nws.known_people_network[self]:
-                link_description = self.model.nws.known_people_network[self][ag]
-                if ('num_meet' in link_description and link_description['num_meet'] > 10 and
-                ag.info['sex'] != self.info['sex'] and
-                abs(self.info['age'] - ag.info['age']) <= self.model.steps_per_year * age_diff and
-                isinstance(ag, Young) and not ag.info['married']):
-                    if abs(ag.info['language'] - self.info['language']) <= 1:
-                        # check both agents have sufficiently high level in common language
-                        common_lang = link_description['lang']
-                        common_lang = 'L1' if common_lang == 0 else 'L2'
-                        pct_1 = self.lang_stats[common_lang]['pct'][self.info['age']]
-                        pct_2 = ag.lang_stats[common_lang]['pct'][ag.info['age']]
-                        if pct_1 > thresh_comm_lang and pct_2 > thresh_comm_lang:
-                            # set marriage flags and links between partners
-                            self.info['married'] = True
-                            ag.info['married'] = True
-                            fam_nw = self.model.nws.family_network
-                            lang = self.model.nws.known_people_network[self][ag]['lang']
-                            # family network is directed Graph !!
-                            fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
-                            fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
-                            # find appartment to move in together
-                            self.move_to_new_home(ag)
-                            break
+                if self.check_partner(self, ag, max_age_diff=max_age_diff,
+                                      thresh_comm_lang=thresh_comm_lang):
+                    # set marriage flags and links between partners
+                    self.info['married'] = True
+                    ag.info['married'] = True
+                    fam_nw = self.model.nws.family_network
+                    lang = self.model.nws.known_people_network[self][ag]['lang']
+                    # family network is directed Graph !!
+                    fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
+                    fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
+                    # find appartment to move in together
+                    self.move_to_new_home(ag)
+                    break
 
     def reproduce(self, day_prob=0.001, max_num_children=4):
         """ give birth to a new agent if conditions and likelihoods are met """
@@ -1113,6 +1136,7 @@ class Young(IndepAgent):
         pass
 
     def stage_4(self, ix_agent):
+        self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
         if not self.info['married'] and self.loc_info['job']:
@@ -1224,6 +1248,7 @@ class Adult(Young): # from 30 to 65
         pass
 
     def stage_4(self, ix_agent, num_days=7):
+        self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
         if not self.info['married'] and self.loc_info['job']:

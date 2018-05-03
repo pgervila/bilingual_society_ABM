@@ -195,6 +195,7 @@ class NetworkBuilder:
                     for (i, j) in [(agent, relat), (relat, agent)]:
                         k_people_nw.add_edge(i, j, family=True, lang=com_lang)
 
+
     def plot_family_networks(self):
         """PLOT NETWORK with lang colors and position"""
         #        people_pos = [elem.pos for elem in self.schedule.agents if elem.agent_type == 'language']
