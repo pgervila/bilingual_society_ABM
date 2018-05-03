@@ -515,21 +515,24 @@ class SpeakerAgent(ListenerAgent):
               other not in self.model.nws.friendship_network[self]):
             self.model.nws.known_people_network[self][other]['num_meet'] += 1
 
-    def speak_to_random_subgroups(self, group, num_days=7):
+    def speak_in_random_subgroups(self, group, num_days=7, max_group_size=6):
         """
             Randomly select a subset of a given group
             and speak to it. Then select a random member of the subgroup
-            and speak to that member
+            and speak to that member.
+            Args:
+                * group: a list, a tuple or a set of agent instances
+                * num_days: integer. Out of 10, number of days action will take place
+                * max_group_size: integer > 0. Maximum size of random group
         """
         if group:
-            num_mates = random.randint(1, len(group))
+            num_mates = random.randint(1, min(len(group), max_group_size))
             # Choose 'num_mates' unique random mates
             speak_group = random.sample(group, num_mates)
             self.model.run_conversation(self, speak_group, num_days=num_days)
             # talk to a single random mate
             random_mate = np.random.choice(speak_group)
             self.model.run_conversation(self, random_mate, num_days=num_days)
-
 
     def stage_1(self, num_days=10):
         ags_at_home = self.loc_info['home'].agents_in.difference({self})
@@ -566,7 +569,7 @@ class SchoolAgent(SpeakerAgent):
                                    if isinstance(ag, SchoolAgent)])
         # talk to random mates in group
         mates = speak_ags_in_course.difference({self})
-        self.speak_to_random_subgroups(mates, num_days=num_days)
+        self.speak_in_random_subgroups(mates, num_days=num_days)
         # talk to friends
         for friend in self.model.nws.friendship_network[self]:
             if friend in educ_center[course_key]['students']:
@@ -832,28 +835,17 @@ class Adolescent(IndepAgent, SchoolAgent):
             self.loc_info['school'] = [school, None]
 
     def speak_at_school(self, school, course_key, num_days=7):
-        super().speak_at_school(num_days=num_days)
+        super().speak_at_school(school, course_key, num_days=num_days)
         # talk with teacher
         teacher = school[course_key]['teacher']
         self.model.run_conversation(teacher, self, num_days=1)
 
+        age = self.info['age']
         # Define random group at school level with adjacent courses
-        # find index of agent course in sorted courses
-        sorted_courses = sorted(school.grouped_studs.keys())
-        idx = sorted_courses.index(course_key)
-        # find indexes of adjacent courses
-        if idx == 0:
-            idxs = [idx, idx + 1]
-        elif idx == len(sorted_courses) - 1:
-            idxs = [idx - 1, idx]
-        else:
-            idxs = [idx - 1, idx, idx + 1]
-        # get mates from adjacent courses
-        mates = {st for ix in idxs
-                 for st in school[sorted_courses[ix]]['students']
-                 if isinstance(st, SchoolAgent)}
-        mates = mates.difference(self)
-        self.speak_to_random_subgroups(mates, num_days=3)
+        mates = {st for st in school.info['students']
+                 if st.info['age'] in [age-1, age, age+1]}
+        mates = mates.difference({self})
+        self.speak_in_random_subgroups(mates, num_days=3)
 
     def evolve(self, new_class, ret_output=False, university=None):
         grown_agent = super().evolve(new_class, ret_output=True)
@@ -963,7 +955,7 @@ class Young(IndepAgent):
         if random.random() < 1 / (avg_years * self.model.steps_per_year):
             # find suitable partner amongst known people
             for ag in self.model.nws.known_people_network[self]:
-                if self.check_partner(self, ag, max_age_diff=max_age_diff,
+                if self.check_partner(ag, max_age_diff=max_age_diff,
                                       thresh_comm_lang=thresh_comm_lang):
                     # set marriage flags and links between partners
                     self.info['married'] = True
@@ -1115,10 +1107,6 @@ class Young(IndepAgent):
                     if child.info['age'] > self.model.steps_per_year:
                         child.register_to_school()
 
-    def speak_with_colleagues(self):
-        ag_init = None
-        others = []
-        self.model.run_conversation(ag_init, others, num_days=7)
 
     def random_death(self):
         dead = super().random_death(ret_out=True)
@@ -1131,9 +1119,18 @@ class Young(IndepAgent):
     def stage_2(self, ix_agent):
         if not self.loc_info['job']:
             self.look_for_job()
+        else:
+            job = self.loc_info['job']
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        pass
+        if not self.loc_info['job']:
+            self.look_for_job()
+        else:
+            job = self.loc_info['job']
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_4(self, ix_agent):
         self.stage_1(ix_agent, num_days=7)
@@ -1145,11 +1142,11 @@ class Young(IndepAgent):
             self.evolve(Adult)
 
 
-class YoungUniv(IndepAgent, SchoolAgent):
+class YoungUniv(Adolescent):
     age_low, age_high = 18, 24
 
     def __init__(self, *args, university=None, fac_key=None, **kwargs):
-        super().__init__(*args, **kwargs)
+        BaseAgent.__init__(self, *args, **kwargs)
 
         if university and fac_key:
             university[fac_key].assign_stud(self)
@@ -1165,7 +1162,7 @@ class YoungUniv(IndepAgent, SchoolAgent):
         return educ_center, course_key
 
     def evolve(self, new_class, ret_output=False):
-        grown_agent = super().evolve(new_class, ret_output=True)
+        grown_agent = BaseAgent.evolve(self, new_class, ret_output=True)
         # new agent will not go to university in any case
         del grown_agent.loc_info['university']
         grown_agent.info.update({'married': False, 'num_children': 0})
@@ -1197,18 +1194,30 @@ class YoungUniv(IndepAgent, SchoolAgent):
         # assign new home to agent
         new_home.assign_to_agent(self)
 
+    def speak_at_school(self, faculty, course_key, num_days=7):
+        super().speak_at_school(faculty, course_key, num_days=num_days)
+        age = self.info['age']
+        # Speak to random group at university level with adjacent courses
+        univ = self.loc_info['university'][0]
+        mates = {st for st in univ.info['students']
+                 if st.info['age'] in [age-1, age, age+1]}
+        mates = mates.difference({self})
+        self.speak_in_random_subgroups(mates, num_days=2)
 
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
-    def stage_2(self, ix_agent):
-        pass
+    def stage_2(self, ix_agent, num_days=7):
+        faculty, course_key = self.get_school_and_course()
+        self.speak_at_school(faculty, course_key, num_days=num_days)
 
-    def stage_3(self, ix_agent):
-        pass
+    def stage_3(self, ix_agent, num_days=7):
+        faculty, course_key = self.get_school_and_course()
+        self.speak_at_school(faculty, course_key, num_days=num_days)
 
     def stage_4(self, ix_agent):
-        pass
+        super().stage_4(ix_agent)
+        # TODO: visit family, meet siblings
 
 
 class Adult(Young): # from 30 to 65
@@ -1241,11 +1250,10 @@ class Adult(Young): # from 30 to 65
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        pass
-    # TODO : model lunch time with colleagues
+        super().stage_2(ix_agent)
 
     def stage_3(self, ix_agent):
-        pass
+        super().stage_2(ix_agent)
 
     def stage_4(self, ix_agent, num_days=7):
         self.stage_1(ix_agent, num_days=7)
@@ -1263,6 +1271,13 @@ class Worker(Adult):
 
 
 class Teacher(Adult):
+
+    def get_school_and_course(self):
+        """
+            Method to get school center and corresponding course for teacher agent
+        """
+        educ_center, course_key = self.loc_info['job']
+        return educ_center, course_key
 
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)
@@ -1290,26 +1305,35 @@ class Teacher(Adult):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        job, course_key = self.loc_info['job']
+        job, course_key = self.get_school_and_course()
         self.model.grid.move_agent(self, job.pos)
         job.agents_in.add(self)
         self.speak_to_class()
-
-
-        # teacher has lunch with colleagues
+        colleagues = job.info['employees']
+        self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        job, course_key = self.loc_info['job']
+        job, course_key = self.get_school_and_course()
         self.speak_to_class()
+        colleagues = job.info['employees']
+        self.speak_in_random_subgroups(colleagues)
 
         self.speak_to_random_friend(ix_agent, num_days=3)
 
-    def stage_4(self, ix_agent):
+    def stage_4(self, ix_agent, num_days=7):
         # TODO : trigger teacher replacement after pension
-        pass
+        super().stage_4(ix_agent, num_days=num_days)
 
 
 class TeacherUniv(Teacher):
+
+    def get_school_and_course(self):
+        """
+            Method to get school center and corresponding course for teacher agent
+        """
+        educ_center, course_key, fac_key = self.loc_info['job']
+        educ_center = educ_center.faculties[fac_key]
+        return educ_center, course_key
 
     def random_death(self):
         univ, course_key, fac_key = self.loc_info['job']
@@ -1326,16 +1350,19 @@ class TeacherUniv(Teacher):
                 self.speak_to_group(studs, 0)
 
     def stage_2(self, ix_agent):
-        job, course_key, fac_key = self.loc_info['job']
-        self.model.grid.move_agent(self, job.pos)
-        job[fac_key].agents_in.add(self)
+        fac, course_key = self.get_school_and_course()
+        self.model.grid.move_agent(self, fac.pos)
+        fac.agents_in.add(self)
         self.speak_to_class()
 
-        # teacher has lunch with colleagues
+        colleagues = fac.info['employees']
+        self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        job, course_key, fac_key = self.loc_info['job']
+        fac, course_key = self.get_school_and_course()
         self.speak_to_class()
+        colleagues = fac.info['employees']
+        self.speak_in_random_subgroups(colleagues)
 
         self.speak_to_random_friend(ix_agent, num_days=3)
 
@@ -1348,7 +1375,7 @@ class Pensioner(Adult): # from 65 to death
     def random_death(self):
         BaseAgent.random_death(self)
 
-    def stage_1(self, ix_agent, num_days=7):
+    def stage_1(self, ix_agent, num_days=10):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
@@ -1359,8 +1386,8 @@ class Pensioner(Adult): # from 65 to death
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
 
-    def stage_4(self, ix_agent):
-        pass
+    def stage_4(self, ix_agent, num_days=10):
+        super().stage_4(ix_agent, num_days=num_days)
 
 
 # class LanguageAgent:
