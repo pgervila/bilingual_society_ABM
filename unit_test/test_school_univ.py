@@ -10,7 +10,7 @@ import agent
 import model
 reload(agent)
 reload(model)
-from agent import Child, Adolescent, YoungUniv, Young, Adult, Worker, Teacher
+from agent import BaseAgent, Child, Adolescent, YoungUniv, Young, Adult, Worker, Teacher
 from model import LanguageModel
 
 @pytest.fixture(scope="module")
@@ -50,6 +50,12 @@ def test_school_set_up_and_update(model):
 #                       if 'teacher' in course])
 #         assert s1_old == s2_old
         school.update_courses()
+        for k, c_info in school.grouped_studs.items():
+            assert c_info['teacher'].loc_info['job'][1] == k
+        num_course_teachers = len([t for t in school.info['employees'] 
+                                   if t.loc_info['job'][1]])
+        num_courses = len(school.grouped_studs)
+        assert num_course_teachers == num_courses
     studs = school.grouped_studs[18]['students'].copy()
     for st in list(school.info['students'])[:]:
         st.info['age'] += 36
@@ -95,7 +101,6 @@ def test_school_set_up_and_update(model):
             assert ags['teacher']
             assert ags['teacher'].loc_info['job'][1] == k
     
-
 def test_univ_set_up_and_update(model):
     # get agents from schools to send them to univ
     schools = [school for cl_info in model.geo.clusters_info.values() 
@@ -182,5 +187,12 @@ def test_assign_new_stud_to_course(model):
     assert new_student in school.grouped_studs[new_stud_course]['students']
     assert new_student.loc_info['school'][1] == new_stud_course
 
-def test_dead_teacher(model):
-    pass
+def test_teacher_death(model):
+    school = model.geo.clusters_info[0]['schools'][0]
+    ck = list(school.grouped_studs.keys())[0]
+    teacher = school[ck]['teacher']
+    with patch('agent.BaseAgent.random_death') as mock_rand_death:
+        mock_rand_death.return_value = True
+        teacher.random_death()
+        assert school[ck]['teacher'] != teacher
+        assert school[ck]['teacher']

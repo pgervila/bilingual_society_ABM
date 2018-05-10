@@ -11,7 +11,21 @@ from zipf_generator import randZipf, Zipf_Mand_CDF_compressed
 
 
 class BaseAgent:
-    """ Basic agent class that contains attributes and methods common to all lang agents subclasses"""
+    """ Basic agent class that contains attributes and
+        methods common to all lang agents subclasses
+        Args:
+            * model: model class instance
+            * unique_id: integer
+            * language: integer in [0, 1, 2]. 0 -> mono L1, 1 -> bilingual , 2 -> mono L2
+            * sex: string. Either 'M' or 'F'
+            * age: integer
+            * home: home class instance
+            * lang_act_thresh: float. Minimum percentage of known words to be able
+                to ACTIVELY communicate in a given language
+            * lang_passive_thresh: float. Minimum percentage of known words to be able
+                to PASSIVELY understand a given language
+            * import_ic: boolean. True if linguistic initial conditions must be imported
+    """
 
     # define memory retrievability constant
     k = np.log(10 / 9)
@@ -527,7 +541,7 @@ class SpeakerAgent(ListenerAgent):
         """
         if group:
             num_mates = random.randint(1, min(len(group), max_group_size))
-            # Choose 'num_mates' unique random mates
+            # Choose n = 'num_mates' unique random mates
             speak_group = random.sample(group, num_mates)
             self.model.run_conversation(self, speak_group, num_days=num_days)
             # talk to a single random mate
@@ -597,7 +611,7 @@ class SchoolAgent(SpeakerAgent):
         if dead:
             educ_center.remove_course(course_key)
 
-    def register_to_school(self):
+    def find_school(self):
         # find closest school in cluster
         clust_info = self.model.geo.clusters_info[self.loc_info['home'].clust]
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
@@ -917,6 +931,7 @@ class Young(IndepAgent):
             self.loc_info['job'] = job
 
     def check_partner(self, cand_agent, max_age_diff=10, thresh_comm_lang=0.3):
+        """ Check conditions that must be satisfied in order to get married """
 
         # measure max age difference in steps
         max_age_diff = self.model.steps_per_year * max_age_diff
@@ -949,7 +964,7 @@ class Young(IndepAgent):
              Args:
                  * avg_years: integer. Real years on average to get a partner
                  * max_age_diff: integer. Max difference in real years between partners to get married
-                 * thresh_comm_lang: float. Minimum required knowledge of common lang
+                 * thresh_comm_lang: float. Minimum required knowledge of common lang by each agent
         """
         # first check luck ( once every 10 years on average )
         if random.random() < 1 / (avg_years * self.model.steps_per_year):
@@ -1028,7 +1043,6 @@ class Young(IndepAgent):
             else:
                 self.move_to_new_home(marriage=False)
 
-
     def switch_job(self, new_job):
             pass
 
@@ -1040,7 +1054,8 @@ class Young(IndepAgent):
                 it is assumed moving is because of job reasons
         """
 
-        # self has a job as condition to marry
+        # self already has a job since it is a pre-condition to move to a new home
+        # import pdb;pdb.set_trace()
         clust_1 = self.loc_info['home'].clust
         job_1 = self.loc_info['job']
         job_1 = job_1[0] if isinstance(job_1, list) else job_1
@@ -1058,23 +1073,28 @@ class Young(IndepAgent):
             if job_2:
                 # defined sum of distances from jobs to each home to sort by it
                 job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
-                if clust_1 == clust_2 :
+                if clust_1 == clust_2:
+                    # both consorts keep jobs
                     sorted_homes = sorted(free_homes_clust_1, key=job_dist_fun )
                     new_home = sorted_homes[0]
                 else:
                     # married agents live and work in different clusters
                     # move to the town with more job offers
                     num_jobs_1 = len(self.model.geo.clusters_info[clust_1]['jobs'])
-                    num_jobs_2 = len(consort.model.geo.clusters_info[clust_1]['jobs'])
+                    num_jobs_2 = len(consort.model.geo.clusters_info[clust_2]['jobs'])
                     if num_jobs_1 >= num_jobs_2:
+                        # consort gives up job_2
                         sorted_homes = sorted(free_homes_clust_1,
-                                              key=job_dist_fun)
+                                              key=lambda home: pdist([job_1.pos, home.pos]))
+                        job_2.remove_employee(consort)
                     else:
+                        # self gives up job_1
                         free_homes_clust2 = [home for home
                                              in self.model.geo.clusters_info[clust_2]['homes']
                                              if not home.info['occupants']]
                         sorted_homes = sorted(free_homes_clust2,
-                                              key=job_dist_fun)
+                                              key=lambda home: pdist([job_2.pos, home.pos]))
+                        job_1.remove_employee(self)
                     new_home = sorted_homes[0]
             else:
                 # consort has no job
@@ -1084,29 +1104,33 @@ class Young(IndepAgent):
                 new_home = sorted_homes[home_ix]
             new_home.assign_to_agent([self, consort])
         else:
-            sorted_homes = sorted(free_homes_clust_1, key=lambda home: pdist([job_1.pos, home.pos])[0])
+            # moving for job reasons, family, if any, will follow
+            sorted_homes = sorted(free_homes_clust_1,
+                                  key=lambda home: pdist([job_1.pos, home.pos])[0])
             home_ix = random.randint(1, int(len(sorted_homes) / 2))
             new_home = sorted_homes[home_ix]
+
             if not self.info['married']:
-                # assign new home to self agent alone
-                new_home.assign_to_agent(self)
+                moving_agents = [self]
             else:
                 # partner will find job in new cluster and children will change school
                 consort = self.get_family_relative('consort')
-                children = self.get_family_relative('child')
-                new_home.assign_to([self, consort] + children)
+                moving_agents = [self, consort]
                 # remove consort from job
                 job_2 = consort.loc_info['job']
                 job_2 = job_2[0] if isinstance(job_2, list) else job_2
                 job_2.remove_employee(consort)
-                # remove children from old school, enroll them in a new one
-                for child in children:
-                    school = child.loc_info['school'][0]
-                    if school:
-                        school.remove_student(child)
-                    if child.info['age'] > self.model.steps_per_year:
-                        child.register_to_school()
+            # find out if there are children that will have to move too
+            children = self.get_family_relative('child')
+            children = [child for child in children
+                        if not isinstance(child, (Young, YoungUniv))]
 
+            new_home.assign_to_agent(moving_agents + children)
+
+            # remove children from old school, enroll them in a new one
+            for child in children:
+                if child.info['age'] >= self.model.steps_per_year:
+                    child.find_school()
 
     def random_death(self):
         dead = super().random_death(ret_out=True)
@@ -1380,14 +1404,16 @@ class Pensioner(Adult): # from 65 to death
 
     def stage_2(self, ix_agent):
         if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days=5)
+            self.speak_to_random_friend(ix_agent, num_days=7)
 
     def stage_3(self, ix_agent):
         if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days=5)
+            self.speak_to_random_friend(ix_agent, num_days=7)
 
     def stage_4(self, ix_agent, num_days=10):
-        super().stage_4(ix_agent, num_days=num_days)
+        self.stage_1(ix_agent, num_days=7)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days=7)
 
 
 # class LanguageAgent:

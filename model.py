@@ -361,6 +361,14 @@ class LanguageModel(Model):
             Replacement by grown_agent will depend on self type
         """
         # TODO : should it be a geomapping method ?
+
+        # remove old instance from cluster (and replace with new one if requested)
+        if replace:
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust,
+                                             update_type='replace', grown_agent=grown_agent)
+        else:
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust)
+
         # remove agent from all locations where it belongs to
         for key in agent.loc_info:
             if key == 'school':
@@ -376,15 +384,15 @@ class LanguageModel(Model):
                 if isinstance(agent, TeacherUniv):
                     univ, course_key, fac_key = agent.loc_info['job']
                     if isinstance(grown_agent, Pensioner):
-                        univ.faculties[fac_key].remove_teacher(agent)
+                        univ.faculties[fac_key].remove_employee(agent)
                     else:
-                        univ.faculties[fac_key].remove_teacher(agent, replace=replace, new_teacher=grown_agent)
+                        univ.faculties[fac_key].remove_employee(agent, replace=replace, new_teacher=grown_agent)
                 elif isinstance(agent, Teacher):
                     school, course_key = agent.loc_info['job']
                     if isinstance(grown_agent, Pensioner):
-                        school.remove_teacher(agent)
+                        school.remove_employee(agent)
                     else:
-                        school.remove_teacher(agent, replace=replace, new_teacher=grown_agent)
+                        school.remove_employee(agent, replace=replace, new_teacher=grown_agent)
                 elif isinstance(agent, Adult):
                     job = agent.loc_info['job']
                     job.remove_employee(agent)
@@ -394,13 +402,6 @@ class LanguageModel(Model):
             elif key == 'university':
                 univ, course_key, fac_key = agent.loc_info['university']
                 univ.faculties[fac_key].remove_student(agent)
-
-        # remove old instance from cluster (and replace with new one if requested)
-        if replace:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust,
-                                             update_type='replace', grown_agent=grown_agent)
-        else:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust)
 
     def remove_after_death(self, agent):
         """
