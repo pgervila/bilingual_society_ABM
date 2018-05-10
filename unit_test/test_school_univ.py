@@ -182,7 +182,7 @@ def test_assign_new_stud_to_course(model):
     new_student = Adolescent(model, model.num_people + 1,
                              1, 'M', home=home, age = 13 * 36 + 5 )
     school = model.geo.clusters_info[0]['schools'][0]
-    school.assign_stud(new_student)
+    school.assign_student(new_student)
     new_stud_course = int(new_student.info['age'] / model.steps_per_year)
     assert new_student in school.grouped_studs[new_stud_course]['students']
     assert new_student.loc_info['school'][1] == new_stud_course

@@ -143,14 +143,16 @@ class EducationCenter:
             self.group_students_per_year()
         self.hire_teachers(self.grouped_studs.keys())
 
-    def assign_stud(self, student):
+    def assign_student(self, student):
         """
-            Assign student to school and corresponding course.
-            Create new course if it does not exist already
+            Method that ssigns student to educational center( school or university)
+            and corresponding course.
+            It creates new course in center if it does not already exist
+            It checks for old school if any and removes student from it
             Args:
                 * student: agent instance.
         """
-        # First check if student already has a school
+        # First check school student comes from, if any
         try:
             old_school = student.loc_info['school'][0]
         except KeyError:
@@ -158,15 +160,19 @@ class EducationCenter:
         if old_school:
             old_school.remove_student(student)
 
-        # Now assign to new school and corresponding course
+        # Now assign student to new educ_center and corresponding course
         course_key = int(student.info['age'] / self.model.steps_per_year)
+        # assign student if course already exists, otherwise create course
         if course_key in self.grouped_studs:
-            # if course already exists
             self[course_key]['students'].add(student)
         else:
             self.grouped_studs[course_key] = {'students': {student}}
             self.hire_teachers([course_key])
         self.info['students'].add(student)
+
+    def remove_student(self, student):
+        """ Method will be implemented in subclasses"""
+        pass
 
     def update_courses(self, max_course_dist=3):
         """
@@ -340,8 +346,8 @@ class School(EducationCenter):
                 hired_t = hired_t.evolve(Teacher, ret_output=True)
             self.assign_teacher(hired_t, k)
 
-    def assign_stud(self, student):
-        super().assign_stud(student)
+    def assign_student(self, student):
+        super().assign_student(student)
         course_key = int(student.info['age'] / self.model.steps_per_year)
         student.loc_info['school'] = [self, course_key]
 
@@ -465,8 +471,8 @@ class Faculty(EducationCenter):
         for st in list(studs):
             st.evolve(Young)
 
-    def assign_stud(self, student):
-        super().assign_stud(student)
+    def assign_student(self, student):
+        super().assign_student(student)
 
         self.univ.info['students'].add(student)
         course_key = int(student.info['age'] / self.model.steps_per_year)

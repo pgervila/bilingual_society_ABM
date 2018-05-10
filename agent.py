@@ -618,7 +618,7 @@ class SchoolAgent(SpeakerAgent):
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
         # register
-        school.assign_stud(self)
+        school.assign_student(self)
 
 
 class IndepAgent(SpeakerAgent):
@@ -700,7 +700,7 @@ class Baby(ListenerAgent):
         self.model.nws.set_family_links(self, father, mother, lang_with_father, lang_with_mother)
 
         if school:
-            school.assign_stud(self)
+            school.assign_student(self)
         else:
             self.loc_info['school'] = [school, None]
 
@@ -711,7 +711,7 @@ class Baby(ListenerAgent):
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
         # register
-        school.assign_stud(self)
+        school.assign_student(self)
 
     def random_death(self):
         dead = super().random_death(ret_out=True)
@@ -786,7 +786,7 @@ class Child(SchoolAgent):
         # TODO: add extra args specific to this class if needed
         super().__init__(*args, **kwargs)
         if school:
-            school.assign_stud(self)
+            school.assign_student(self)
         else:
             self.loc_info['school'] = [school, None]
 
@@ -844,7 +844,7 @@ class Adolescent(IndepAgent, SchoolAgent):
     def __init__(self, *args, school=None, **kwargs):
         super().__init__(*args, **kwargs)
         if school:
-            school.assign_stud(self)
+            school.assign_student(self)
         else:
             self.loc_info['school'] = [school, None]
 
@@ -870,7 +870,7 @@ class Adolescent(IndepAgent, SchoolAgent):
             if university:
                 fac_key = random.choice(string.ascii_letters[:5])
                 fac = university.faculties[fac_key]
-                fac.assign_stud(grown_agent)
+                fac.assign_student(grown_agent)
                 # agent moves to new home if he has to change cluster to attend univ
                 if fac.info['clust'] != grown_agent.loc_info['home'].clust:
                     grown_agent.move_to_new_home()
@@ -1173,10 +1173,10 @@ class YoungUniv(Adolescent):
         BaseAgent.__init__(self, *args, **kwargs)
 
         if university and fac_key:
-            university[fac_key].assign_stud(self)
+            university[fac_key].assign_student(self)
         elif university and not fac_key:
             fac_key = random.choice(string.ascii_letters[:5])
-            university[fac_key].assign_stud(self)
+            university[fac_key].assign_student(self)
         else:
             self.loc_info['university'] = [university, None, fac_key]
 
