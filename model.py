@@ -356,7 +356,7 @@ class LanguageModel(Model):
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
-    def remove_from_locations(self, agent, replace=False, grown_agent=None):
+    def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """ Method to remove agent instance from locations in agent loc_info dict attribute
             Replacement by grown_agent will depend on self type
         """
@@ -375,8 +375,9 @@ class LanguageModel(Model):
                 school = agent.loc_info['school'][0]
                 if isinstance(agent, (Baby, Child)):
                     school.remove_student(agent, replace=replace, grown_agent=grown_agent)
-                else:
-                    school.remove_student(agent)
+                elif isinstance(agent, Adolescent):
+                    # if Adolescent, agent will never be replaced at school by grown agent
+                    school.remove_student(agent, upd_course=upd_course)
             elif key == 'home':
                 home = agent.loc_info['home']
                 home.remove_agent(agent, replace=replace, grown_agent=grown_agent)
@@ -401,7 +402,7 @@ class LanguageModel(Model):
                     job.remove_employee(agent, replace=replace, new_agent=grown_agent)
             elif key == 'university':
                 univ, course_key, fac_key = agent.loc_info['university']
-                univ.faculties[fac_key].remove_student(agent)
+                univ.faculties[fac_key].remove_student(agent, upd_course=upd_course)
 
     def remove_after_death(self, agent):
         """
@@ -423,7 +424,7 @@ class LanguageModel(Model):
                 network.remove_node(agent)
             except nx.NetworkXError:
                 continue
-        # remove agent from all locations where it might have been
+        # remove agent from all locations where it belonged to
         self.remove_from_locations(agent)
         # remove agent from grid and schedule
         self.grid._remove_agent(agent.pos, agent)

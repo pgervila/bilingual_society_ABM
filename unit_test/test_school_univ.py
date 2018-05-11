@@ -17,7 +17,7 @@ from model import LanguageModel
 def model():
     return LanguageModel(500, num_clusters=3) 
 
-#@pytest.mark.parametrize()
+
 def test_group_students_per_year(model):
     # check that num_employees_per_school is the same as num_courses_per_school
     num_employees_per_school = [len(model.geo.clusters_info[x]['schools'][y].info['employees'])
@@ -29,6 +29,7 @@ def test_group_students_per_year(model):
                               for y in range(len(model.geo.clusters_info[x]['schools']))]
     
     assert num_employees_per_school == num_courses_per_school
+
 
 def test_school_set_up_and_update(model):
     i = np.random.randint(0, 3)
@@ -63,12 +64,12 @@ def test_school_set_up_and_update(model):
             st.evolve(Adolescent)
     school.update_courses()
     i_max = np.argmax(model.geo.cluster_sizes)
-    univ = model.geo.clusters_info[i_max]['university']
     for (k, ags) in school.grouped_studs.items():
         assert ags['students']
         assert ags['teacher']
     # check some students are correctly enrolled in univ
     # check all working links with school are erased after completing school education
+    univ = model.geo.clusters_info[i_max]['university']
     for stud in studs:
         assert stud not in school.info['students']
         assert 'school' not in stud.loc_info
@@ -76,10 +77,9 @@ def test_school_set_up_and_update(model):
             assert stud.loc_info['university'][0] == univ
                 
     # test teacher retirement
-    
     rand_teacher = np.random.choice([t for t in school.info['employees'] 
                                      if t.loc_info['job'][1]])
-    while ( rand_teacher.info['age'] / 36 ) <= 65:
+    while (rand_teacher.info['age'] / 36 ) <= 65:
         rand_teacher.info['age'] += 36
     course_key = rand_teacher.loc_info['job'][1]
     school.update_courses()
@@ -100,7 +100,8 @@ def test_school_set_up_and_update(model):
             assert ags['students']
             assert ags['teacher']
             assert ags['teacher'].loc_info['job'][1] == k
-    
+
+
 def test_univ_set_up_and_update(model):
     # get agents from schools to send them to univ
     schools = [school for cl_info in model.geo.clusters_info.values() 
@@ -147,8 +148,9 @@ def test_univ_set_up_and_update(model):
     for stud in jm_studs:
         assert stud not in fac.info['students']
         assert stud not in fac.univ.info['students']
-        assert stud.loc_info['university'] == None
+        assert stud.loc_info['university'] is None
         assert 'course_key' not in stud.loc_info
+
 
 def test_hire_teachers(model):
     i = np.random.randint(0, 3)
@@ -165,7 +167,8 @@ def test_hire_teachers(model):
             assert t.loc_info['job'][1] == rand_course
     else:
         pass
-    
+
+
 def test_teachers_course_swap(model):
     for i in range(model.num_clusters):
         school = model.geo.clusters_info[i]['schools'][0]
@@ -176,7 +179,8 @@ def test_teachers_course_swap(model):
         ts_after = [school.grouped_studs[k]['teacher'] for k in sorted_keys]
         for pair_bf, pair_aft in zip(zip(*[iter(ts_bf)] * 2), zip(*[iter(ts_after)] * 2)):
             assert pair_bf == pair_aft[::-1]
-                  
+
+
 def test_assign_new_stud_to_course(model):
     home = model.geo.clusters_info[0]['homes'][0]
     new_student = Adolescent(model, model.num_people + 1,

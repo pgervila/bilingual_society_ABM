@@ -143,37 +143,6 @@ class EducationCenter:
             self.group_students_per_year()
         self.hire_teachers(self.grouped_studs.keys())
 
-    def assign_student(self, student):
-        """
-            Method that ssigns student to educational center( school or university)
-            and corresponding course.
-            It creates new course in center if it does not already exist
-            It checks for old school if any and removes student from it
-            Args:
-                * student: agent instance.
-        """
-        # First check school student comes from, if any
-        try:
-            old_school = student.loc_info['school'][0]
-        except KeyError:
-            old_school = None
-        if old_school:
-            old_school.remove_student(student)
-
-        # Now assign student to new educ_center and corresponding course
-        course_key = int(student.info['age'] / self.model.steps_per_year)
-        # assign student if course already exists, otherwise create course
-        if course_key in self.grouped_studs:
-            self[course_key]['students'].add(student)
-        else:
-            self.grouped_studs[course_key] = {'students': {student}}
-            self.hire_teachers([course_key])
-        self.info['students'].add(student)
-
-    def remove_student(self, student):
-        """ Method will be implemented in subclasses"""
-        pass
-
     def update_courses(self, max_course_dist=3):
         """
             Method to update courses at the end of the year. It moves all students forward to
@@ -188,7 +157,6 @@ class EducationCenter:
             self.group_students_per_year()
         else:
             # define empty set to update school groups
-            import pdb; pdb.set_trace()
             updated_groups = {}
             # define Teacher retirement age in years
             retirement_age = Teacher.age_high * self.model.steps_per_year
@@ -241,6 +209,7 @@ class EducationCenter:
                 missing_teachers_keys.remove(mt_key)
 
             # check if there are still jobless teachers left in school
+            # remove reference to course in their job spec
             if jobless_teachers_keys:
                 # TODO : for jobless teachers, find another occupation. Use them when needed
                 for jlt_key in jobless_teachers_keys:
@@ -253,13 +222,47 @@ class EducationCenter:
             if missing_teachers_keys:
                 self.hire_teachers(missing_teachers_keys)
 
-    def remove_student_from_course(self, student, educ_center, replace=None, grown_agent=None):
-        """ remove students from their course, and optionally replace them with grown_agents
+    def assign_student(self, student):
+        """
+            Method that assigns student to educational center( school or university)
+            and corresponding course.
+            It creates new course in center if it does not already exist
+            It checks for old school if any and removes student from it
+            Args:
+                * student: agent instance.
+        """
+
+        # First check school student comes from, if any
+        try:
+            old_school = student.loc_info['school'][0]
+        except KeyError:
+            old_school = None
+        if old_school:
+            old_school.remove_student(student)
+
+        # Now assign student to new educ_center and corresponding course
+        course_key = int(student.info['age'] / self.model.steps_per_year)
+        # assign student if course already exists, otherwise create course
+        if course_key in self.grouped_studs:
+            self[course_key]['students'].add(student)
+        else:
+            self.grouped_studs[course_key] = {'students': {student}}
+            self.hire_teachers([course_key])
+        self.info['students'].add(student)
+
+    def remove_student(self, student):
+        """ Method will be implemented in subclasses"""
+        pass
+
+    def remove_student_from_course(self, student, educ_center, replace=None, grown_agent=None, upd_course=False):
+        """
+            Remove students from their course, and optionally replace them with grown_agents
             Args:
                 * student: agent instance
                 * educ_center: string. It is either 'school' or 'university'
                 * replace:boolean. If True, grown_agent msut be specified
                 * grown_agent: agent instance
+                * upd_course: boolean. False if removal does not involve exit towards university or job market
         """
         course_key = student.loc_info[educ_center][1]
         self[course_key]['students'].remove(student)
@@ -267,7 +270,7 @@ class EducationCenter:
             self[course_key]['students'].add(grown_agent)
 
         # check if there are students left in course
-        if not self[course_key]['students']:
+        if not self[course_key]['students'] and not upd_course:
             self.remove_course(course_key)
 
     def remove_teacher_from_course(self, teacher, replace=None, new_teacher=None):
@@ -365,11 +368,11 @@ class School(EducationCenter):
                                      size=ceil(0.5 * len(studs)),
                                      replace=False)
         for st in univ_stds:
-            st.evolve(YoungUniv, university=univ)
+            st.evolve(YoungUniv, university=univ, upd_course=True)
         # rest of last year students to job market
         job_stds = set(studs).difference(set(univ_stds))
         for st in job_stds:
-            st.evolve(Young)
+            st.evolve(Young, upd_course=True)
 
     def swap_teachers_courses(self):
         """ Every n years on average teachers are swapped between classes """
@@ -382,15 +385,15 @@ class School(EducationCenter):
             (self[k1]['teacher'],
              self[k2]['teacher']) = (self[k2]['teacher'], self[k1]['teacher'])
 
-    def remove_student(self, student, replace=False, grown_agent=None):
-        # TODO: check course is not left empty after student leaves !!
+    def remove_student(self, student, replace=False, grown_agent=None, upd_course=False):
         self.info['students'].remove(student)
-        self.remove_agent_in(student)
         # replace agent only if it is not an adolescent
         if replace and not isinstance(student, Adolescent):
             self.info['students'].add(grown_agent)
         # course_key
-        self.remove_student_from_course(student, 'school', replace=replace, grown_agent=grown_agent)
+        self.remove_student_from_course(student, 'school', replace=replace, grown_agent=grown_agent,
+                                        upd_course=upd_course)
+        self.remove_agent_in(student)
 
 
 
@@ -469,7 +472,7 @@ class Faculty(EducationCenter):
 
     def exit_studs(self, studs):
         for st in list(studs):
-            st.evolve(Young)
+            st.evolve(Young, upd_course=True)
 
     def assign_student(self, student):
         super().assign_student(student)
@@ -478,12 +481,12 @@ class Faculty(EducationCenter):
         course_key = int(student.info['age'] / self.model.steps_per_year)
         student.loc_info['university'] = [self.univ, course_key, self.info['type']]
 
-    def remove_student(self, student):
+    def remove_student(self, student, upd_course=False):
         # remove from uni and fac
         self.univ.info['students'].remove(student)
         self.info['students'].remove(student)
         # course_key
-        self.remove_student_from_course(student, 'university')
+        self.remove_student_from_course(student, 'university', upd_course=upd_course)
         self.remove_agent_in(student)
 
     def remove_employee(self, teacher, replace=False, new_teacher=None):

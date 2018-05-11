@@ -121,7 +121,6 @@ def test_move_to_new_home(model, job1, job2, j2_teach):
     j1 = model.geo.clusters_info[0]['jobs'][0] if job1 else None
     h2 = model.geo.clusters_info[1]['homes'][1]
     j2 = model.geo.clusters_info[1]['jobs'][0] if job2 else None
-    
 
     consort1 = Young(model, 1500, 0, 'M', age=1200, home=h1, job=j1)
     if j2_teach:
@@ -152,7 +151,7 @@ def test_move_to_new_home(model, job1, job2, j2_teach):
     
     if consort1.loc_info['job'] == j1:
         assert consort1  in consort1.loc_info['job'].info['employees']
-    if consort2.loc_info['job'] == j2:
+    if consort2.loc_info['job'] == j2 and j2:
         assert consort2  in consort2.loc_info['job'].info['employees']
     
 

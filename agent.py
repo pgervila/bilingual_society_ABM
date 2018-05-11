@@ -6,6 +6,8 @@ import networkx as nx
 from scipy.spatial.distance import pdist
 from collections import defaultdict
 
+#from city_objects import Job
+
 #import private library to model lang zipf CDF
 from zipf_generator import randZipf, Zipf_Mand_CDF_compressed
 
@@ -166,7 +168,7 @@ class BaseAgent:
             elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
                 self.info['language'] = 0
 
-    def evolve(self, new_class, ret_output=False):
+    def evolve(self, new_class, ret_output=False, upd_course=False):
         """ It replaces current agent with a new agent subclass instance.
             It removes current instance from all networks, lists, sets in model and adds new instance
             to them instead.
@@ -197,7 +199,8 @@ class BaseAgent:
         self.model.schedule.replace_agent(self, grown_agent)
 
         # remove and replace agent from ALL locations where it belongs to
-        self.model.remove_from_locations(self, replace=True, grown_agent=grown_agent)
+        self.model.remove_from_locations(self, replace=True,
+                                         grown_agent=grown_agent, upd_course=upd_course)
 
         if ret_output:
             return grown_agent
@@ -606,6 +609,8 @@ class SchoolAgent(SpeakerAgent):
 
     def random_death(self):
         dead = super().random_death(ret_out=True)
+
+        # TODO: not needed ! remove_student method already checks for it
         educ_center, course_key = self.get_school_and_course()
         # check if dead child was only student in course and cancel course if yes
         if dead:
@@ -861,8 +866,8 @@ class Adolescent(IndepAgent, SchoolAgent):
         mates = mates.difference({self})
         self.speak_in_random_subgroups(mates, num_days=3)
 
-    def evolve(self, new_class, ret_output=False, university=None):
-        grown_agent = super().evolve(new_class, ret_output=True)
+    def evolve(self, new_class, ret_output=False, university=None, upd_course=False):
+        grown_agent = super().evolve(new_class, ret_output=True, upd_course=upd_course)
         # new agent will not go to school in any case
         del grown_agent.loc_info['school']
         # find out growth type
@@ -1058,7 +1063,8 @@ class Young(IndepAgent):
         # import pdb;pdb.set_trace()
         clust_1 = self.loc_info['home'].clust
         job_1 = self.loc_info['job']
-        job_1 = job_1[0] if isinstance(job_1, list) else job_1
+        job_1 = job_1 if not isinstance(job_1, list) else job_1[0] if len(job_1) == 2 else job_1[0][job_1[2]]
+
         free_homes_clust_1 = [home for home in self.model.geo.clusters_info[clust_1]['homes']
                              if not home.info['occupants']]
         if marriage:
@@ -1066,7 +1072,7 @@ class Young(IndepAgent):
             clust_2 = consort.loc_info['home'].clust
             if not isinstance(consort, Pensioner):
                 job_2 = consort.loc_info['job']
-                job_2 = job_2[0] if isinstance(job_2, list) else job_2
+                job_2 = job_2 if not isinstance(job_2, list) else job_2[0] if len(job_2) == 2 else job_2[0][job_2[2]]
             else:
                 job_2 = None
             # check if consort has a job
@@ -1118,7 +1124,7 @@ class Young(IndepAgent):
                 moving_agents = [self, consort]
                 # remove consort from job
                 job_2 = consort.loc_info['job']
-                job_2 = job_2[0] if isinstance(job_2, list) else job_2
+                job_2 = job_2 if not isinstance(job_2, list) else job_2[0] if len(job_2) == 2 else job_2[0][job_2[2]]
                 job_2.remove_employee(consort)
             # find out if there are children that will have to move too
             children = self.get_family_relative('child')
@@ -1185,8 +1191,8 @@ class YoungUniv(Adolescent):
         educ_center = educ_center[fac_key]
         return educ_center, course_key
 
-    def evolve(self, new_class, ret_output=False):
-        grown_agent = BaseAgent.evolve(self, new_class, ret_output=True)
+    def evolve(self, new_class, ret_output=False, upd_course=False):
+        grown_agent = BaseAgent.evolve(self, new_class, ret_output=True, upd_course=upd_course)
         # new agent will not go to university in any case
         del grown_agent.loc_info['university']
         grown_agent.info.update({'married': False, 'num_children': 0})
