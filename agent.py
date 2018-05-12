@@ -610,7 +610,7 @@ class SchoolAgent(SpeakerAgent):
     def random_death(self):
         dead = super().random_death(ret_out=True)
 
-        # TODO: not needed ! remove_student method already checks for it
+        # TODO: not needed ! 'remove_student' method already checks for it
         educ_center, course_key = self.get_school_and_course()
         # check if dead child was only student in course and cancel course if yes
         if dead:

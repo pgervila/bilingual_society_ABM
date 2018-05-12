@@ -43,7 +43,7 @@ class Home:
             Args:
                 * agent: class instance. Agent to be removed
                 * replace: boolean. If True, agent will be replaced after removal
-                * grown_agent: class instance. Agent that will replace fromer agent in home occupants
+                * grown_agent: class instance. Agent that will replace former agent in home occupants
         """
 
         self.info['occupants'].remove(agent)
@@ -51,7 +51,6 @@ class Home:
         if replace:
             self.info['occupants'].add(grown_agent)
             grown_agent.loc_info['home'] = self
-
         if agent in self.agents_in:
             self.agents_in.remove(agent)
 
@@ -95,7 +94,7 @@ class EducationCenter:
         """
         # TODO : when a teacher dies or retires =>
         # TODO a signal needs to be sent to school so that it can update => Call 'look_for_teachers'
-        num_needed_teachers = len(courses_keys)
+        num_needed_teachers = len([c_id for c_id in courses_keys if c_id])
         school_clust_ix = self.info['clust']
         hired_teachers = []
 
@@ -186,9 +185,9 @@ class EducationCenter:
                 if course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
                     course['teacher'].evolve(Pensioner)
 
-            # define set of teachers that are left with an empty class
+            # define set of teachers that are left with an empty course
             jobless_teachers_keys = {key for key in self.grouped_studs
-                                     if key not in updated_groups and self.grouped_studs[key]['teacher']}
+                                     if key not in updated_groups and self[key]['teacher']}
 
             # define set of missing teachers in updated_groups
             missing_teachers_keys = {key for key in updated_groups
@@ -202,7 +201,7 @@ class EducationCenter:
                     if abs(jlt_key - mt_key) < max_course_dist and mt_key not in pairs.values():
                         pairs.update({jlt_key: mt_key})
             for (jlt_key, mt_key) in pairs.items():
-                updated_groups[mt_key]['teacher'] = self.grouped_studs[jlt_key]['teacher']
+                updated_groups[mt_key]['teacher'] = self[jlt_key]['teacher']
                 updated_groups[mt_key]['teacher'].loc_info['job'][1] = mt_key
                 # update sets after reallocation
                 jobless_teachers_keys.remove(jlt_key)
@@ -254,7 +253,8 @@ class EducationCenter:
         """ Method will be implemented in subclasses"""
         pass
 
-    def remove_student_from_course(self, student, educ_center, replace=None, grown_agent=None, upd_course=False):
+    def remove_student_from_course(self, student, educ_center, replace=None,
+                                   grown_agent=None, upd_course=False):
         """
             Remove students from their course, and optionally replace them with grown_agents
             Args:
@@ -276,9 +276,11 @@ class EducationCenter:
     def remove_teacher_from_course(self, teacher, replace=None, new_teacher=None):
         if teacher.loc_info['job'][1]:
             course_key = teacher.loc_info['job'][1]
-            self.grouped_studs[course_key]['teacher'] = None
+            self[course_key]['teacher'] = None
+            teacher.loc_info['job'][1] = None
             if replace:
-                self.grouped_studs[course_key]['teacher'] = new_teacher
+                self[course_key]['teacher'] = new_teacher
+                new_teacher.loc_info['job'][1] = course_key
 
     def remove_agent_in(self, agent):
         if agent in self.agents_in:
@@ -395,20 +397,21 @@ class School(EducationCenter):
                                         upd_course=upd_course)
         self.remove_agent_in(student)
 
-
-
     def remove_employee(self, teacher, replace=False, new_teacher=None):
         self.info['employees'].remove(teacher)
-        # course_key
-        self.remove_teacher_from_course(teacher, replace=replace, new_teacher=new_teacher)
         self.remove_agent_in(teacher)
+        # course_key
+        course_key = teacher.loc_info['job'][1]
+        if course_key:
+            self.remove_teacher_from_course(teacher, replace=replace, new_teacher=new_teacher)
         if replace:
             # if replacement is because of growing agent
             self.info['employees'].add(new_teacher)
+            self.agents_in.add(new_teacher)
         else:
             # teacher needs to be replaced anyway (e.g. Pensioner)
-            course_key = teacher.loc_info['job'][1]
-            self.hire_teachers([course_key])
+            if course_key:
+                self.hire_teachers([course_key])
 
     def update_courses(self, max_course_dist=3):
         super().update_courses()
@@ -492,16 +495,21 @@ class Faculty(EducationCenter):
     def remove_employee(self, teacher, replace=False, new_teacher=None):
         self.univ.info['employees'].remove(teacher)
         self.info['employees'].remove(teacher)
-        # course_key
-        self.remove_teacher_from_course(teacher, replace=replace, new_teacher=new_teacher)
         self.remove_agent_in(teacher)
+        # course key
+        course_key = teacher.loc_info['job'][1]
+        if course_key:
+            self.remove_teacher_from_course(teacher, replace=replace, new_teacher=new_teacher)
         if replace:
             self.univ.info['employees'].add(new_teacher)
             self.info['employees'].add(new_teacher)
         else:
             # teacher needs to be replaced anyway (e.g. Pensioner)
-            course_key = teacher.loc_info['job'][1]
-            self.hire_teachers([course_key])
+            if course_key:
+                self.hire_teachers([course_key])
+
+
+
 
     def update_courses(self, max_course_dist=3):
         super().update_courses()

@@ -103,11 +103,6 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
     print('*****')
         
 def test_look_for_partner(model):
-#     for ag in model.schedule.agents:
-#         if isinstance(ag, Adult):
-#             ag1 = ag
-#             break
-#     ag2 = ag1.get_family_relative('consort')
     pass
             
 def test_listen(model):
