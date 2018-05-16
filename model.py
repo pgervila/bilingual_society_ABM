@@ -42,6 +42,7 @@ class LanguageModel(Model):
                  max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1],
                  num_clusters=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
+        # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
         if spoken_only:
             self.vocab_red = 500
@@ -396,10 +397,10 @@ class LanguageModel(Model):
                         school.remove_employee(agent, replace=replace, new_teacher=grown_agent)
                 elif isinstance(agent, Adult):
                     job = agent.loc_info['job']
-                    job.remove_employee(agent)
+                    if job: job.remove_employee(agent)
                 elif isinstance(agent, Young):
                     job = agent.loc_info['job']
-                    job.remove_employee(agent, replace=replace, new_agent=grown_agent)
+                    if job: job.remove_employee(agent, replace=replace, new_agent=grown_agent)
             elif key == 'university':
                 univ, course_key, fac_key = agent.loc_info['university']
                 univ.faculties[fac_key].remove_student(agent, upd_course=upd_course)

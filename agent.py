@@ -607,23 +607,16 @@ class SchoolAgent(SpeakerAgent):
         studied_words = {lang: [act, act_c]}
         self.update_lang_arrays(studied_words, delta_s_factor=delta_s_factor, speak=False)
 
-    def random_death(self):
-        dead = super().random_death(ret_out=True)
-
-        # TODO: not needed ! 'remove_student' method already checks for it
-        educ_center, course_key = self.get_school_and_course()
-        # check if dead child was only student in course and cancel course if yes
-        if dead:
-            educ_center.remove_course(course_key)
-
-    def find_school(self):
+    def register_to_school(self):
         # find closest school in cluster
         clust_info = self.model.geo.clusters_info[self.loc_info['home'].clust]
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
-        # register
-        school.assign_student(self)
+
+        if 'school' not in self.loc_info or self.loc_info['school'][0] is not school:
+            # register on condition school is not the same as current, or if currently no school
+            school.assign_student(self)
 
 
 class IndepAgent(SpeakerAgent):
@@ -715,15 +708,13 @@ class Baby(ListenerAgent):
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
-        # register
-        school.assign_student(self)
 
-    def random_death(self):
-        dead = super().random_death(ret_out=True)
-        school, course_key = self.loc_info['school']
-        # check if dead baby was only student in course and cancel course if yes
-        if dead and course_key:
-            school.remove_course(course_key)
+        if 'school' not in self.loc_info:
+            school.assign_student(self)
+        else:
+            # register on condition school is not the same as current
+            if self.loc_info['school'][0] is not school:
+                school.assign_student(self)
 
     def stage_1(self, num_days=10):
         # listen to close family at home
@@ -1017,7 +1008,7 @@ class Young(IndepAgent):
             self.info['num_children'] += 1
             consort.info['num_children'] += 1
 
-    def look_for_job(self):
+    def look_for_job(self, keep_cluster=False):
 
         # TODO: make model that takes majority language of clusters into account
         # TODO: create weights for choice that depend on distance and language
@@ -1029,24 +1020,25 @@ class Young(IndepAgent):
 
         # get current agent cluster
         clust = self.loc_info['home'].clust
-        # make array of cluster indexes with equal weight equal to one
-        clust_ixs = np.ones(self.model.num_clusters)
-        # assign a higher weight to current cluster so that it is picked more than half the times
-        clust_ixs[clust] = self.model.num_clusters
-        # define probabilities to pick cluster
-        clust_probs = clust_ixs / clust_ixs.sum()
-        # pick a random cluster according to probabs
-        job_clust = np.random.choice(np.array(self.model.num_clusters), p=clust_probs)
-        # pick a job from chosen cluster
-        job_c = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
-        # check if job is suitable for agent
-        if job_c.num_places and self.info['language'] in job_c.info['lang_policy']:
-            job_c.hire_employee(self)
-            if clust is job_clust:
-                if random.random() > 0.5:
-                    self.move_to_new_home(marriage=False)
-            else:
-                self.move_to_new_home(marriage=False)
+        if not keep_cluster:
+            # look for job on any cluster with bias towards the current one
+            # make array of cluster indexes with equal weight equal to one
+            clust_ixs = np.ones(self.model.num_clusters)
+            # assign a higher weight to current cluster so that it is picked more than half the times
+            clust_ixs[clust] = self.model.num_clusters
+            # define probabilities to pick cluster
+            clust_probs = clust_ixs / clust_ixs.sum()
+            # pick a random cluster according to probabs
+            job_clust = np.random.choice(np.array(self.model.num_clusters), p=clust_probs)
+            # pick a job from chosen cluster
+            job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
+            # check if job is suitable for agent
+        else:
+            # look for job on current cluster only
+            job = np.random.choice(self.model.geo.clusters_info[clust]['jobs'])
+
+        if job.num_places and self.info['language'] in job.info['lang_policy']:
+            job.hire_employee(self)
 
     def switch_job(self, new_job):
             pass
@@ -1058,7 +1050,7 @@ class Young(IndepAgent):
             * marriage: boolean. Specifies if moving is because of marriage or not. If not,
                 it is assumed moving is because of job reasons
         """
-
+        #import pdb;pdb.set_trace()
         # self already has a job since it is a pre-condition to move to a new home
         # import pdb;pdb.set_trace()
         clust_1 = self.loc_info['home'].clust
@@ -1081,6 +1073,7 @@ class Young(IndepAgent):
                 job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
                 if clust_1 == clust_2:
                     # both consorts keep jobs
+                    job_change = None
                     sorted_homes = sorted(free_homes_clust_1, key=job_dist_fun )
                     new_home = sorted_homes[0]
                 else:
@@ -1090,27 +1083,37 @@ class Young(IndepAgent):
                     num_jobs_2 = len(consort.model.geo.clusters_info[clust_2]['jobs'])
                     if num_jobs_1 >= num_jobs_2:
                         # consort gives up job_2
+                        job_change = 'consort'
                         sorted_homes = sorted(free_homes_clust_1,
                                               key=lambda home: pdist([job_1.pos, home.pos]))
                         job_2.remove_employee(consort)
+                        new_home = sorted_homes[0]
                     else:
                         # self gives up job_1
+                        job_change = 'self'
                         free_homes_clust2 = [home for home
                                              in self.model.geo.clusters_info[clust_2]['homes']
                                              if not home.info['occupants']]
                         sorted_homes = sorted(free_homes_clust2,
                                               key=lambda home: pdist([job_2.pos, home.pos]))
                         job_1.remove_employee(self)
-                    new_home = sorted_homes[0]
+                        new_home = sorted_homes[0]
             else:
                 # consort has no job
+                job_change = 'consort'
                 sorted_homes = sorted(free_homes_clust_1,
                                       key=lambda home: pdist([job_1.pos, home.pos])[0])
                 home_ix = random.randint(1, int(len(sorted_homes) / 2))
                 new_home = sorted_homes[home_ix]
+            # assign new home
             new_home.assign_to_agent([self, consort])
+            # update job status for agent that must switch
+            if job_change == 'consort':
+                consort.look_for_job(keep_cluster=True)
+            elif job_change == 'self':
+                self.look_for_job(keep_cluster=True)
         else:
-            # moving for job reasons, family, if any, will follow
+            # moving for job reasons -> family, if any, will follow
             sorted_homes = sorted(free_homes_clust_1,
                                   key=lambda home: pdist([job_1.pos, home.pos])[0])
             home_ix = random.randint(1, int(len(sorted_homes) / 2))
@@ -1118,30 +1121,33 @@ class Young(IndepAgent):
 
             if not self.info['married']:
                 moving_agents = [self]
+                new_home.assign_to_agent(moving_agents)
             else:
                 # partner will find job in new cluster and children will change school
                 consort = self.get_family_relative('consort')
                 moving_agents = [self, consort]
                 # remove consort from job
-                job_2 = consort.loc_info['job']
-                job_2 = job_2 if not isinstance(job_2, list) else job_2[0] if len(job_2) == 2 else job_2[0][job_2[2]]
-                job_2.remove_employee(consort)
+                try:
+                    job_2 = consort.loc_info['job']
+                    job_2 = job_2 if not isinstance(job_2, list) else job_2[0] if len(job_2) == 2 else job_2[0][job_2[2]]
+                except KeyError:
+                    job_2 = None
+                if job_2:
+                    job_2.remove_employee(consort)
+                    new_home.assign_to_agent(moving_agents)
+                    # consort looks for job in current cluster
+                    consort.look_for_job(keep_cluster=True)
+                else:
+                    new_home.assign_to_agent(moving_agents)
             # find out if there are children that will have to move too
             children = self.get_family_relative('child')
             children = [child for child in children
                         if not isinstance(child, (Young, YoungUniv))]
-
-            new_home.assign_to_agent(moving_agents + children)
-
+            new_home.assign_to_agent(children)
             # remove children from old school, enroll them in a new one
             for child in children:
-                if child.info['age'] >= self.model.steps_per_year:
-                    child.find_school()
-
-    def random_death(self):
-        dead = super().random_death(ret_out=True)
-        if dead and self.loc_info['job']:
-            self.loc_info['job'].look_for_employee()
+                if child.info['age'] > self.model.steps_per_year:
+                    child.register_to_school()
 
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -1205,7 +1211,6 @@ class YoungUniv(Adolescent):
             Method to move self agent and other optional agents to a new home close to university
             Args:
         """
-
         # move close to university
         univ = self.loc_info['university'][0]
         clust_univ = univ.info['clust']
@@ -1215,7 +1220,7 @@ class YoungUniv(Adolescent):
                                  all([isinstance(x, YoungUniv) for x in home.info['occupants']])]
         # define function to measure distance home-univ
         univ_dist_fun = lambda home: pdist([univ.pos, home.pos])[0]
-        # sort homes by distance to univ, pick first that has less than 6 occupants
+        # sort homes by distance to univ, pick first that has less than max_num_occup occupants
         sorted_homes = sorted(univ_homes, key=univ_dist_fun)
         for h in sorted_homes:
             if len(h.info['occupants']) < max_num_occup:
@@ -1351,8 +1356,9 @@ class Teacher(Adult):
         self.speak_to_random_friend(ix_agent, num_days=3)
 
     def stage_4(self, ix_agent, num_days=7):
-        # TODO : trigger teacher replacement after pension
-        super().stage_4(ix_agent, num_days=num_days)
+        self.stage_1(ix_agent, num_days=7)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days=5)
 
 
 class TeacherUniv(Teacher):

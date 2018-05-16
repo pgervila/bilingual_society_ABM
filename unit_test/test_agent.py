@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch
 import numpy as np
 import os, sys
+import objgraph
 from importlib import reload
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 import agent
@@ -43,8 +44,8 @@ test_data_evolve = [(Baby, Child, ('school', 'school', False)),
                     (YoungUniv, Young, ('university', 'job', False)),
                     (Adult, Pensioner, ('job', None, False)),
                     (Adult, Teacher, ('job', 'job', False)),
-                    (Adult, TeacherUniv, ('job', 'job', False)),
-                    (Teacher, Pensioner, ('job', None, False))]
+                    (Teacher, Pensioner, ('job', None, False)),
+                    (Adult, TeacherUniv, ('job', 'job', False))]
 
 
 test_data_update_lang_arrays = [({0: (np.array([0, 1, 10, 450, 470, 490]), 
@@ -59,6 +60,13 @@ test_data_move_new_home = [(True, None, None), (True, True, None), (True, True, 
 
 @pytest.mark.parametrize("origin_class, new_class, labels", test_data_evolve)
 def test_evolve(model, city_places, origin_class, new_class, labels):
+
+    def add_ag_to_world(m, ag_to_add):
+        """ add agent to grid, schedule, clusters, networks """
+        m.geo.add_agents_to_grid_and_schedule(ag_to_add)
+        m.geo.clusters_info[city_places['home'].clust]['agents'].append(ag_to_add)
+        m.nws.add_ags_to_networks(ag_to_add)
+
     if origin_class == Baby:
         father, mother = None, None
         for ag in model.schedule.agents:
@@ -72,27 +80,36 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         old_ag = origin_class(father, mother, 0, 0, model, ag_id, 0, 'M', age=40,
                               home=city_places['home'],
                               **{labels[0]:city_places[labels[0]]})
+        add_ag_to_world(model, old_ag)
     elif origin_class == Teacher:
         ag_id = model.set_available_ids.pop()
         old_ag = origin_class(model, ag_id , 0, 'M', age=1200, home=city_places['home'])
+        add_ag_to_world(model, old_ag)
         school = city_places['school']
         ckey = np.random.choice(list(school.grouped_studs.keys()))
         school.assign_teacher(old_ag, ckey)
+        # import pdb; pdb.set_trace()
     else:
         ag_id = model.set_available_ids.pop()
         old_ag = origin_class(model, ag_id, 0, 'M', age=100, home=city_places['home'],
                               **{labels[0]:city_places[labels[0]]})
+        add_ag_to_world(model, old_ag)
     
     city_places['home'].agents_in.add(old_ag)
-    print(old_ag)
-    print(city_places['home'].agents_in)
-    model.geo.add_agents_to_grid_and_schedule(old_ag)
-    model.geo.clusters_info[city_places['home'].clust]['agents'].append(old_ag)
+    # print(old_ag)
+    # print(city_places['home'].agents_in)
+
+
     if labels[2]:
         grown_ag = old_ag.evolve(new_class, ret_output=True, 
                                  **{labels[1]:city_places[labels[1]]})
     else:
         grown_ag = old_ag.evolve(new_class, ret_output=True)
+
+    # if isinstance(old_ag, Teacher):
+    #     city_places['home'].info['occupants'].add(old_ag)
+    #     objgraph.show_backrefs([old_ag], filename=str(old_ag) + '_backrefs.png')
+
     # check references to old agent are all deleted
     assert sys.getrefcount(old_ag) == 2
     if labels[0] and labels[0] != labels[1]:

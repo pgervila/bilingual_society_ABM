@@ -15,7 +15,19 @@ from model import LanguageModel
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(500, num_clusters=3) 
+    return LanguageModel(500, num_clusters=3)
+
+@pytest.fixture(scope="module")
+def univ(model):
+    ix_sorted_clusts_by_size = np.argsort(model.geo.cluster_sizes)[::-1]
+    for ix_clust in ix_sorted_clusts_by_size:
+        try:
+            univ = model.geo.clusters_info[ix_clust]['university']
+            break
+        except KeyError:
+            continue
+    return univ
+
 
 
 def test_group_students_per_year(model):
@@ -31,7 +43,7 @@ def test_group_students_per_year(model):
     assert num_employees_per_school == num_courses_per_school
 
 
-def test_school_set_up_and_update(model):
+def test_school_set_up_and_update(model, univ):
     i = np.random.randint(0, 3)
     school = model.geo.clusters_info[i]['schools'][0]
     # school.update_courses()
@@ -39,17 +51,14 @@ def test_school_set_up_and_update(model):
     for (k, ags) in school.grouped_studs.items():
         assert ags['students']
         assert ags['teacher']
+        assert type(ags['teacher']) == Teacher
     # check students older than 18 are out of school
     while 18 not in school.grouped_studs:
         for st in list(school.info['students'])[:]:
             st.info['age'] += 36
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
-#         s1_old = set(school.info['employees'])
-#         s2_old = set([course['teacher'] 
-#                       for ck, course in school.grouped_studs.items() 
-#                       if 'teacher' in course])
-#         assert s1_old == s2_old
+
         school.update_courses()
         for k, c_info in school.grouped_studs.items():
             assert c_info['teacher'].loc_info['job'][1] == k
@@ -63,13 +72,13 @@ def test_school_set_up_and_update(model):
         if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
             st.evolve(Adolescent)
     school.update_courses()
-    i_max = np.argmax(model.geo.cluster_sizes)
     for (k, ags) in school.grouped_studs.items():
         assert ags['students']
         assert ags['teacher']
+        assert type(ags['teacher']) == Teacher
     # check some students are correctly enrolled in univ
     # check all working links with school are erased after completing school education
-    univ = model.geo.clusters_info[i_max]['university']
+
     for stud in studs:
         assert stud not in school.info['students']
         assert 'school' not in stud.loc_info
@@ -99,10 +108,11 @@ def test_school_set_up_and_update(model):
         for (k, ags) in school.grouped_studs.items():
             assert ags['students']
             assert ags['teacher']
+            assert type(ags['teacher']) == Teacher
             assert ags['teacher'].loc_info['job'][1] == k
 
 
-def test_univ_set_up_and_update(model):
+def test_univ_set_up_and_update(model, univ):
     # get agents from schools to send them to univ
     schools = [school for cl_info in model.geo.clusters_info.values() 
                for school in cl_info['schools']]
@@ -120,8 +130,7 @@ def test_univ_set_up_and_update(model):
             if isinstance(st, Child) and st.info['age'] >= st.age_high * model.steps_per_year:
                 st.evolve(Adolescent)
         school.update_courses()
-    i_max = np.argmax(model.geo.cluster_sizes)
-    univ = model.geo.clusters_info[i_max]['university']
+
     for fac in univ.faculties.values():
         for (k, ags) in fac.grouped_studs.items():
             print(fac, k, ags)
@@ -143,13 +152,13 @@ def test_univ_set_up_and_update(model):
         for st in list(fac.info['students'])[:]:
             st.info['age'] += 36
         fac.update_courses()
+    # store students that will move to job market
     jm_studs = fac.grouped_studs[univ.info['age_range'][1]]['students']
     fac.update_courses()
     for stud in jm_studs:
         assert stud not in fac.info['students']
         assert stud not in fac.univ.info['students']
-        assert stud.loc_info['university'] is None
-        assert 'course_key' not in stud.loc_info
+        assert 'university' not in stud.loc_info
 
 
 def test_hire_teachers(model):
@@ -167,6 +176,8 @@ def test_hire_teachers(model):
             assert t.loc_info['job'][1] == rand_course
     else:
         pass
+
+    # test moving to a new home
 
 
 def test_teachers_course_swap(model):

@@ -84,55 +84,6 @@ class EducationCenter:
                                                       lambda x: int(x.info['age'] / self.model.steps_per_year))
                                            if c_key <= self.info['age_range'][1]])
 
-    def find_teachers(self, courses_keys):
-        """
-        Hire teachers for the specified courses
-            Args:
-                * courses_keys: list of integer(s). Identifies courses for which teachers are missing
-                    through years of age
-                * ret_output: boolean. True when output needs to be returned
-        """
-        # TODO : when a teacher dies or retires =>
-        # TODO a signal needs to be sent to school so that it can update => Call 'look_for_teachers'
-        num_needed_teachers = len([c_id for c_id in courses_keys if c_id])
-        school_clust_ix = self.info['clust']
-        hired_teachers = []
-
-        # first check among teachers employed at school but without course_key assigned
-        # TODO : add more restrictive conditions for higher courses
-        free_staff_from_school = [ag for ag in self.info['employees'] if not ag.loc_info['job'][1]]
-        hired_teachers.extend(free_staff_from_school)
-        if len(hired_teachers) >= num_needed_teachers:
-            hired_teachers = set(hired_teachers[:num_needed_teachers])
-            return hired_teachers
-
-        # loop over clusters from closest to farthest from school
-        for ix in self.model.geo.clusters_info[school_clust_ix]['closest_clusters']:
-            # list cluster teacher candidates. Shuffle them to add randomness
-            # TODO : hire teachers based on fact they have UNIV education !!!
-            clust_cands = [ag for ag in self.model.geo.clusters_info[ix]['agents']
-                           if ag.info['language'] in self.info['lang_policy'] and
-                           ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
-                           not isinstance(ag, (Teacher, TeacherUniv, Pensioner))]
-            random.shuffle(clust_cands)
-            hired_teachers.extend(clust_cands)
-            if len(hired_teachers) >= num_needed_teachers:
-                # hire all teachers and assign school to them before stopping loop
-                hired_teachers = set(hired_teachers[:num_needed_teachers])
-                break
-            else:
-                # continue looking for missing teachers in next cluster
-                continue
-        return hired_teachers
-
-    def hire_teachers(self, keys):
-        """ This method will be fully implemented in subclasses"""
-        pass
-
-    def exit_studs(self, studs):
-        """ Method will be customized in subclasses """
-        pass
-
     def set_up_courses(self):
         """ Method to hire all necessary suitable teacher agents for a school instance.
             It calls method to group students by age to form courses, then it assigns
@@ -140,7 +91,7 @@ class EducationCenter:
         """
         if not self.grouped_studs:
             self.group_students_per_year()
-        self.hire_teachers(self.grouped_studs.keys())
+        self.hire_teachers(self.grouped_studs.keys(), move_home=False)
 
     def update_courses(self, max_course_dist=3):
         """
@@ -155,8 +106,11 @@ class EducationCenter:
         if not self.grouped_studs:
             self.group_students_per_year()
         else:
+            print('STARTING UPDATE OF ', self)
             # define empty set to update school groups
             updated_groups = {}
+            # define variable to store students from last year course( if there is such course )
+            exit_students = None
             # define Teacher retirement age in years
             retirement_age = Teacher.age_high * self.model.steps_per_year
             for (c_id, course) in self.grouped_studs.items():
@@ -179,11 +133,10 @@ class EducationCenter:
                         else:
                             updated_groups[c_id + 1]['teacher'] = None
                 else:
-                    self.exit_studs(course['students'])
+                    # store students that will move out of school
+                    exit_students = course['students']
+                    # TODO: need to remove students from school now, to avoid conflicts during transition later
 
-                # check if teacher has to retire
-                if course['teacher'].info['age'] >= course['teacher'].age_high * self.model.steps_per_year:
-                    course['teacher'].evolve(Pensioner)
 
             # define set of teachers that are left with an empty course
             jobless_teachers_keys = {key for key in self.grouped_studs
@@ -198,7 +151,7 @@ class EducationCenter:
             pairs = {}
             for jlt_key in list(jobless_teachers_keys):
                 for mt_key in list(missing_teachers_keys):
-                    if abs(jlt_key - mt_key) < max_course_dist and mt_key not in pairs.values():
+                    if abs(jlt_key - mt_key) <= max_course_dist and mt_key not in pairs.values():
                         pairs.update({jlt_key: mt_key})
             for (jlt_key, mt_key) in pairs.items():
                 updated_groups[mt_key]['teacher'] = self[jlt_key]['teacher']
@@ -209,17 +162,94 @@ class EducationCenter:
 
             # check if there are still jobless teachers left in school
             # remove reference to course in their job spec
-            if jobless_teachers_keys:
-                # TODO : for jobless teachers, find another occupation. Use them when needed
-                for jlt_key in jobless_teachers_keys:
-                    self.grouped_studs[jlt_key]['teacher'].loc_info['job'][1] = None
+            # TODO : for jobless teachers, find another occupation. Use them when needed
+            for jlt_key in jobless_teachers_keys:
+                self[jlt_key]['teacher'].loc_info['job'][1] = None
 
-            # assign update groups to grouped_studs class attribute
+            # assign updated groups to grouped_studs class attribute
             self.grouped_studs = updated_groups
+
+            # assign course id to each student
+            educ_center = 'school' if isinstance(self, School) else 'university'
+            for (c_id, course) in self.grouped_studs.items():
+                for st in course['students']:
+                    st.loc_info[educ_center][1] = c_id
+
+            # return {'missing_teachers_keys': missing_teachers_keys, 'exit_students': exit_students}
 
             # check if there are still missing teachers for some courses and hire them
             if missing_teachers_keys:
                 self.hire_teachers(missing_teachers_keys)
+
+            # exit_studs ( decoupled from course updating process to avoid conflicts in agent transfers)
+            if exit_students:
+                self.exit_studs(exit_students)
+
+            # check if teacher has to retire and replace it if needed
+            for (c_id, course) in self.grouped_studs.items():
+                if course['teacher'].info['age'] >= retirement_age:
+                    course['teacher'].evolve(Pensioner)
+
+            print('UPDATED ', self)
+
+    def find_teachers(self, courses_keys):
+        """
+        Hire teachers for the specified courses. Method looks firsta among available
+        courseless teachers at school. If not sufficient, it looks further among clusters
+            Args:
+                * courses_keys: list of integer(s). Identifies courses for which teachers are missing
+                    through years of age
+                * ret_output: boolean. True when output needs to be returned
+        """
+        # TODO : when a teacher dies or retires =>
+        # TODO a signal needs to be sent to school so that it can update => Call 'look_for_teachers'
+        num_needed_teachers = len([c_id for c_id in courses_keys if c_id])
+        school_clust_ix = self.info['clust']
+        hired_teachers = []
+
+        # first check among teachers employed at school but without course_key assigned
+        free_staff_from_school = [ag for ag in self.info['employees'] if not ag.loc_info['job'][1]]
+        hired_teachers.extend(free_staff_from_school)
+        if len(hired_teachers) >= num_needed_teachers:
+            hired_teachers = set(hired_teachers[:num_needed_teachers])
+            return hired_teachers
+        # loop over clusters from closest to farthest from school to hire other teachers without course
+        # Skip search in same cluster as before to avoid repetition
+        for ix in self.model.geo.clusters_info[school_clust_ix]['closest_clusters'][1:]:
+            clust_teach_cands = [t for sc in self.model.geo.clusters_info[ix]['schools']
+                                 for t in sc.info['employees'] if not t.loc_info['job'][1]]
+            hired_teachers.extend(clust_teach_cands)
+            if len(set(hired_teachers)) >= num_needed_teachers:
+                hired_teachers = set(hired_teachers[:num_needed_teachers])
+                return hired_teachers
+            else:
+                continue
+        # loop over clusters from closest to farthest from school, to hire non teachers
+        for ix in self.model.geo.clusters_info[school_clust_ix]['closest_clusters']:
+            # list cluster teacher candidates. Shuffle them to add randomness
+            # TODO : hire teachers based on fact they have UNIV education !!!
+            clust_cands = [ag for ag in self.model.geo.clusters_info[ix]['agents']
+                           if ag.info['language'] in self.info['lang_policy'] and
+                           ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
+                           not isinstance(ag, (Teacher, TeacherUniv, Pensioner))]
+            random.shuffle(clust_cands)
+            hired_teachers.extend(clust_cands)
+            if len(set(hired_teachers)) >= num_needed_teachers:
+                # hire all teachers and assign school to them before stopping loop
+                hired_teachers = set(hired_teachers[:num_needed_teachers])
+                break
+            else:
+                # continue looking for missing teachers in next cluster
+                continue
+        return hired_teachers
+
+    def hire_teachers(self, keys, move_home=True):
+        """ This method will be fully implemented in subclasses """
+        pass
+
+    def exit_studs(self, studs):
+        """ Method will be customized in subclasses """
+        pass
 
     def assign_student(self, student):
         """
@@ -229,18 +259,21 @@ class EducationCenter:
             It checks for old school if any and removes student from it
             Args:
                 * student: agent instance.
+                * hire_teacher: boolean. If True, a teacher will be hired
+                    if course assigned to student does not exist. Defaults to True
         """
 
-        # First check school student comes from, if any
+        # First checks school student comes from, if any, and remove links to it
         try:
-            old_school = student.loc_info['school'][0]
+            old_school, course_key = student.get_school_and_course()
         except KeyError:
             old_school = None
-        if old_school:
+        if old_school and old_school is not self:
             old_school.remove_student(student)
 
         # Now assign student to new educ_center and corresponding course
-        course_key = int(student.info['age'] / self.model.steps_per_year)
+        if not course_key:
+            course_key = int(student.info['age'] / self.model.steps_per_year)
         # assign student if course already exists, otherwise create course
         if course_key in self.grouped_studs:
             self[course_key]['students'].add(student)
@@ -260,17 +293,22 @@ class EducationCenter:
             Args:
                 * student: agent instance
                 * educ_center: string. It is either 'school' or 'university'
-                * replace:boolean. If True, grown_agent msut be specified
+                * replace:boolean. If True, grown_agent must be specified
                 * grown_agent: agent instance
                 * upd_course: boolean. False if removal does not involve exit towards university or job market
         """
         course_key = student.loc_info[educ_center][1]
-        self[course_key]['students'].remove(student)
+        # after updating courses, leaving student is no longer amongst students in course
+        # thus remove from course only if not leaving school
+        if not upd_course:
+            self[course_key]['students'].remove(student)
+        student.loc_info[educ_center][1] = None
         if replace and educ_center == 'school' and not isinstance(student, Adolescent):
             self[course_key]['students'].add(grown_agent)
+            grown_agent.loc_info[educ_center][1] = course_key
 
         # check if there are students left in course
-        if not self[course_key]['students'] and not upd_course:
+        if not upd_course and not self[course_key]['students']:
             self.remove_course(course_key)
 
     def remove_teacher_from_course(self, teacher, replace=None, new_teacher=None):
@@ -329,17 +367,51 @@ class School(EducationCenter):
             for st in ags['students']:
                 st.loc_info['school'][1] = c_key
 
-    def assign_teacher(self, teacher, course_key):
+    # def update_courses(self, max_course_dist=3):
+    #     super().update_courses()
+    #     # assign course id to each student
+    #     for (c_id, course) in self.grouped_studs.items():
+    #         for st in course['students']:
+    #             st.loc_info['school'][1] = c_id
+
+    def assign_teacher(self, teacher, course_key, move_home=True):
+        """ Method to assign school job to a teacher. It checks that all links
+            to previous job are erased before assigning the new ones
+            Args:
+                * teacher: Teacher class instance.
+                * course_key: integer. It specifies course
+                * move_home: boolean. If True(default), it forces teacher agent to
+                    move to a new home
+        """
+
+        try:
+            old_job = teacher.loc_info['job']
+            if isinstance(old_job, list):
+                if len(old_job) == 2:
+                    old_job = old_job[0]
+                else:
+                    old_job = old_job[0][old_job[2]]
+            if old_job and old_job is not self:
+                old_job.remove_employee(teacher)
+        except KeyError:
+            pass
+
         self.grouped_studs[course_key]['teacher'] = teacher
         teacher.loc_info['job'] = [self, course_key]
         if teacher not in self.info['employees']:
             self.info['employees'].add(teacher)
+        if move_home:
+            teacher_clust = teacher.loc_info['home'].clust
+            school_clust = self.info['clust']
+            if teacher_clust is not school_clust:
+                teacher.move_to_new_home(marriage=False)
 
-    def hire_teachers(self, courses_keys):
+    def hire_teachers(self, courses_keys, move_home=True):
         """ Hire teachers for the specified courses
             Args:
                 * courses_keys: list of integer(s). Identifies courses for which teachers are missing
                     through years of age of its students
+                * move_home: force hired teacher to move home when acceptin new position
         """
         hired_teachers = self.find_teachers(courses_keys)
         # assign class key to teachers and add teachers to grouped studs
@@ -349,7 +421,7 @@ class School(EducationCenter):
             if not isinstance(hired_t, Teacher):
                 # turn hired agent into Teacher
                 hired_t = hired_t.evolve(Teacher, ret_output=True)
-            self.assign_teacher(hired_t, k)
+            self.assign_teacher(hired_t, k, move_home=move_home)
 
     def assign_student(self, student):
         super().assign_student(student)
@@ -358,6 +430,7 @@ class School(EducationCenter):
 
     def exit_studs(self, studs):
         """ Method to send studs from last year to univ or job market """
+
         universities = [clust_info['university']
                         for clust_info in self.model.geo.clusters_info.values()
                         if 'university' in clust_info]
@@ -389,13 +462,15 @@ class School(EducationCenter):
 
     def remove_student(self, student, replace=False, grown_agent=None, upd_course=False):
         self.info['students'].remove(student)
-        # replace agent only if it is not an adolescent
-        if replace and not isinstance(student, Adolescent):
-            self.info['students'].add(grown_agent)
+        self.remove_agent_in(student)
         # course_key
         self.remove_student_from_course(student, 'school', replace=replace, grown_agent=grown_agent,
                                         upd_course=upd_course)
-        self.remove_agent_in(student)
+        # replace agent only if it is not an Adolescent instance
+        if replace and not isinstance(student, Adolescent):
+            self.info['students'].add(grown_agent)
+        else:
+            student.loc_info['school'] = None
 
     def remove_employee(self, teacher, replace=False, new_teacher=None):
         self.info['employees'].remove(teacher)
@@ -409,19 +484,10 @@ class School(EducationCenter):
             self.info['employees'].add(new_teacher)
             self.agents_in.add(new_teacher)
         else:
+            teacher.loc_info['job'] = None
             # teacher needs to be replaced anyway (e.g. Pensioner)
             if course_key:
                 self.hire_teachers([course_key])
-
-    def update_courses(self, max_course_dist=3):
-        super().update_courses()
-        # assign course id to each student
-        for (c_id, course) in self.grouped_studs.items():
-            for st in course['students']:
-                st.loc_info['school'][1] = c_id
-
-
-
 
     def __repr__(self):
         return 'School_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
@@ -451,12 +517,36 @@ class Faculty(EducationCenter):
             for st in ags['students']:
                 st.loc_info['university'][2] = c_key
 
-    def assign_teacher(self, teacher, course_key):
+    # def update_courses(self, max_course_dist=3):
+    #     super().update_courses()
+    #     # assign course id to each student
+    #     for (c_id, course) in self.grouped_studs.items():
+    #         for st in course['students']:
+    #             st.loc_info['university'][1] = c_id
+
+    def assign_teacher(self, teacher, course_key, move_home=True):
+        try:
+            old_job = teacher.loc_info['job']
+            if isinstance(old_job, list):
+                if len(old_job) == 2:
+                    old_job = old_job[0]
+                else:
+                    old_job = old_job[0][old_job[2]]
+            if old_job and old_job is not self:
+                old_job.remove_employee(teacher)
+        except KeyError:
+            pass
+
         self.grouped_studs[course_key]['teacher'] = teacher
         teacher.loc_info['job'] = [self.univ, course_key, self.info['type']]
         if teacher not in self.info['employees']:
             self.info['employees'].add(teacher)
             self.univ.info['employees'].add(teacher)
+        if move_home:
+            teacher_clust = teacher.loc_info['home'].clust
+            school_clust = self.info['clust']
+            if teacher_clust is not school_clust:
+                teacher.move_to_new_home(marriage=False)
 
     def hire_teachers(self, courses_keys):
         """ Hire teachers for the specified courses
@@ -491,6 +581,7 @@ class Faculty(EducationCenter):
         # course_key
         self.remove_student_from_course(student, 'university', upd_course=upd_course)
         self.remove_agent_in(student)
+        student.loc_info['university'] = None
 
     def remove_employee(self, teacher, replace=False, new_teacher=None):
         self.univ.info['employees'].remove(teacher)
@@ -504,19 +595,10 @@ class Faculty(EducationCenter):
             self.univ.info['employees'].add(new_teacher)
             self.info['employees'].add(new_teacher)
         else:
+            teacher.loc_info['job'] = None
             # teacher needs to be replaced anyway (e.g. Pensioner)
             if course_key:
                 self.hire_teachers([course_key])
-
-
-
-
-    def update_courses(self, max_course_dist=3):
-        super().update_courses()
-        # assign course id to each student
-        for (c_id, course) in self.grouped_studs.items():
-            for st in course['students']:
-                st.loc_info['university'][1] = c_id
 
     def __repr__(self):
         return 'Faculty_{0[clust]!r}_{1.pos!r}_{0[type]!r}'.format(self.info, self)
@@ -564,25 +646,37 @@ class Job:
                      'skill_level': skill_level }
         self.agents_in = set()
 
-    def look_for_employee(self):
-        """ Look for employee that meets requirements """
+    def look_for_employee(self, excluded_ag=None):
+        """
+            Look for employee that meets requirements
+            Args:
+                * excluded_ag: agent excluded from search
+        """
 
         # look for suitable agents in any cluster
-        for ag in self.model.schedule.agents:
-            if ag.info['language'] in self.info['lang_policy'] and isinstance(ag, Young) and not isinstance(ag, Teacher):
-                self.hire_employee(ag)
-                break
+        for ag in set(self.model.schedule.agents).difference(set([excluded_ag])):
+            if isinstance(ag, Young) and not isinstance(ag, (Teacher, Pensioner)):
+                if ag.info['language'] in self.info['lang_policy'] and not ag.loc_info['job']:
+                    self.hire_employee(ag)
+                    break
 
-    def hire_employee(self, agent, move_home=False):
-
-        # TODO: add code to remove agent from previous job if any
-
+    def hire_employee(self, agent, move_home=True):
+        try:
+            old_job = agent.loc_info['job']
+            if old_job and old_job is not self:
+                old_job.remove_employee(agent)
+        except KeyError:
+            pass
         if agent.info['language'] in self.info['lang_policy']:
             self.num_places -= 1
             agent.loc_info['job'] = self
             self.info['employees'].add(agent)
+            # move agent to new home closer to job if necessary (and requested)
             if move_home:
-                agent.move_to_new_home(marriage=False)
+                agent_clust = agent.loc_info['home'].clust
+                job_clust = self.clust
+                if agent_clust is not job_clust:
+                    agent.move_to_new_home(marriage=False)
     # TODO : update workers by department and send them to retirement when age reached
 
     def remove_employee(self, agent, replace=None, new_agent=None):
@@ -591,9 +685,12 @@ class Job:
         agent.loc_info['job'] = None
         if agent in self.agents_in:
             self.agents_in.remove(agent)
+        # Either replace agent by new_agent or hire a new random one
         if replace:
             self.info['employees'].add(new_agent)
             new_agent.loc_info['job'] = self
+        else:
+            self.look_for_employee()
 
     def __repr__(self):
         return 'Job_{0.clust!r}_{0.pos!r}'.format(self)

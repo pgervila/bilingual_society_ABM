@@ -84,9 +84,6 @@ class StagedActivationModif(StagedActivation):
                     if not self.steps % (2 * self.model.steps_per_year):  # every 2 years only, teachers swap
                         school.swap_teachers_courses()
 
-        # sc = self.model.geo.clusters_info[2]['schools'][0]
-        # print('num_school_employees at step end is: ', len(sc.info['employees']))
-        # print(sc.grouped_studs.keys())
 
         self.steps += 1
 

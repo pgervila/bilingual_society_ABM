@@ -319,7 +319,7 @@ class GeoMapper:
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
-                            job.hire_employee(parent)
+                            job.hire_employee(parent, move_home=False)
                             break
                 # assign school to children
                 # find closest school to home
@@ -350,7 +350,7 @@ class GeoMapper:
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
-                            job.hire_employee(ag)
+                            job.hire_employee(ag, move_home=False)
                             break
 
     def assign_school_jobs(self):
