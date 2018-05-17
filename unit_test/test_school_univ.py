@@ -29,7 +29,6 @@ def univ(model):
     return univ
 
 
-
 def test_group_students_per_year(model):
     # check that num_employees_per_school is the same as num_courses_per_school
     num_employees_per_school = [len(model.geo.clusters_info[x]['schools'][y].info['employees'])
@@ -46,7 +45,6 @@ def test_group_students_per_year(model):
 def test_school_set_up_and_update(model, univ):
     i = np.random.randint(0, 3)
     school = model.geo.clusters_info[i]['schools'][0]
-    # school.update_courses()
     # check that there are students and teacher for each existing course in school
     for (k, ags) in school.grouped_studs.items():
         assert ags['students']
@@ -59,7 +57,8 @@ def test_school_set_up_and_update(model, univ):
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
 
-        school.update_courses()
+        school.update_courses_phase_1()
+        school.update_courses_phase_2()
         for k, c_info in school.grouped_studs.items():
             assert c_info['teacher'].loc_info['job'][1] == k
         num_course_teachers = len([t for t in school.info['employees'] 
@@ -71,7 +70,8 @@ def test_school_set_up_and_update(model, univ):
         st.info['age'] += 36
         if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
             st.evolve(Adolescent)
-    school.update_courses()
+    school.update_courses_phase_1()
+    school.update_courses_phase_2()
     for (k, ags) in school.grouped_studs.items():
         assert ags['students']
         assert ags['teacher']
@@ -91,7 +91,8 @@ def test_school_set_up_and_update(model, univ):
     while (rand_teacher.info['age'] / 36 ) <= 65:
         rand_teacher.info['age'] += 36
     course_key = rand_teacher.loc_info['job'][1]
-    school.update_courses()
+    school.update_courses_phase_1()
+    school.update_courses_phase_2()
     if course_key in school.grouped_studs:
         if school.grouped_studs[course_key]['students']:
             assert school.grouped_studs[course_key]['teacher']
@@ -104,7 +105,8 @@ def test_school_set_up_and_update(model, univ):
             st.info['age'] += 36
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
-        school.update_courses()
+        school.update_courses_phase_1()
+        school.update_courses_phase_2()
         for (k, ags) in school.grouped_studs.items():
             assert ags['students']
             assert ags['teacher']
@@ -124,16 +126,19 @@ def test_univ_set_up_and_update(model, univ):
                 st.info['age'] += 36
                 if isinstance(st, Child) and st.info['age'] >= st.age_high * model.steps_per_year:
                     st.evolve(Adolescent)
-            school.update_courses()
+            school.update_courses_phase_1()
+            school.update_courses_phase_2()
         for st in list(school.info['students'])[:]:
             st.info['age'] += 36
             if isinstance(st, Child) and st.info['age'] >= st.age_high * model.steps_per_year:
                 st.evolve(Adolescent)
-        school.update_courses()
+        school.update_courses_phase_1()
+        school.update_courses_phase_2()
 
     for fac in univ.faculties.values():
+        fac.update_courses_phase_2()
         for (k, ags) in fac.grouped_studs.items():
-            print(fac, k, ags)
+            # print(fac, k, ags)
             assert ags['students']
             assert ags['teacher']
     for fac in univ.faculties.values():
@@ -141,7 +146,8 @@ def test_univ_set_up_and_update(model, univ):
             st.info['age'] += 36
             if isinstance(st, YoungUniv) and st.info['age'] >= st.age_high * model.steps_per_year:
                 st.evolve(Young)
-        fac.update_courses()
+        fac.update_courses_phase_1()
+        fac.update_courses_phase_2()
         for (k, ags) in fac.grouped_studs.items():
             assert ags['students']
             assert ags['teacher']
@@ -151,10 +157,12 @@ def test_univ_set_up_and_update(model, univ):
     while univ.info['age_range'][1] not in fac.grouped_studs:
         for st in list(fac.info['students'])[:]:
             st.info['age'] += 36
-        fac.update_courses()
+        fac.update_courses_phase_1()
+        fac.update_courses_phase_2()
     # store students that will move to job market
     jm_studs = fac.grouped_studs[univ.info['age_range'][1]]['students']
-    fac.update_courses()
+    fac.update_courses_phase_1()
+    fac.update_courses_phase_2()
     for stud in jm_studs:
         assert stud not in fac.info['students']
         assert stud not in fac.univ.info['students']

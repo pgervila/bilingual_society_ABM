@@ -175,6 +175,7 @@ class BaseAgent:
             Args:
                 * new_class: class. Agent subclass that will replace the current one
                 * ret_ouput: boolean. True if grown_agent needs to be returned as output
+                * upd_course:
         """
         grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
 
@@ -702,6 +703,14 @@ class Baby(ListenerAgent):
         else:
             self.loc_info['school'] = [school, None]
 
+    def get_school_and_course(self):
+        """
+            Method to get school center and corresponding course for student agent
+        """
+
+        educ_center, course_key = self.loc_info['school']
+        return educ_center, course_key
+
     def register_to_school(self):
         # find closest school in cluster
         clust_info = self.model.geo.clusters_info[self.loc_info['home'].clust]
@@ -858,6 +867,7 @@ class Adolescent(IndepAgent, SchoolAgent):
         self.speak_in_random_subgroups(mates, num_days=3)
 
     def evolve(self, new_class, ret_output=False, university=None, upd_course=False):
+
         grown_agent = super().evolve(new_class, ret_output=True, upd_course=upd_course)
         # new agent will not go to school in any case
         del grown_agent.loc_info['school']
@@ -866,7 +876,7 @@ class Adolescent(IndepAgent, SchoolAgent):
             if university:
                 fac_key = random.choice(string.ascii_letters[:5])
                 fac = university.faculties[fac_key]
-                fac.assign_student(grown_agent)
+                fac.assign_student(grown_agent, course_key=19, hire_t=False)
                 # agent moves to new home if he has to change cluster to attend univ
                 if fac.info['clust'] != grown_agent.loc_info['home'].clust:
                     grown_agent.move_to_new_home()

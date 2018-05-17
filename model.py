@@ -358,7 +358,8 @@ class LanguageModel(Model):
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
-        """ Method to remove agent instance from locations in agent loc_info dict attribute
+        """
+            Method to remove agent instance from locations in agent loc_info dict attribute
             Replacement by grown_agent will depend on self type
         """
         # TODO : should it be a geomapping method ?

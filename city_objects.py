@@ -93,7 +93,7 @@ class EducationCenter:
             self.group_students_per_year()
         self.hire_teachers(self.grouped_studs.keys(), move_home=False)
 
-    def update_courses(self, max_course_dist=3):
+    def update_courses_phase_1(self, max_course_dist=3):
         """
             Method to update courses at the end of the year. It moves all students forward to
             next course and checks each new course has a corresponding teacher. It sends a percentage of
@@ -124,19 +124,14 @@ class EducationCenter:
                         # set missing teacher for new course
                         updated_groups[c_id + 1]['teacher'] = None
                     else:
-                        # keep teacher if he/she does not have to retire
                         if self.grouped_studs[c_id + 1]['teacher']:
-                            if self.grouped_studs[c_id + 1]['teacher'].info['age'] < retirement_age:
-                                updated_groups[c_id + 1]['teacher'] = self.grouped_studs[c_id + 1]['teacher']
-                            else:
-                                updated_groups[c_id + 1]['teacher'] = None
+                            updated_groups[c_id + 1]['teacher'] = self.grouped_studs[c_id + 1]['teacher']
                         else:
                             updated_groups[c_id + 1]['teacher'] = None
                 else:
                     # store students that will move out of school
                     exit_students = course['students']
-                    # TODO: need to remove students from school now, to avoid conflicts during transition later
-
+                    self.exit_studs(exit_students)
 
             # define set of teachers that are left with an empty course
             jobless_teachers_keys = {key for key in self.grouped_studs
@@ -174,23 +169,31 @@ class EducationCenter:
             for (c_id, course) in self.grouped_studs.items():
                 for st in course['students']:
                     st.loc_info[educ_center][1] = c_id
+            # assign info needed later after all school rearrangements are done
+            #self.info['update'] = {'missing_teachers_keys': missing_teachers_keys}
 
-            # return {'missing_teachers_keys': missing_teachers_keys, 'exit_students': exit_students}
+    def update_courses_phase_2(self):
+        """ Method to hire missing teachers after phase1-update and
+            replace retiring teachers"""
 
-            # check if there are still missing teachers for some courses and hire them
-            if missing_teachers_keys:
-                self.hire_teachers(missing_teachers_keys)
+        retirement_age = Teacher.age_high * self.model.steps_per_year
+        # missing_teachers_keys = self.info['update']['missing_teachers_keys']
+        # exit_students = self.info['update']['exit_students']
 
-            # exit_studs ( decoupled from course updating process to avoid conflicts in agent transfers)
-            if exit_students:
-                self.exit_studs(exit_students)
+        for c_id, c_info in self.grouped_studs.items():
+            if not c_info['teacher']:
+                self.hire_teachers([c_id])
 
-            # check if teacher has to retire and replace it if needed
-            for (c_id, course) in self.grouped_studs.items():
-                if course['teacher'].info['age'] >= retirement_age:
-                    course['teacher'].evolve(Pensioner)
+        # # check if there are still missing teachers for some courses and hire them
+        # if missing_teachers_keys:
+        #     self.hire_teachers(missing_teachers_keys)
 
-            print('UPDATED ', self)
+        # check if teacher has to retire and replace it if needed
+        for (c_id, course) in self.grouped_studs.items():
+            if course['teacher'].info['age'] >= retirement_age:
+                course['teacher'].evolve(Pensioner)
+
+        print('UPDATED ', self)
 
     def find_teachers(self, courses_keys):
         """
@@ -251,7 +254,7 @@ class EducationCenter:
         """ Method will be customized in subclasses """
         pass
 
-    def assign_student(self, student):
+    def assign_student(self, student, course_key=None, hire_t=True):
         """
             Method that assigns student to educational center( school or university)
             and corresponding course.
@@ -259,8 +262,10 @@ class EducationCenter:
             It checks for old school if any and removes student from it
             Args:
                 * student: agent instance.
-                * hire_teacher: boolean. If True, a teacher will be hired
-                    if course assigned to student does not exist. Defaults to True
+                * course_key: integer. Specify course_key
+                * hire_t: boolean. If True, a teacher will be hired if the assigned course did not exist.
+                    Defaults to True
+
         """
 
         # First checks school student comes from, if any, and remove links to it
@@ -278,8 +283,9 @@ class EducationCenter:
         if course_key in self.grouped_studs:
             self[course_key]['students'].add(student)
         else:
-            self.grouped_studs[course_key] = {'students': {student}}
-            self.hire_teachers([course_key])
+            self.grouped_studs[course_key] = {'students': {student}, 'teacher': None}
+            if hire_t:
+                self.hire_teachers([course_key])
         self.info['students'].add(student)
 
     def remove_student(self, student):
@@ -367,12 +373,7 @@ class School(EducationCenter):
             for st in ags['students']:
                 st.loc_info['school'][1] = c_key
 
-    # def update_courses(self, max_course_dist=3):
-    #     super().update_courses()
-    #     # assign course id to each student
-    #     for (c_id, course) in self.grouped_studs.items():
-    #         for st in course['students']:
-    #             st.loc_info['school'][1] = c_id
+
 
     def assign_teacher(self, teacher, course_key, move_home=True):
         """ Method to assign school job to a teacher. It checks that all links
@@ -423,9 +424,10 @@ class School(EducationCenter):
                 hired_t = hired_t.evolve(Teacher, ret_output=True)
             self.assign_teacher(hired_t, k, move_home=move_home)
 
-    def assign_student(self, student):
-        super().assign_student(student)
-        course_key = int(student.info['age'] / self.model.steps_per_year)
+    def assign_student(self, student, course_key=None, hire_t=True):
+        super().assign_student(student, course_key=course_key, hire_t=hire_t)
+        if not course_key:
+            course_key = int(student.info['age'] / self.model.steps_per_year)
         student.loc_info['school'] = [self, course_key]
 
     def exit_studs(self, studs):
@@ -517,12 +519,7 @@ class Faculty(EducationCenter):
             for st in ags['students']:
                 st.loc_info['university'][2] = c_key
 
-    # def update_courses(self, max_course_dist=3):
-    #     super().update_courses()
-    #     # assign course id to each student
-    #     for (c_id, course) in self.grouped_studs.items():
-    #         for st in course['students']:
-    #             st.loc_info['university'][1] = c_id
+
 
     def assign_teacher(self, teacher, course_key, move_home=True):
         try:
@@ -567,11 +564,12 @@ class Faculty(EducationCenter):
         for st in list(studs):
             st.evolve(Young, upd_course=True)
 
-    def assign_student(self, student):
-        super().assign_student(student)
+    def assign_student(self, student, course_key=None, hire_t=True):
+        super().assign_student(student, course_key=course_key, hire_t=hire_t)
 
         self.univ.info['students'].add(student)
-        course_key = int(student.info['age'] / self.model.steps_per_year)
+        if not course_key:
+            course_key = int(student.info['age'] / self.model.steps_per_year)
         student.loc_info['university'] = [self.univ, course_key, self.info['type']]
 
     def remove_student(self, student, upd_course=False):
