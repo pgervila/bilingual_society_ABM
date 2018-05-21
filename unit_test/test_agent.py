@@ -57,6 +57,8 @@ test_data_vocab_choice_model = [True, False]
 
 test_data_move_new_home = [(True, None, None), (True, True, None), (True, True, True)]
 
+test_data_get_job  = [Young, Teacher, TeacherUniv]
+
 
 @pytest.mark.parametrize("origin_class, new_class, labels", test_data_evolve)
 def test_evolve(model, city_places, origin_class, new_class, labels):
@@ -98,7 +100,6 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
     city_places['home'].agents_in.add(old_ag)
     # print(old_ag)
     # print(city_places['home'].agents_in)
-
 
     if labels[2]:
         grown_ag = old_ag.evolve(new_class, ret_output=True, 
@@ -165,8 +166,18 @@ def test_move_to_new_home(model, job1, job2, j2_teach):
         assert consort1  in consort1.loc_info['job'].info['employees']
     if consort2.loc_info['job'] == j2 and j2:
         assert consort2  in consort2.loc_info['job'].info['employees']
-    
 
+@pytest.mark.parametrize('agent_class', test_data_get_job)
+def test_get_job(model, city_places, agent_class):
+    ag_id = model.set_available_ids.pop()
+    agent_class(model, ag_id, 0, 'M', age=1200, home=city_places['home'])
+
+    if type(agent) is Adult:
+        assert agent in agent.loc_info['job'].info['employees']
+    elif type(agent) is Teacher:
+        assert agent in agent.loc_info['job'][0].info['employees']
+    elif type(agent) is TeacherUniv:
+        assert agent in agent.loc_info['job'][0].info['employees']
                   
 # @pytest.mark.parametrize("sample_words, speak", test_data_update_lang_arrays)
 # def test_update_lang_arrays(model, sample_words, speak):

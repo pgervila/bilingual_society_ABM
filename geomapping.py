@@ -216,7 +216,7 @@ class GeoMapper:
                 self.clusters_info[clust_idx]['schools'].append(school)
                 school_places_per_cluster -= school_size
 
-    def map_universities(self, pct_univ_towns = 0.2):
+    def map_universities(self, pct_univ_towns=0.2):
         num_univ = ceil(pct_univ_towns * self.num_clusters)
         ixs_sorted = np.argsort(self.cluster_sizes)[::-1][:num_univ]
         for clust_idx in ixs_sorted:
