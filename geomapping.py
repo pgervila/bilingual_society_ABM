@@ -392,3 +392,11 @@ class GeoMapper:
             else:
                 raise Exception('new cluster must be specified for switch option')
 
+    def get_clusters_with_univ(self):
+        sorted_clusts = np.argsort(self.cluster_sizes)[::-1]
+        for ix, clust in enumerate(sorted_clusts):
+            if 'university' not in self.clusters_info[clust]:
+                ix_max_univ = ix
+                break
+        return sorted_clusts[:ix_max_univ]
+

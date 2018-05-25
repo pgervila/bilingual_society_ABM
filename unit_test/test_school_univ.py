@@ -210,12 +210,22 @@ def test_assign_new_stud_to_course(model):
     assert new_student in school.grouped_studs[new_stud_course]['students']
     assert new_student.loc_info['school'][1] == new_stud_course
 
+
 def test_teacher_death(model):
     school = model.geo.clusters_info[0]['schools'][0]
     ck = list(school.grouped_studs.keys())[0]
     teacher = school[ck]['teacher']
-    with patch('agent.BaseAgent.random_death') as mock_rand_death:
-        mock_rand_death.return_value = True
-        teacher.random_death()
-        assert school[ck]['teacher'] != teacher
-        assert school[ck]['teacher']
+
+    model.remove_after_death(teacher)
+
+    assert school[ck]['teacher'] != teacher
+    assert school[ck]['teacher']
+    # check only one teacher is assigned to course after previous teacher death
+    assert len([t for t in school.info['employees'] if t.loc_info['job'][1] == ck]) == 1
+
+
+    # with patch('agent.BaseAgent.random_death') as mock_rand_death:
+    #     mock_rand_death.return_value = True
+    #     teacher.random_death()
+    #     assert school[ck]['teacher'] != teacher
+    #     assert school[ck]['teacher']

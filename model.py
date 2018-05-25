@@ -206,7 +206,7 @@ class LanguageModel(Model):
             langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
                                        for ag in others
                                        if ag in self.nws.known_people_network[ag_init]]
-            langs_with_known_agents = [lang[0] if isinstance(lang, list) else lang
+            langs_with_known_agents = [lang[0] if isinstance(lang, tuple) else lang
                                        for lang in langs_with_known_agents]
             if langs_with_known_agents:
                 lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
@@ -217,16 +217,23 @@ class LanguageModel(Model):
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
-            idxs_real_monolings_l1 = [idx for idx, pct in enumerate(l2_pcts) if pct < 0.025]
-            idxs_real_monolings_l2 = [idx for idx, pct in enumerate(l1_pcts) if pct < 0.025]
+            idxs_real_monolings_l1 = [idx for idx, pct in enumerate(l2_pcts)
+                                      if pct < ags[idx].lang_thresholds['understand']]
+            idxs_real_monolings_l2 = [idx for idx, pct in enumerate(l1_pcts)
+                                      if pct < ags[idx].lang_thresholds['understand']]
 
             if not idxs_real_monolings_l1 and not idxs_real_monolings_l2:
                 # No complete monolinguals on either side
                 # All agents partially understand each other langs, but some can't speak l1 and some can't speak l2
                 # Conversation is possible when each agent picks their favorite lang
-                lang_group = fav_lang_per_agent
-                conv_params.update({'lang_group': lang_group, 'multilingual':True, 'long':False})
-
+                # TODO: those who can should adapt to init lang
+                lang_init = fav_lang_per_agent[0]
+                lang_group = tuple([lang_init
+                                    if fav_langs_and_pcts[ix][1][lang_init] >= ag.lang_thresholds['speak']
+                                    else fav_lang_per_agent[ix]
+                                    for ix, ag in enumerate(ags)])
+                conv_params.update({'lang_group': lang_group,
+                                    'multilingual': True, 'long': False})
             elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
                 # There are real L1 monolinguals in the group
                 # Everybody partially understands L1, but some agents don't understand L2 at all
@@ -274,7 +281,7 @@ class LanguageModel(Model):
                 conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
 
         if not conv_params['multilingual']:
-            conv_params['lang_group'] = [conv_params['lang_group']] * len(ags)
+            conv_params['lang_group'] = (conv_params['lang_group'],) * len(ags)
 
         conv_params['min_group_age'] = min([ag.info['age'] for ag in ags])
         conv_params['fav_langs'] = fav_lang_per_agent
@@ -376,7 +383,10 @@ class LanguageModel(Model):
             if key == 'school':
                 school = agent.loc_info['school'][0]
                 if isinstance(agent, (Baby, Child)):
-                    school.remove_student(agent, replace=replace, grown_agent=grown_agent)
+                    try:
+                        school.remove_student(agent, replace=replace, grown_agent=grown_agent)
+                    except AttributeError:
+                        continue
                 elif isinstance(agent, Adolescent):
                     # if Adolescent, agent will never be replaced at school by grown agent
                     school.remove_student(agent, upd_course=upd_course)
@@ -385,17 +395,25 @@ class LanguageModel(Model):
                 home.remove_agent(agent, replace=replace, grown_agent=grown_agent)
             elif key == 'job':
                 if isinstance(agent, TeacherUniv):
-                    univ, course_key, fac_key = agent.loc_info['job']
-                    if isinstance(grown_agent, Pensioner):
-                        univ.faculties[fac_key].remove_employee(agent)
-                    else:
-                        univ.faculties[fac_key].remove_employee(agent, replace=replace, new_teacher=grown_agent)
+                    try:
+                        univ, course_key, fac_key = agent.loc_info['job']
+                        if isinstance(grown_agent, Pensioner):
+                            univ.faculties[fac_key].remove_employee(agent)
+                        else:
+                            univ.faculties[fac_key].remove_employee(agent, replace=replace,
+                                                                    new_teacher=grown_agent)
+                    except TypeError:
+                        pass
                 elif isinstance(agent, Teacher):
-                    school, course_key = agent.loc_info['job']
-                    if isinstance(grown_agent, Pensioner):
-                        school.remove_employee(agent)
-                    else:
-                        school.remove_employee(agent, replace=replace, new_teacher=grown_agent)
+                    try:
+                        school, course_key = agent.loc_info['job']
+                        if isinstance(grown_agent, Pensioner):
+                            school.remove_employee(agent)
+                        else:
+                            school.remove_employee(agent, replace=replace,
+                                                   new_teacher=grown_agent)
+                    except TypeError:
+                        pass
                 elif isinstance(agent, Adult):
                     job = agent.loc_info['job']
                     if job: job.remove_employee(agent)

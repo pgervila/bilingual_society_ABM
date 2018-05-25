@@ -151,10 +151,15 @@ class BaseAgent:
             return dominant_lang
 
     def update_lang_switch(self, switch_threshold=0.2):
-        """Switch to a new linguistic regime when threshold is reached
+        """
+           Switch to a new linguistic regime when threshold is reached
            If language knowledge falls below switch_threshold value, agent
            becomes monolingual
-           This method is called from schedule at each step"""
+           This method is called from schedule at each step
+           Args:
+                * switch_threshold: float. Threshold value below which agent
+                    is no longer considered fluent in that language. It defaults to 0.2
+        """
 
         if self.info['language'] == 0:
             if self.lang_stats['L2']['pct'][self.info['age']] >= switch_threshold:
@@ -237,6 +242,9 @@ class BaseAgent:
             for ag, labels in self.model.nws.family_network[self].items():
                 if labels['fam_link'] == fam_link:
                     return ag
+
+    def go_back_home(self):
+        self.model.grid.move_agent(self, self.loc_info['home'].pos)
 
     def __repr__(self):
         if self.loc_info['home']:
@@ -660,10 +668,15 @@ class IndepAgent(SpeakerAgent):
         for ag in group:
             ag.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
 
-
-
     def pick_random_friend(self, ix_agent):
-        """ Description needed """
+        """
+            Method selects a row of friendship adjacent matrix based on agent index
+            It then picks a random friend based on probabilities of friendship intensity
+
+            Args:
+                * ix_agent: integer. agent index in schedule agent list
+        """
+
         # get current agent neighboring nodes ids
         adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
         # get agents ids and probs
@@ -674,6 +687,11 @@ class IndepAgent(SpeakerAgent):
             return picked_agent
 
     def speak_to_random_friend(self, ix_agent, num_days):
+        """ Method to speak to a randomly chosen friend
+            Args:
+                * ix_agent: integer. agent index in schedule agent list
+                 * num_days: integer. number of days out of ten when action takes place on average
+        """
         random_friend = self.pick_random_friend(ix_agent)
         if random_friend:
             self.model.run_conversation(self, random_friend, num_days=num_days)
@@ -681,6 +699,10 @@ class IndepAgent(SpeakerAgent):
     def meet_agent(self):
         pass
     # TODO : method to meet new agents
+
+    def listen_to_media(self):
+        """ Method to listen languages in mass media: internet, radio, TV, movies """
+        pass
 
 
 class Baby(ListenerAgent):
@@ -778,6 +800,7 @@ class Baby(ListenerAgent):
 
     def stage_4(self):
         # baby goes to bed early during week
+        self.go_back_home()
         self.stage_1(num_days=3)
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Child)
@@ -837,6 +860,7 @@ class Child(SchoolAgent):
         school.agents_in.remove(self)
 
     def stage_4(self, num_days=10):
+        self.go_back_home()
         self.stage_1(num_days=num_days)
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Adolescent)
@@ -915,6 +939,7 @@ class Adolescent(IndepAgent, SchoolAgent):
             self.speak_to_random_friend(ix_agent, num_days=5)
 
     def stage_4(self, ix_agent, num_days=7):
+        self.go_back_home()
         self.stage_1(ix_agent, num_days=num_days)
         # go out with friends at least once
         num_out = random.randint(1, 5)
@@ -1163,6 +1188,7 @@ class Young(IndepAgent):
                 if child.info['age'] > self.model.steps_per_year:
                     child.register_to_school()
 
+
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
@@ -1183,6 +1209,7 @@ class Young(IndepAgent):
             self.speak_in_random_subgroups(colleagues)
 
     def stage_4(self, ix_agent):
+        self.go_back_home()
         self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
@@ -1265,6 +1292,7 @@ class YoungUniv(Adolescent):
         self.speak_at_school(faculty, course_key, num_days=num_days)
 
     def stage_4(self, ix_agent):
+        self.go_back_home()
         super().stage_4(ix_agent)
         # TODO: visit family, meet siblings
 
@@ -1305,6 +1333,7 @@ class Adult(Young): # from 30 to 65
         super().stage_2(ix_agent)
 
     def stage_4(self, ix_agent, num_days=7):
+        self.go_back_home()
         self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
@@ -1343,10 +1372,10 @@ class Teacher(Adult):
                 break
 
     def random_death(self):
-        school, course_key = self.loc_info['job']
+        # school, course_key = self.loc_info['job']
         dead = BaseAgent.random_death(self, ret_out=True)
-        if dead and course_key:
-            school.hire_teachers([course_key])
+        # if dead and course_key:
+        #     school.hire_teachers([course_key])
 
     def speak_to_class(self):
         job, course_key = self.loc_info['job']
@@ -1363,22 +1392,30 @@ class Teacher(Adult):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        job, course_key = self.get_school_and_course()
-        self.model.grid.move_agent(self, job.pos)
-        job.agents_in.add(self)
-        self.speak_to_class()
-        colleagues = job.info['employees']
-        self.speak_in_random_subgroups(colleagues)
+        if not self.loc_info['job']:
+            # TODO: make sure agent meets lang requirements to get job as teacher, study otherwise
+            self.get_job(keep_cluster=True)
+        else:
+            job, course_key = self.get_school_and_course()
+            self.model.grid.move_agent(self, job.pos)
+            job.agents_in.add(self)
+            self.speak_to_class()
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        job, course_key = self.get_school_and_course()
-        self.speak_to_class()
-        colleagues = job.info['employees']
-        self.speak_in_random_subgroups(colleagues)
+        if not self.loc_info['job']:
+            self.get_job(keep_cluster=True)
+        else:
+            job, course_key = self.get_school_and_course()
+            self.speak_to_class()
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
-        self.speak_to_random_friend(ix_agent, num_days=3)
+            self.speak_to_random_friend(ix_agent, num_days=3)
 
     def stage_4(self, ix_agent, num_days=7):
+        self.go_back_home()
         self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
@@ -1395,7 +1432,11 @@ class TeacherUniv(Teacher):
         return educ_center, course_key
 
     def get_job(self, keep_cluster=False):
-        clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
+        if keep_cluster:
+            clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
+        else:
+            clust = np.random.choice(self.model.geo.get_clusters_with_univ())
+
         if 'university' in self.model.geo.clusters_info[clust]:
             univ = self.model.geo.clusters_info[clust]['university']
             if self.info['language'] in univ.info['lang_policy']:
@@ -1403,10 +1444,10 @@ class TeacherUniv(Teacher):
                 fac.assign_teacher(self)
 
     def random_death(self):
-        univ, course_key, fac_key = self.loc_info['job']
+        # univ, course_key, fac_key = self.loc_info['job']
         dead = BaseAgent.random_death(self, ret_out=True)
-        if dead and course_key:
-            univ.faculties[fac_key].hire_teachers([course_key])
+        # if dead and course_key:
+        #     univ.faculties[fac_key].hire_teachers([course_key])
 
     def speak_to_class(self):
         job, course_key, fac_key = self.loc_info['job']
@@ -1417,21 +1458,27 @@ class TeacherUniv(Teacher):
                 self.speak_to_group(studs, 0)
 
     def stage_2(self, ix_agent):
-        fac, course_key = self.get_school_and_course()
-        self.model.grid.move_agent(self, fac.pos)
-        fac.agents_in.add(self)
-        self.speak_to_class()
+        if not self.loc_info['job']:
+            self.get_job(keep_cluster=True)
+        else:
+            fac, course_key = self.get_school_and_course()
+            self.model.grid.move_agent(self, fac.pos)
+            fac.agents_in.add(self)
+            self.speak_to_class()
 
-        colleagues = fac.info['employees']
-        self.speak_in_random_subgroups(colleagues)
+            colleagues = fac.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        fac, course_key = self.get_school_and_course()
-        self.speak_to_class()
-        colleagues = fac.info['employees']
-        self.speak_in_random_subgroups(colleagues)
+        if not self.loc_info['job']:
+            self.get_job(keep_cluster=True)
+        else:
+            fac, course_key = self.get_school_and_course()
+            self.speak_to_class()
+            colleagues = fac.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
-        self.speak_to_random_friend(ix_agent, num_days=3)
+            self.speak_to_random_friend(ix_agent, num_days=3)
 
 
 class Pensioner(Adult): # from 65 to death
@@ -1454,6 +1501,7 @@ class Pensioner(Adult): # from 65 to death
             self.speak_to_random_friend(ix_agent, num_days=7)
 
     def stage_4(self, ix_agent, num_days=10):
+        self.go_back_home()
         self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=7)

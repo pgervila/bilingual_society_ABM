@@ -206,7 +206,7 @@ class EducationCenter:
                 * ret_output: boolean. True when output needs to be returned
         """
 
-        num_needed_teachers = len([c_id for c_id in courses_keys if c_id])
+        num_needed_teachers = len(set([c_id for c_id in courses_keys if c_id]))
         hired_teachers = []
 
         # first check among teachers employed at educ_center but without course_key assigned
@@ -288,16 +288,15 @@ class EducationCenter:
                 * course_key: integer. Specify course_key
                 * hire_t: boolean. If True, a teacher will be hired if the assigned course did not exist.
                     Defaults to True
-
         """
 
-        # First checks school student comes from, if any, and remove links to it
+        # First checks center student comes from, if any, and remove links to it
         try:
-            old_school, course_key = student.get_school_and_course()
+            old_educ_center, course_key = student.get_school_and_course()
         except KeyError:
-            old_school = None
-        if old_school and old_school is not self:
-            old_school.remove_student(student)
+            old_educ_center = None
+        if old_educ_center and old_educ_center is not self:
+            old_educ_center.remove_student(student)
 
         # Now assign student to new educ_center and corresponding course
         if not course_key:
@@ -310,6 +309,7 @@ class EducationCenter:
             if hire_t:
                 self.hire_teachers([course_key])
         self.info['students'].add(student)
+        return course_key
 
     def remove_student(self, student):
         """ Method will be implemented in subclasses"""
@@ -357,7 +357,8 @@ class EducationCenter:
         """ Remove school course if no students are left in it. Relocate teacher """
         if not self[course_key]['students']:
             courseless_teacher = self[course_key]['teacher']
-            courseless_teacher.loc_info['job'][1] = None
+            if courseless_teacher:
+                courseless_teacher.loc_info['job'][1] = None
             del self.grouped_studs[course_key]
 
     def __getitem__(self, key):
@@ -401,32 +402,28 @@ class School(EducationCenter):
             to previous job are erased before assigning the new ones
             Args:
                 * teacher: Teacher class instance.
-                * course_key: integer. It specifies course
+                * course_key: integer. It specifies teacher's course, if any. It defaults to none
                 * move_home: boolean. If True(default), it forces teacher agent to
-                    move to a new home
+                    move to a new home if his current home is not in the same cluster as the new school
         """
 
         self.check_teacher_old_job(teacher)
 
         if course_key:
-            # assign both to school and course
+            # assign teacher to course
             self.grouped_studs[course_key]['teacher'] = teacher
-            teacher.loc_info['job'] = [self, course_key]
-            if teacher not in self.info['employees']:
-                self.info['employees'].add(teacher)
-            if move_home:
-                teacher_clust = teacher.loc_info['home'].clust
-                school_clust = self.info['clust']
-                if teacher_clust is not school_clust:
-                    teacher.move_to_new_home(marriage=False)
-        else:
-            # assign only to school
-            teacher.loc_info['job'] = [self, None]
-            if teacher not in self.info['employees']:
-                self.info['employees'].add(teacher)
+        teacher.loc_info['job'] = [self, course_key]
+        if teacher not in self.info['employees']:
+            self.info['employees'].add(teacher)
+        if move_home:
+            teacher_clust = teacher.loc_info['home'].clust
+            school_clust = self.info['clust']
+            if teacher_clust is not school_clust:
+                teacher.move_to_new_home(marriage=False)
 
     def hire_teachers(self, courses_keys, move_home=True):
-        """ Hire teachers for the specified courses
+        """
+            Hire teachers for the specified courses
             Args:
                 * courses_keys: list of integer(s). Identifies courses for which teachers are missing
                     through years of age of its students
@@ -470,14 +467,9 @@ class School(EducationCenter):
                 return other_clusters_free_staff
         return other_clusters_free_staff
 
-
-
-
-
     def assign_student(self, student, course_key=None, hire_t=True):
-        super().assign_student(student, course_key=course_key, hire_t=hire_t)
-        if not course_key:
-            course_key = int(student.info['age'] / self.model.steps_per_year)
+
+        course_key = super().assign_student(student, course_key=course_key, hire_t=hire_t)
         student.loc_info['school'] = [self, course_key]
 
     def exit_studs(self, studs):
@@ -575,21 +567,16 @@ class Faculty(EducationCenter):
 
         if course_key:
             self.grouped_studs[course_key]['teacher'] = teacher
-            teacher.loc_info['job'] = [self.univ, course_key, self.info['type']]
-            if teacher not in self.info['employees']:
-                self.info['employees'].add(teacher)
-                self.univ.info['employees'].add(teacher)
-            # check if moving to a new home is needed
-            if move_home:
-                teacher_clust = teacher.loc_info['home'].clust
-                school_clust = self.info['clust']
-                if teacher_clust is not school_clust:
-                    teacher.move_to_new_home(marriage=False)
-        else:
-            teacher.loc_info['job'] = [self.univ, course_key, self.info['type']]
-            if teacher not in self.info['employees']:
-                self.info['employees'].add(teacher)
-                self.univ.info['employees'].add(teacher)
+        teacher.loc_info['job'] = [self.univ, course_key, self.info['type']]
+        if teacher not in self.info['employees']:
+            self.info['employees'].add(teacher)
+            self.univ.info['employees'].add(teacher)
+        # check if moving to a new home is needed
+        if move_home:
+            teacher_clust = teacher.loc_info['home'].clust
+            school_clust = self.info['clust']
+            if teacher_clust is not school_clust:
+                teacher.move_to_new_home(marriage=False)
 
     def hire_teachers(self, courses_keys):
         """ Hire teachers for the specified courses
@@ -637,11 +624,8 @@ class Faculty(EducationCenter):
             st.evolve(Young, upd_course=True)
 
     def assign_student(self, student, course_key=None, hire_t=True):
-        super().assign_student(student, course_key=course_key, hire_t=hire_t)
-
+        course_key = super().assign_student(student, course_key=course_key, hire_t=hire_t)
         self.univ.info['students'].add(student)
-        if not course_key:
-            course_key = int(student.info['age'] / self.model.steps_per_year)
         student.loc_info['university'] = [self.univ, course_key, self.info['type']]
 
     def remove_student(self, student, upd_course=False):

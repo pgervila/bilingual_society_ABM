@@ -12,9 +12,11 @@ reload(model)
 from agent import Baby, Child, Adolescent, Young, YoungUniv, Adult, Worker, Teacher, TeacherUniv, Pensioner
 from model import LanguageModel
 
+
 @pytest.fixture(scope="module")
 def model():
     return LanguageModel(250, num_clusters=2)
+
 
 @pytest.fixture(scope="module")
 def city_places(model):
@@ -57,17 +59,24 @@ test_data_vocab_choice_model = [True, False]
 
 test_data_move_new_home = [(True, None, None), (True, True, None), (True, True, True)]
 
-test_data_get_job  = [Young, Teacher, TeacherUniv]
+test_data_get_job = [Young, Teacher, TeacherUniv]
+
+
+def add_ag_to_world(m, city_places, ag_to_add):
+    """ add agent to grid, schedule, clusters, networks """
+    m.geo.add_agents_to_grid_and_schedule(ag_to_add)
+    m.geo.clusters_info[city_places['home'].clust]['agents'].append(ag_to_add)
+    m.nws.add_ags_to_networks(ag_to_add)
 
 
 @pytest.mark.parametrize("origin_class, new_class, labels", test_data_evolve)
 def test_evolve(model, city_places, origin_class, new_class, labels):
 
-    def add_ag_to_world(m, ag_to_add):
-        """ add agent to grid, schedule, clusters, networks """
-        m.geo.add_agents_to_grid_and_schedule(ag_to_add)
-        m.geo.clusters_info[city_places['home'].clust]['agents'].append(ag_to_add)
-        m.nws.add_ags_to_networks(ag_to_add)
+    # def add_ag_to_world(m, ag_to_add):
+    #     """ add agent to grid, schedule, clusters, networks """
+    #     m.geo.add_agents_to_grid_and_schedule(ag_to_add)
+    #     m.geo.clusters_info[city_places['home'].clust]['agents'].append(ag_to_add)
+    #     m.nws.add_ags_to_networks(ag_to_add)
 
     if origin_class == Baby:
         father, mother = None, None
@@ -82,11 +91,11 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         old_ag = origin_class(father, mother, 0, 0, model, ag_id, 0, 'M', age=40,
                               home=city_places['home'],
                               **{labels[0]:city_places[labels[0]]})
-        add_ag_to_world(model, old_ag)
+        add_ag_to_world(model, city_places, old_ag)
     elif origin_class == Teacher:
         ag_id = model.set_available_ids.pop()
         old_ag = origin_class(model, ag_id , 0, 'M', age=1200, home=city_places['home'])
-        add_ag_to_world(model, old_ag)
+        add_ag_to_world(model, city_places, old_ag)
         school = city_places['school']
         ckey = np.random.choice(list(school.grouped_studs.keys()))
         school.assign_teacher(old_ag, ckey)
@@ -95,7 +104,7 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         ag_id = model.set_available_ids.pop()
         old_ag = origin_class(model, ag_id, 0, 'M', age=100, home=city_places['home'],
                               **{labels[0]:city_places[labels[0]]})
-        add_ag_to_world(model, old_ag)
+        add_ag_to_world(model, city_places, old_ag)
     
     city_places['home'].agents_in.add(old_ag)
     # print(old_ag)
@@ -167,17 +176,23 @@ def test_move_to_new_home(model, job1, job2, j2_teach):
     if consort2.loc_info['job'] == j2 and j2:
         assert consort2  in consort2.loc_info['job'].info['employees']
 
+
 @pytest.mark.parametrize('agent_class', test_data_get_job)
 def test_get_job(model, city_places, agent_class):
     ag_id = model.set_available_ids.pop()
-    agent_class(model, ag_id, 0, 'M', age=1200, home=city_places['home'])
+    ag = agent_class(model, ag_id, 1, 'M', age=1200, home=city_places['home'])
+    add_ag_to_world(model, city_places, ag)
+    # get a job
+    ag.get_job()
 
-    if type(agent) is Adult:
-        assert agent in agent.loc_info['job'].info['employees']
-    elif type(agent) is Teacher:
-        assert agent in agent.loc_info['job'][0].info['employees']
-    elif type(agent) is TeacherUniv:
-        assert agent in agent.loc_info['job'][0].info['employees']
+    if type(ag) is Adult:
+        assert ag in ag.loc_info['job'].info['employees']
+    elif type(ag) is Teacher:
+        assert ag in ag.loc_info['job'][0].info['employees']
+    elif type(ag) is TeacherUniv:
+        assert ag in ag.loc_info['job'][0].info['employees']
+
+
                   
 # @pytest.mark.parametrize("sample_words, speak", test_data_update_lang_arrays)
 # def test_update_lang_arrays(model, sample_words, speak):
