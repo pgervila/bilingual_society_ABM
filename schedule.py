@@ -78,15 +78,18 @@ class StagedActivationModif(StagedActivation):
                 if 'university' in clust_info:
                     for fac in clust_info['university'].faculties.values():
                         if fac.info['students']:
-                            fac.update_courses()
+                            fac.update_courses_phase_1()
                 for school in clust_info['schools']:
-                    school.update_courses()
-                    if not self.steps % (2 * self.model.steps_per_year):  # every 2 years only, teachers swap
+                    school.update_courses_phase_1()
+            for clust_idx, clust_info in self.model.geo.clusters_info.items():
+                if 'university' in clust_info:
+                    for fac in clust_info['university'].faculties.values():
+                        if fac.info['students']:
+                            fac.update_courses_phase_2()
+                for school in clust_info['schools']:
+                    school.update_courses_phase_2()
+                    if not self.steps % (4 * self.model.steps_per_year):  # every 4 years only, teachers swap
                         school.swap_teachers_courses()
-
-        # sc = self.model.geo.clusters_info[2]['schools'][0]
-        # print('num_school_employees at step end is: ', len(sc.info['employees']))
-        # print(sc.grouped_studs.keys())
 
         self.steps += 1
 

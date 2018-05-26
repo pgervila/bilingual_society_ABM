@@ -216,7 +216,7 @@ class GeoMapper:
                 self.clusters_info[clust_idx]['schools'].append(school)
                 school_places_per_cluster -= school_size
 
-    def map_universities(self, pct_univ_towns = 0.2):
+    def map_universities(self, pct_univ_towns=0.2):
         num_univ = ceil(pct_univ_towns * self.num_clusters)
         ixs_sorted = np.argsort(self.cluster_sizes)[::-1][:num_univ]
         for clust_idx in ixs_sorted:
@@ -319,7 +319,7 @@ class GeoMapper:
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
-                            job.hire_employee(parent)
+                            job.hire_employee(parent, move_home=False)
                             break
                 # assign school to children
                 # find closest school to home
@@ -350,7 +350,7 @@ class GeoMapper:
                     while True:
                         job = np.random.choice(clust_info['jobs'])
                         if job.num_places:
-                            job.hire_employee(ag)
+                            job.hire_employee(ag, move_home=False)
                             break
 
     def assign_school_jobs(self):
@@ -391,4 +391,12 @@ class GeoMapper:
                 self.clusters_info[new_clust]['agents'].append(agent)
             else:
                 raise Exception('new cluster must be specified for switch option')
+
+    def get_clusters_with_univ(self):
+        sorted_clusts = np.argsort(self.cluster_sizes)[::-1]
+        for ix, clust in enumerate(sorted_clusts):
+            if 'university' not in self.clusters_info[clust]:
+                ix_max_univ = ix
+                break
+        return sorted_clusts[:ix_max_univ]
 

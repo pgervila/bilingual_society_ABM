@@ -6,12 +6,28 @@ import networkx as nx
 from scipy.spatial.distance import pdist
 from collections import defaultdict
 
+#from city_objects import Job
+
 #import private library to model lang zipf CDF
 from zipf_generator import randZipf, Zipf_Mand_CDF_compressed
 
 
 class BaseAgent:
-    """ Basic agent class that contains attributes and methods common to all lang agents subclasses"""
+    """ Basic agent class that contains attributes and
+        methods common to all lang agents subclasses
+        Args:
+            * model: model class instance
+            * unique_id: integer
+            * language: integer in [0, 1, 2]. 0 -> mono L1, 1 -> bilingual , 2 -> mono L2
+            * sex: string. Either 'M' or 'F'
+            * age: integer
+            * home: home class instance
+            * lang_act_thresh: float. Minimum percentage of known words to be able
+                to ACTIVELY communicate in a given language
+            * lang_passive_thresh: float. Minimum percentage of known words to be able
+                to PASSIVELY understand a given language
+            * import_ic: boolean. True if linguistic initial conditions must be imported
+    """
 
     # define memory retrievability constant
     k = np.log(10 / 9)
@@ -135,10 +151,15 @@ class BaseAgent:
             return dominant_lang
 
     def update_lang_switch(self, switch_threshold=0.2):
-        """Switch to a new linguistic regime when threshold is reached
+        """
+           Switch to a new linguistic regime when threshold is reached
            If language knowledge falls below switch_threshold value, agent
            becomes monolingual
-           This method is called from schedule at each step"""
+           This method is called from schedule at each step
+           Args:
+                * switch_threshold: float. Threshold value below which agent
+                    is no longer considered fluent in that language. It defaults to 0.2
+        """
 
         if self.info['language'] == 0:
             if self.lang_stats['L2']['pct'][self.info['age']] >= switch_threshold:
@@ -152,13 +173,14 @@ class BaseAgent:
             elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
                 self.info['language'] = 0
 
-    def evolve(self, new_class, ret_output=False):
+    def evolve(self, new_class, ret_output=False, upd_course=False):
         """ It replaces current agent with a new agent subclass instance.
             It removes current instance from all networks, lists, sets in model and adds new instance
             to them instead.
             Args:
                 * new_class: class. Agent subclass that will replace the current one
                 * ret_ouput: boolean. True if grown_agent needs to be returned as output
+                * upd_course:
         """
         grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
 
@@ -183,7 +205,8 @@ class BaseAgent:
         self.model.schedule.replace_agent(self, grown_agent)
 
         # remove and replace agent from ALL locations where it belongs to
-        self.model.remove_from_locations(self, replace=True, grown_agent=grown_agent)
+        self.model.remove_from_locations(self, replace=True,
+                                         grown_agent=grown_agent, upd_course=upd_course)
 
         if ret_output:
             return grown_agent
@@ -220,7 +243,8 @@ class BaseAgent:
                 if labels['fam_link'] == fam_link:
                     return ag
 
-
+    def go_back_home(self):
+        self.model.grid.move_agent(self, self.loc_info['home'].pos)
 
     def __repr__(self):
         if self.loc_info['home']:
@@ -517,6 +541,25 @@ class SpeakerAgent(ListenerAgent):
               other not in self.model.nws.friendship_network[self]):
             self.model.nws.known_people_network[self][other]['num_meet'] += 1
 
+    def speak_in_random_subgroups(self, group, num_days=7, max_group_size=6):
+        """
+            Randomly select a subset of a given group
+            and speak to it. Then select a random member of the subgroup
+            and speak to that member.
+            Args:
+                * group: a list, a tuple or a set of agent instances
+                * num_days: integer. Out of 10, number of days action will take place
+                * max_group_size: integer > 0. Maximum size of random group
+        """
+        if group:
+            num_mates = random.randint(1, min(len(group), max_group_size))
+            # Choose n = 'num_mates' unique random mates
+            speak_group = random.sample(group, num_mates)
+            self.model.run_conversation(self, speak_group, num_days=num_days)
+            # talk to a single random mate
+            random_mate = np.random.choice(speak_group)
+            self.model.run_conversation(self, random_mate, num_days=num_days)
+
     def stage_1(self, num_days=10):
         ags_at_home = self.loc_info['home'].agents_in.difference({self})
         ags_at_home = [ag for ag in ags_at_home if isinstance(ag, SpeakerAgent)]
@@ -531,36 +574,32 @@ class SchoolAgent(SpeakerAgent):
 
     def get_school_and_course(self):
         """
-            Method to get the educational center and corresponding course for student agent,
-            regardless of whether he is at school or at university
+            Method to get school center and corresponding course for student agent
         """
-        if 'school' in self.loc_info:
-            educ_center, course_key = self.loc_info['school']
-        elif 'university' in self.loc_info:
-            educ_center, course_key, fac_key = self.loc_info['university']
-            educ_center = educ_center[fac_key]
+
+        educ_center, course_key = self.loc_info['school']
         return educ_center, course_key
 
-    def speak_at_school(self, num_days):
+    def speak_at_school(self, educ_center, course_key, num_days=7):
         """
             Method to talk with school mates and friends in an educational center,
             such as school or university
             Args:
-                * num_days: integer
+                * educ_center: instance of agent's educational center
+                * course_key: integer.
+                * num_days: integer.
         """
         # TODO : filter by correlation in language preference
 
-        educ_center, course_key = self.get_school_and_course()
         speak_ags_in_course = set([ag for ag in educ_center[course_key]['students']
                                    if isinstance(ag, SchoolAgent)])
+        # talk to random mates in group
         mates = speak_ags_in_course.difference({self})
-        if mates:
-            num_mates = random.randint(1, len(mates))
-            # Choose 'num_mates' unique random mates
-            mates = random.sample(mates, num_mates)
-            self.model.run_conversation(self, mates, num_days=num_days)
-
-
+        self.speak_in_random_subgroups(mates, num_days=num_days)
+        # talk to friends
+        for friend in self.model.nws.friendship_network[self]:
+            if friend in educ_center[course_key]['students']:
+                self.model.run_conversation(self, friend, num_days=num_days)
 
     def study_vocab(self, lang, delta_s_factor=0.25, num_words=100):
         """ Method to update vocabulary without conversations
@@ -577,21 +616,16 @@ class SchoolAgent(SpeakerAgent):
         studied_words = {lang: [act, act_c]}
         self.update_lang_arrays(studied_words, delta_s_factor=delta_s_factor, speak=False)
 
-    def random_death(self):
-        dead = super().random_death(ret_out=True)
-        educ_center, course_key = self.get_school_and_course()
-        # check if dead child was only student in course and cancel course if yes
-        if dead:
-            educ_center.remove_course(course_key)
-
     def register_to_school(self):
         # find closest school in cluster
         clust_info = self.model.geo.clusters_info[self.loc_info['home'].clust]
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
-        # register
-        school.assign_stud(self)
+
+        if 'school' not in self.loc_info or self.loc_info['school'][0] is not school:
+            # register on condition school is not the same as current, or if currently no school
+            school.assign_student(self)
 
 
 class IndepAgent(SpeakerAgent):
@@ -634,10 +668,15 @@ class IndepAgent(SpeakerAgent):
         for ag in group:
             ag.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
 
-
-
     def pick_random_friend(self, ix_agent):
-        """ Description needed """
+        """
+            Method selects a row of friendship adjacent matrix based on agent index
+            It then picks a random friend based on probabilities of friendship intensity
+
+            Args:
+                * ix_agent: integer. agent index in schedule agent list
+        """
+
         # get current agent neighboring nodes ids
         adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
         # get agents ids and probs
@@ -648,6 +687,11 @@ class IndepAgent(SpeakerAgent):
             return picked_agent
 
     def speak_to_random_friend(self, ix_agent, num_days):
+        """ Method to speak to a randomly chosen friend
+            Args:
+                * ix_agent: integer. agent index in schedule agent list
+                 * num_days: integer. number of days out of ten when action takes place on average
+        """
         random_friend = self.pick_random_friend(ix_agent)
         if random_friend:
             self.model.run_conversation(self, random_friend, num_days=num_days)
@@ -655,6 +699,10 @@ class IndepAgent(SpeakerAgent):
     def meet_agent(self):
         pass
     # TODO : method to meet new agents
+
+    def listen_to_media(self):
+        """ Method to listen languages in mass media: internet, radio, TV, movies """
+        pass
 
 
 class Baby(ListenerAgent):
@@ -673,9 +721,17 @@ class Baby(ListenerAgent):
         self.model.nws.set_family_links(self, father, mother, lang_with_father, lang_with_mother)
 
         if school:
-            school.assign_stud(self)
+            school.assign_student(self)
         else:
             self.loc_info['school'] = [school, None]
+
+    def get_school_and_course(self):
+        """
+            Method to get school center and corresponding course for student agent
+        """
+
+        educ_center, course_key = self.loc_info['school']
+        return educ_center, course_key
 
     def register_to_school(self):
         # find closest school in cluster
@@ -683,15 +739,13 @@ class Baby(ListenerAgent):
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
-        # register
-        school.assign_stud(self)
 
-    def random_death(self):
-        dead = super().random_death(ret_out=True)
-        school, course_key = self.loc_info['school']
-        # check if dead baby was only student in course and cancel course if yes
-        if dead and course_key:
-            school.remove_course(course_key)
+        if 'school' not in self.loc_info:
+            school.assign_student(self)
+        else:
+            # register on condition school is not the same as current
+            if self.loc_info['school'][0] is not school:
+                school.assign_student(self)
 
     def stage_1(self, num_days=10):
         # listen to close family at home
@@ -746,6 +800,7 @@ class Baby(ListenerAgent):
 
     def stage_4(self):
         # baby goes to bed early during week
+        self.go_back_home()
         self.stage_1(num_days=3)
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Child)
@@ -759,15 +814,15 @@ class Child(SchoolAgent):
         # TODO: add extra args specific to this class if needed
         super().__init__(*args, **kwargs)
         if school:
-            school.assign_stud(self)
+            school.assign_student(self)
         else:
             self.loc_info['school'] = [school, None]
 
-    def speak_at_school(self, num_days):
-        super().speak_at_school(num_days=num_days)
-        # talk to friends
-        for friend in self.model.nws.friendship_network[self]:
-            self.model.run_conversation(self, friend, num_days=num_days)
+    def speak_at_school(self, school, course_key, num_days=7):
+        super().speak_at_school(school, course_key, num_days=num_days)
+        # talk with teacher
+        teacher = school[course_key]['teacher']
+        self.model.run_conversation(teacher, self, num_days=2)
 
     def stage_1(self, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -777,25 +832,18 @@ class Child(SchoolAgent):
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
         school, course_key = self.get_school_and_course()
         self.model.grid.move_agent(self, school.pos)
+        school.agents_in.add(self)
         # check if school parent is available
         school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
         school_parent = self.get_family_relative(school_parent)
         if school_parent:
+            teacher = school[course_key]['teacher']
             self.model.run_conversation(self, school_parent, num_days=num_days)
-        # TODO : a part of speech from teacher to all course(driven from teacher stage method),
-        school.agents_in.add(self)
-        # talk to teacher and mates
-        # talk with teacher
-        teacher = school.grouped_studs[course_key]['teacher']
-        self.model.run_conversation(teacher, self, num_days=num_days)
-        self.listen(to_agent=teacher, min_age_interlocs=self.info['age'],
-                    num_days=num_days)
-        if school_parent:
             self.model.run_conversation(teacher, school_parent, num_days=2)
-        # talk with school mates
-        # TODO : filter by correlation in language preference
-        self.speak_at_school(num_days)
-        # week-ends time are modeled in PARENTS stages
+        # talk with school mates, friends and teacher
+        # TODO : filter mate selection by correlation in language preference
+        self.speak_at_school(school, course_key, num_days=num_days)
+        # TODO : week-ends time are modeled in PARENTS stages
 
     def stage_3(self, num_days=7):
         school, course_key = self.get_school_and_course()
@@ -812,6 +860,7 @@ class Child(SchoolAgent):
         school.agents_in.remove(self)
 
     def stage_4(self, num_days=10):
+        self.go_back_home()
         self.stage_1(num_days=num_days)
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Adolescent)
@@ -824,34 +873,26 @@ class Adolescent(IndepAgent, SchoolAgent):
     def __init__(self, *args, school=None, **kwargs):
         super().__init__(*args, **kwargs)
         if school:
-            school.assign_stud(self)
+            school.assign_student(self)
         else:
             self.loc_info['school'] = [school, None]
 
-    def speak_at_school(self, ix_agent, num_days=7):
-
-
-        # get student school refs
-        school, course_key = self.loc_info['school']
-
-        # talk with school mates
-        mates = school[course_key]['students'].difference({self})
-        if mates:
-            num_mates = random.randint(1, len(mates))
-            mates = random.sample(mates, num_mates)
-            self.model.run_conversation(self, mates, num_days=num_days)
-
+    def speak_at_school(self, school, course_key, num_days=7):
+        super().speak_at_school(school, course_key, num_days=num_days)
         # talk with teacher
         teacher = school[course_key]['teacher']
-        self.model.run_conversation(teacher, self, num_days=2)
+        self.model.run_conversation(teacher, self, num_days=1)
 
-        # talk to close friends
-        if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days)
-        # week-ends time are modeled in PARENTS stages
+        age = self.info['age']
+        # Define random group at school level with adjacent courses
+        mates = {st for st in school.info['students']
+                 if st.info['age'] in [age-1, age, age+1]}
+        mates = mates.difference({self})
+        self.speak_in_random_subgroups(mates, num_days=3)
 
-    def evolve(self, new_class, ret_output=False, university=None):
-        grown_agent = super().evolve(new_class, ret_output=True)
+    def evolve(self, new_class, ret_output=False, university=None, upd_course=False):
+
+        grown_agent = super().evolve(new_class, ret_output=True, upd_course=upd_course)
         # new agent will not go to school in any case
         del grown_agent.loc_info['school']
         # find out growth type
@@ -859,7 +900,7 @@ class Adolescent(IndepAgent, SchoolAgent):
             if university:
                 fac_key = random.choice(string.ascii_letters[:5])
                 fac = university.faculties[fac_key]
-                fac.assign_stud(grown_agent)
+                fac.assign_student(grown_agent, course_key=19, hire_t=False)
                 # agent moves to new home if he has to change cluster to attend univ
                 if fac.info['clust'] != grown_agent.loc_info['home'].clust:
                     grown_agent.move_to_new_home()
@@ -875,15 +916,14 @@ class Adolescent(IndepAgent, SchoolAgent):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent, num_days=7):
-        school, course_key = self.loc_info['school']
+        school, course_key = self.get_school_and_course()
         self.model.grid.move_agent(self, school.pos)
-        # TODO : a part of speech from teacher to all course(driven from teacher stage method)
         school.agents_in.add(self)
-        self.speak_at_school(ix_agent)
+        self.speak_at_school(school, course_key, num_days=num_days)
 
     def stage_3(self, ix_agent, num_days=7):
-        school, course_key = self.loc_info['school']
-        self.speak_at_school(ix_agent)
+        school, course_key = self.get_school_and_course()
+        self.speak_at_school(school, course_key, num_days=num_days)
         school.agents_in.remove(self)
         if school.info['lang_policy'] == [0, 1]:
             self.study_vocab('L1', num_words=100)
@@ -894,13 +934,17 @@ class Adolescent(IndepAgent, SchoolAgent):
         elif school.info['lang_policy'] == [1, 2]:
             self.study_vocab('L1', num_words=50)
             self.study_vocab('L2', num_words=100)
+        if self.model.nws.friendship_network[self]:
+            # TODO : add groups, more than one friend
+            self.speak_to_random_friend(ix_agent, num_days=5)
 
     def stage_4(self, ix_agent, num_days=7):
+        self.go_back_home()
         self.stage_1(ix_agent, num_days=num_days)
         # go out with friends at least once
         num_out = random.randint(1, 5)
         if self.model.nws.friendship_network[self]:
-            # TODO : add groups, more than one friend
+            # TODO : add groups, more than one friend (friends of friends)
             self.speak_to_random_friend(ix_agent, num_days=num_out)
 
 
@@ -917,42 +961,59 @@ class Young(IndepAgent):
         else:
             self.loc_info['job'] = job
 
-    def look_for_partner(self, avg_years=6, age_diff=10, thresh_comm_lang=0.3):
+    def check_partner(self, cand_agent, max_age_diff=10, thresh_comm_lang=0.3):
+        """ Check conditions that must be satisfied in order to get married """
+
+        # measure max age difference in steps
+        max_age_diff = self.model.steps_per_year * max_age_diff
+
+        # define boolean variables
+        link_description = self.model.nws.known_people_network[self][cand_agent]
+        sex_diff = cand_agent.info['sex'] != self.info['sex']
+        lang_diff = abs(cand_agent.info['language'] - self.info['language'])
+        age_diff = abs(self.info['age'] - cand_agent.info['age'])
+
+        # define knowledge of each agent in common language
+        common_lang = link_description['lang']
+        common_lang = 'L1' if common_lang == 0 else 'L2'
+        pct_1 = self.lang_stats[common_lang]['pct'][self.info['age']]
+        pct_2 = cand_agent.lang_stats[common_lang]['pct'][cand_agent.info['age']]
+
+        # define 4 conditions to marry
+        num_meetings_condition = 'num_meet' in link_description and link_description['num_meet'] > 10
+        diffs_condition = sex_diff and age_diff <= max_age_diff and lang_diff <= 1
+        pre_conditions = isinstance(cand_agent, Young) and not cand_agent.info['married']
+        lang_threshold_condition = pct_1 > thresh_comm_lang and pct_2 > thresh_comm_lang
+
+        if num_meetings_condition and diffs_condition and pre_conditions and lang_threshold_condition:
+            return True
+
+    def look_for_partner(self, avg_years=6, max_age_diff=10, thresh_comm_lang=0.3):
         """ Find partner every avg_years if agent is not married yet. Marrying agents
             must have a sufficiently high knowledge of common language
 
              Args:
-                 * avg_years: integer. Real years on average to get a partner
-                 * age_diff: integer. Max difference in real years between partners to get married
-                 * thresh_comm_lang: float. Minimum required knowledge of common lang
+                 * avg_years: integer. Years on average to get a partner ( expressed in years)
+                 * max_age_diff: integer. Max difference in years between partners to get married
+                 * thresh_comm_lang: float. Minimum required knowledge of common lang by each agent
         """
         # first check luck ( once every 10 years on average )
         if random.random() < 1 / (avg_years * self.model.steps_per_year):
             # find suitable partner amongst known people
             for ag in self.model.nws.known_people_network[self]:
-                link_description = self.model.nws.known_people_network[self][ag]
-                if ('num_meet' in link_description and link_description['num_meet'] > 10 and
-                ag.info['sex'] != self.info['sex'] and
-                abs(self.info['age'] - ag.info['age']) <= self.model.steps_per_year * age_diff and
-                isinstance(ag, Young) and not ag.info['married']):
-                    if abs(ag.info['language'] - self.info['language']) <= 1:
-                        # check both agents have sufficiently high level in common language
-                        common_lang = link_description['lang']
-                        common_lang = 'L1' if common_lang == 0 else 'L2'
-                        pct_1 = self.lang_stats[common_lang]['pct'][self.info['age']]
-                        pct_2 = ag.lang_stats[common_lang]['pct'][ag.info['age']]
-                        if pct_1 > thresh_comm_lang and pct_2 > thresh_comm_lang:
-                            # set marriage flags and links between partners
-                            self.info['married'] = True
-                            ag.info['married'] = True
-                            fam_nw = self.model.nws.family_network
-                            lang = self.model.nws.known_people_network[self][ag]['lang']
-                            # family network is directed Graph !!
-                            fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
-                            fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
-                            # find appartment to move in together
-                            self.move_to_new_home(ag)
-                            break
+                if self.check_partner(ag, max_age_diff=max_age_diff,
+                                      thresh_comm_lang=thresh_comm_lang):
+                    # set marriage flags and links between partners
+                    self.info['married'] = True
+                    ag.info['married'] = True
+                    fam_nw = self.model.nws.family_network
+                    lang = self.model.nws.known_people_network[self][ag]['lang']
+                    # family network is directed Graph !!
+                    fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
+                    fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
+                    # find appartment to move in together
+                    self.move_to_new_home(ag)
+                    break
 
     def reproduce(self, day_prob=0.001, max_num_children=4):
         """ give birth to a new agent if conditions and likelihoods are met """
@@ -982,40 +1043,45 @@ class Young(IndepAgent):
             self.info['num_children'] += 1
             consort.info['num_children'] += 1
 
-    def look_for_job(self):
+    def pick_cluster_for_job_search(self, keep_cluster=False):
+
+        """
+            Method to look for a job and get hired.
+            Args:
+                * keep_cluster: boolean. If True, looks for job only in current cluster.
+                    It defaults to False
+        """
 
         # TODO: make model that takes majority language of clusters into account
         # TODO: create weights for choice that depend on distance and language
-
-        # all_model_jobs = [job for jobs in [clust_info['jobs']
-        #                                     for clust_info in self.model.geo.clusters_info.values()
-        #                                     if 'jobs' in clust_info]
-        #                   for job in jobs if job.num_places]
-
         # get current agent cluster
         clust = self.loc_info['home'].clust
-        # make array of cluster indexes with equal weight equal to one
-        clust_ixs = np.ones(self.model.num_clusters)
-        # assign a higher weight to current cluster so that it is picked more than half the times
-        clust_ixs[clust] = self.model.num_clusters
-        # define probabilities to pick cluster
-        clust_probs = clust_ixs / clust_ixs.sum()
-        # pick a random cluster according to probabs
-        job_clust = np.random.choice(np.array(self.model.num_clusters), p=clust_probs)
+        if not keep_cluster:
+            # look for job on any cluster with bias towards the current one
+            # make array of cluster indexes with equal weight equal to one
+            clust_ixs = np.ones(self.model.num_clusters)
+            # assign a higher weight to current cluster so that it is picked more than half the times
+            clust_ixs[clust] = self.model.num_clusters
+            # define probabilities to pick cluster
+            clust_probs = clust_ixs / clust_ixs.sum()
+            # pick a random cluster according to probabs
+            job_clust = np.random.choice(np.array(self.model.num_clusters), p=clust_probs)
+        else:
+            # look for job on current cluster only
+            job_clust = clust
+
+        return job_clust
+
+    def get_job(self, keep_cluster=False):
+        """ Assign agent to a random job
+            Args:
+                * keep_cluster: boolean. If True, job search will be limited to agent's current cluster
+                    Otherwise, all clusters might be searched. It defaults to False"""
+        job_clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # pick a job from chosen cluster
-        job_c = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
-        # check if job is suitable for agent
-        if job_c.num_places and self.info['language'] in job_c.info['lang_policy']:
-            job_c.hire_employee(self)
-            if clust is job_clust:
-                if random.random() > 0.5:
-                    self.move_to_new_home(marriage=False)
-            else:
-                self.move_to_new_home(marriage=False)
-
-
-    def switch_job(self, new_job):
-            pass
+        job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
+        if job.num_places and self.info['language'] in job.info['lang_policy']:
+            job.hire_employee(self)
 
     def move_to_new_home(self, marriage=True):
         """
@@ -1024,95 +1090,127 @@ class Young(IndepAgent):
             * marriage: boolean. Specifies if moving is because of marriage or not. If not,
                 it is assumed moving is because of job reasons
         """
+        # self already has a job since it is a pre-condition to move to a new home
 
-        # self has a job as condition to marry
+        def check_job(agent):
+            """ Inner function to get agent's current job """
+            try:
+                job = agent.loc_info['job']
+                job = job if not isinstance(job, list) else job[0] if len(job) == 2 else job[0][job[2]]
+            except KeyError:
+                job = None
+            return job
+
+        # get self agent cluster and job
         clust_1 = self.loc_info['home'].clust
-        job_1 = self.loc_info['job']
-        job_1 = job_1[0] if isinstance(job_1, list) else job_1
+        job_1 = check_job(self)
+        # get free homes in self agent cluster
         free_homes_clust_1 = [home for home in self.model.geo.clusters_info[clust_1]['homes']
-                             if not home.info['occupants']]
+                              if not home.info['occupants']]
         if marriage:
             consort = self.get_family_relative('consort')
             clust_2 = consort.loc_info['home'].clust
-            if not isinstance(consort, Pensioner):
-                job_2 = consort.loc_info['job']
-                job_2 = job_2[0] if isinstance(job_2, list) else job_2
-            else:
-                job_2 = None
+            job_2 = check_job(consort)
             # check if consort has a job
             if job_2:
                 # defined sum of distances from jobs to each home to sort by it
                 job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
-                if clust_1 == clust_2 :
+                if clust_1 == clust_2:
+                    # both consorts keep jobs
+                    job_change = None
                     sorted_homes = sorted(free_homes_clust_1, key=job_dist_fun )
                     new_home = sorted_homes[0]
                 else:
                     # married agents live and work in different clusters
                     # move to the town with more job offers
                     num_jobs_1 = len(self.model.geo.clusters_info[clust_1]['jobs'])
-                    num_jobs_2 = len(consort.model.geo.clusters_info[clust_1]['jobs'])
+                    num_jobs_2 = len(consort.model.geo.clusters_info[clust_2]['jobs'])
                     if num_jobs_1 >= num_jobs_2:
+                        # consort gives up job_2
+                        job_change = 'consort'
                         sorted_homes = sorted(free_homes_clust_1,
-                                              key=job_dist_fun)
+                                              key=lambda home: pdist([job_1.pos, home.pos]))
+                        job_2.remove_employee(consort)
+                        new_home = sorted_homes[0]
                     else:
+                        # self gives up job_1
+                        job_change = 'self'
                         free_homes_clust2 = [home for home
                                              in self.model.geo.clusters_info[clust_2]['homes']
                                              if not home.info['occupants']]
                         sorted_homes = sorted(free_homes_clust2,
-                                              key=job_dist_fun)
-                    new_home = sorted_homes[0]
+                                              key=lambda home: pdist([job_2.pos, home.pos]))
+                        job_1.remove_employee(self)
+                        new_home = sorted_homes[0]
             else:
                 # consort has no job
+                job_change = 'consort'
                 sorted_homes = sorted(free_homes_clust_1,
                                       key=lambda home: pdist([job_1.pos, home.pos])[0])
                 home_ix = random.randint(1, int(len(sorted_homes) / 2))
                 new_home = sorted_homes[home_ix]
+            # assign new home
             new_home.assign_to_agent([self, consort])
+            # update job status for agent that must switch
+            if job_change == 'consort':
+                consort.get_job(keep_cluster=True)
+            elif job_change == 'self':
+                self.get_job(keep_cluster=True)
         else:
-            sorted_homes = sorted(free_homes_clust_1, key=lambda home: pdist([job_1.pos, home.pos])[0])
+            # moving for job reasons -> family, if any, will follow
+            sorted_homes = sorted(free_homes_clust_1,
+                                  key=lambda home: pdist([job_1.pos, home.pos])[0])
             home_ix = random.randint(1, int(len(sorted_homes) / 2))
             new_home = sorted_homes[home_ix]
+
             if not self.info['married']:
-                # assign new home to self agent alone
-                new_home.assign_to_agent(self)
+                moving_agents = [self]
+                new_home.assign_to_agent(moving_agents)
             else:
                 # partner will find job in new cluster and children will change school
                 consort = self.get_family_relative('consort')
-                children = self.get_family_relative('child')
-                new_home.assign_to([self, consort] + children)
-                # remove consort from job
-                job_2 = consort.loc_info['job']
-                job_2 = job_2[0] if isinstance(job_2, list) else job_2
-                job_2.remove_employee(consort)
-                # remove children from old school, enroll them in a new one
-                for child in children:
-                    school = child.loc_info['school'][0]
-                    if school:
-                        school.remove_student(child)
-                    if child.info['age'] > self.model.steps_per_year:
-                        child.register_to_school()
+                moving_agents = [self, consort]
+                job_2 = check_job(consort)
+                if job_2:
+                    job_2.remove_employee(consort)
+                    new_home.assign_to_agent(moving_agents)
+                    # consort looks for job in current cluster
+                    consort.get_job(keep_cluster=True)
+                else:
+                    new_home.assign_to_agent(moving_agents)
+            # find out if there are children that will have to move too
+            children = self.get_family_relative('child')
+            children = [child for child in children
+                        if not isinstance(child, (Young, YoungUniv))]
+            new_home.assign_to_agent(children)
+            # remove children from old school, enroll them in a new one
+            for child in children:
+                if child.info['age'] > self.model.steps_per_year:
+                    child.register_to_school()
 
-    def speak_with_colleagues(self):
-        ag_init = None
-        others = []
-        self.model.run_conversation(ag_init, others, num_days=7)
-
-    def random_death(self):
-        dead = super().random_death(ret_out=True)
-        if dead and self.loc_info['job']:
-            self.loc_info['job'].look_for_employee()
 
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent):
         if not self.loc_info['job']:
-            self.look_for_job()
+            self.get_job()
+        else:
+            job = self.loc_info['job']
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        pass
+        if not self.loc_info['job']:
+            self.get_job()
+        else:
+            job = self.loc_info['job']
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_4(self, ix_agent):
+        self.go_back_home()
+        self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
         if not self.info['married'] and self.loc_info['job']:
@@ -1121,17 +1219,17 @@ class Young(IndepAgent):
             self.evolve(Adult)
 
 
-class YoungUniv(IndepAgent, SchoolAgent):
+class YoungUniv(Adolescent):
     age_low, age_high = 18, 24
 
     def __init__(self, *args, university=None, fac_key=None, **kwargs):
-        super().__init__(*args, **kwargs)
+        BaseAgent.__init__(self, *args, **kwargs)
 
         if university and fac_key:
-            university[fac_key].assign_stud(self)
+            university[fac_key].assign_student(self)
         elif university and not fac_key:
             fac_key = random.choice(string.ascii_letters[:5])
-            university[fac_key].assign_stud(self)
+            university[fac_key].assign_student(self)
         else:
             self.loc_info['university'] = [university, None, fac_key]
 
@@ -1140,8 +1238,8 @@ class YoungUniv(IndepAgent, SchoolAgent):
         educ_center = educ_center[fac_key]
         return educ_center, course_key
 
-    def evolve(self, new_class, ret_output=False):
-        grown_agent = super().evolve(new_class, ret_output=True)
+    def evolve(self, new_class, ret_output=False, upd_course=False):
+        grown_agent = BaseAgent.evolve(self, new_class, ret_output=True, upd_course=upd_course)
         # new agent will not go to university in any case
         del grown_agent.loc_info['university']
         grown_agent.info.update({'married': False, 'num_children': 0})
@@ -1154,7 +1252,6 @@ class YoungUniv(IndepAgent, SchoolAgent):
             Method to move self agent and other optional agents to a new home close to university
             Args:
         """
-
         # move close to university
         univ = self.loc_info['university'][0]
         clust_univ = univ.info['clust']
@@ -1164,7 +1261,7 @@ class YoungUniv(IndepAgent, SchoolAgent):
                                  all([isinstance(x, YoungUniv) for x in home.info['occupants']])]
         # define function to measure distance home-univ
         univ_dist_fun = lambda home: pdist([univ.pos, home.pos])[0]
-        # sort homes by distance to univ, pick first that has less than 6 occupants
+        # sort homes by distance to univ, pick first that has less than max_num_occup occupants
         sorted_homes = sorted(univ_homes, key=univ_dist_fun)
         for h in sorted_homes:
             if len(h.info['occupants']) < max_num_occup:
@@ -1173,18 +1270,31 @@ class YoungUniv(IndepAgent, SchoolAgent):
         # assign new home to agent
         new_home.assign_to_agent(self)
 
+    def speak_at_school(self, faculty, course_key, num_days=7):
+        super().speak_at_school(faculty, course_key, num_days=num_days)
+        age = self.info['age']
+        # Speak to random group at university level with adjacent courses
+        univ = self.loc_info['university'][0]
+        mates = {st for st in univ.info['students']
+                 if st.info['age'] in [age-1, age, age+1]}
+        mates = mates.difference({self})
+        self.speak_in_random_subgroups(mates, num_days=2)
 
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
-    def stage_2(self, ix_agent):
-        pass
+    def stage_2(self, ix_agent, num_days=7):
+        faculty, course_key = self.get_school_and_course()
+        self.speak_at_school(faculty, course_key, num_days=num_days)
 
-    def stage_3(self, ix_agent):
-        pass
+    def stage_3(self, ix_agent, num_days=7):
+        faculty, course_key = self.get_school_and_course()
+        self.speak_at_school(faculty, course_key, num_days=num_days)
 
     def stage_4(self, ix_agent):
-        pass
+        self.go_back_home()
+        super().stage_4(ix_agent)
+        # TODO: visit family, meet siblings
 
 
 class Adult(Young): # from 30 to 65
@@ -1217,13 +1327,14 @@ class Adult(Young): # from 30 to 65
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        pass
-    # TODO : model lunch time with colleagues
+        super().stage_2(ix_agent)
 
     def stage_3(self, ix_agent):
-        pass
+        super().stage_2(ix_agent)
 
     def stage_4(self, ix_agent, num_days=7):
+        self.go_back_home()
+        self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
         if not self.info['married'] and self.loc_info['job']:
@@ -1239,16 +1350,32 @@ class Worker(Adult):
 
 class Teacher(Adult):
 
+    def get_school_and_course(self):
+        """
+            Method to get school center and corresponding course for teacher agent
+        """
+        educ_center, course_key = self.loc_info['job']
+        return educ_center, course_key
+
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)
         if ret_output:
             return grown_agent
 
+    def get_job(self, keep_cluster=False):
+        # get cluster where job will be found
+        clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
+        # assign teacher to first school that matches teacher lang profile
+        for school in self.model.geo.clusters_info[clust]['schools']:
+            if self.info['language'] in school.info['lang_policy']:
+                school.assign_teacher(self)
+                break
+
     def random_death(self):
-        school, course_key = self.loc_info['job']
+        # school, course_key = self.loc_info['job']
         dead = BaseAgent.random_death(self, ret_out=True)
-        if dead and course_key:
-            school.hire_teachers([course_key])
+        # if dead and course_key:
+        #     school.hire_teachers([course_key])
 
     def speak_to_class(self):
         job, course_key = self.loc_info['job']
@@ -1265,32 +1392,62 @@ class Teacher(Adult):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
-        job, course_key = self.loc_info['job']
-        self.model.grid.move_agent(self, job.pos)
-        job.agents_in.add(self)
-        self.speak_to_class()
-
-
-        # teacher has lunch with colleagues
+        if not self.loc_info['job']:
+            # TODO: make sure agent meets lang requirements to get job as teacher, study otherwise
+            self.get_job(keep_cluster=True)
+        else:
+            job, course_key = self.get_school_and_course()
+            self.model.grid.move_agent(self, job.pos)
+            job.agents_in.add(self)
+            self.speak_to_class()
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        job, course_key = self.loc_info['job']
-        self.speak_to_class()
+        if not self.loc_info['job']:
+            self.get_job(keep_cluster=True)
+        else:
+            job, course_key = self.get_school_and_course()
+            self.speak_to_class()
+            colleagues = job.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
-        self.speak_to_random_friend(ix_agent, num_days=3)
+            self.speak_to_random_friend(ix_agent, num_days=3)
 
-    def stage_4(self, ix_agent):
-        # TODO : trigger teacher replacement after pension
-        pass
+    def stage_4(self, ix_agent, num_days=7):
+        self.go_back_home()
+        self.stage_1(ix_agent, num_days=7)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days=5)
 
 
 class TeacherUniv(Teacher):
 
+    def get_school_and_course(self):
+        """
+            Method to get school center and corresponding course for teacher agent
+        """
+        educ_center, course_key, fac_key = self.loc_info['job']
+        educ_center = educ_center.faculties[fac_key]
+        return educ_center, course_key
+
+    def get_job(self, keep_cluster=False):
+        if keep_cluster:
+            clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
+        else:
+            clust = np.random.choice(self.model.geo.get_clusters_with_univ())
+
+        if 'university' in self.model.geo.clusters_info[clust]:
+            univ = self.model.geo.clusters_info[clust]['university']
+            if self.info['language'] in univ.info['lang_policy']:
+                fac = univ[random.choice('abcde')]
+                fac.assign_teacher(self)
+
     def random_death(self):
-        univ, course_key, fac_key = self.loc_info['job']
+        # univ, course_key, fac_key = self.loc_info['job']
         dead = BaseAgent.random_death(self, ret_out=True)
-        if dead and course_key:
-            univ.faculties[fac_key].hire_teachers([course_key])
+        # if dead and course_key:
+        #     univ.faculties[fac_key].hire_teachers([course_key])
 
     def speak_to_class(self):
         job, course_key, fac_key = self.loc_info['job']
@@ -1301,18 +1458,27 @@ class TeacherUniv(Teacher):
                 self.speak_to_group(studs, 0)
 
     def stage_2(self, ix_agent):
-        job, course_key, fac_key = self.loc_info['job']
-        self.model.grid.move_agent(self, job.pos)
-        job[fac_key].agents_in.add(self)
-        self.speak_to_class()
+        if not self.loc_info['job']:
+            self.get_job(keep_cluster=True)
+        else:
+            fac, course_key = self.get_school_and_course()
+            self.model.grid.move_agent(self, fac.pos)
+            fac.agents_in.add(self)
+            self.speak_to_class()
 
-        # teacher has lunch with colleagues
+            colleagues = fac.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
     def stage_3(self, ix_agent):
-        job, course_key, fac_key = self.loc_info['job']
-        self.speak_to_class()
+        if not self.loc_info['job']:
+            self.get_job(keep_cluster=True)
+        else:
+            fac, course_key = self.get_school_and_course()
+            self.speak_to_class()
+            colleagues = fac.info['employees']
+            self.speak_in_random_subgroups(colleagues)
 
-        self.speak_to_random_friend(ix_agent, num_days=3)
+            self.speak_to_random_friend(ix_agent, num_days=3)
 
 
 class Pensioner(Adult): # from 65 to death
@@ -1323,545 +1489,20 @@ class Pensioner(Adult): # from 65 to death
     def random_death(self):
         BaseAgent.random_death(self)
 
-    def stage_1(self, ix_agent, num_days=7):
+    def stage_1(self, ix_agent, num_days=10):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
         if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days=5)
+            self.speak_to_random_friend(ix_agent, num_days=7)
 
     def stage_3(self, ix_agent):
         if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days=5)
+            self.speak_to_random_friend(ix_agent, num_days=7)
 
-    def stage_4(self, ix_agent):
-        pass
+    def stage_4(self, ix_agent, num_days=10):
+        self.go_back_home()
+        self.stage_1(ix_agent, num_days=7)
+        if self.model.nws.friendship_network[self]:
+            self.speak_to_random_friend(ix_agent, num_days=7)
 
-
-# class LanguageAgent:
-#
-#     #define memory retrievability constant
-#     k = np.log(10 / 9)
-#
-#     def __init__(self, model, unique_id, language, lang_act_thresh=0.1, lang_passive_thresh=0.025, age=0,
-#                  num_children=0, ag_home=None, ag_school=None, ag_job=None, import_IC=False):
-#         self.model = model
-#         self.unique_id = unique_id
-#         # language values: 0, 1, 2 => spa, bil, cat
-#         self.info = {'language': language, 'age': age, 'num_children': num_children} # TODO : group marital/parental info in dict ??
-#         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
-#         self.loc_info = {'home': ag_home, 'school': ag_school, 'job': ag_job}
-#
-#         # define container for languages' tracking and statistics
-#         self.lang_stats = defaultdict(lambda:defaultdict(dict))
-#         self.day_mask = {l: np.zeros(self.model.vocab_red, dtype=np.bool)
-#                          for l in ['L1', 'L12', 'L21', 'L2']}
-#         if import_IC:
-#             self.set_lang_ics()
-#         else:
-#             # set null knowledge in all possible langs
-#             for lang in ['L1', 'L12', 'L21', 'L2']:
-#                 self._set_null_lang_attrs(lang)
-#
-#     def _set_lang_attrs(self, lang, pct_key):
-#         """ Private method that sets agent linguistic status for a GIVEN AGE
-#             Args:
-#                 * lang: string. It can take two different values: 'L1' or 'L2'
-#                 * pct_key: string. It must be of the form '%_pct' with % an integer
-#                   from following list [10,25,50,75,90,100]. ICs are not available for every single level
-#         """
-#         # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
-#         self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.info['age']])
-#         # S: numpy array(shape=vocab_size) that measures memory stability for each word
-#         self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.info['age']])
-#         # compute R from t, S (R defines retrievability of each word)
-#         self.lang_stats[lang]['R'] = np.exp(- self.k *
-#                                                   self.lang_stats[lang]['t'] /
-#                                                   self.lang_stats[lang]['S']
-#                                                   ).astype(np.float64)
-#         # word counter
-#         self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.info['age']])
-#         # vocab pct
-#         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-#         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-#                                                   self.model.vocab_red)
-#
-#     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
-#         """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
-#            at all of it
-#            Args:
-#                * lang: string. It can take two different values: 'L1' or 'L2'
-#                * S_0: float. Initial value of memory stability
-#                * t_0: integer. Initial value of time-elapsed ( in days) from last time words were encountered
-#         """
-#         self.lang_stats[lang]['S'] = np.full(self.model.vocab_red, S_0, dtype=np.float)
-#         self.lang_stats[lang]['t'] = np.full(self.model.vocab_red, t_0, dtype=np.float)
-#         self.lang_stats[lang]['R'] = np.exp(- self.k *
-#                                             self.lang_stats[lang]['t'] /
-#                                             self.lang_stats[lang]['S']
-#                                             ).astype(np.float32)
-#         self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
-#         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
-#         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-#                                                   self.model.vocab_red)
-#
-#     def set_lang_ics(self, S_0=0.01, t_0=1000, biling_key=None):
-#         """ set agent's linguistic Initial Conditions by calling set up methods
-#         Args:
-#             * S_0: float <= 1. Initial memory intensity
-#             * t_0: last-activation days counter
-#             * biling_key: integer from [10, 25, 50, 75, 90, 100]. Specify only if
-#               specific bilingual level is needed as input
-#         """
-#         if self.info['language'] == 0:
-#             self._set_lang_attrs('L1', '100_pct')
-#             self._set_null_lang_attrs('L2', S_0, t_0)
-#         elif self.info['language'] == 2:
-#             self._set_null_lang_attrs('L1', S_0, t_0)
-#             self._set_lang_attrs('L2', '100_pct')
-#         else: # BILINGUAL
-#             if not biling_key:
-#                 biling_key = np.random.choice(self.model.ic_pct_keys)
-#             L1_key = str(biling_key) + '_pct'
-#             L2_key = str(100 - biling_key) + '_pct'
-#             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
-#                 self._set_lang_attrs(lang, key)
-#         # always null conditions for transition languages
-#         self._set_null_lang_attrs('L12', S_0, t_0)
-#         self._set_null_lang_attrs('L21', S_0, t_0)
-#
-#     def move_random(self):
-#         """ Take a random step into any surrounding cell
-#             All eight surrounding cells are available as choices
-#             Current cell is not an output choice
-#
-#             Returns:
-#                 * modifies self.pos attribute
-#         """
-#         x, y = self.pos  # attr pos is defined when adding agent to schedule
-#         possible_steps = self.model.grid.get_neighborhood(
-#             (x, y),
-#             moore=True,
-#             include_center=False
-#         )
-#         chosen_cell = random.choice(possible_steps)
-#         self.model.grid.move_agent(self, chosen_cell)
-#
-#     def reproduce(self, age_1=20, age_2=40, repr_prob_per_step=0.005):
-#         """ Method to generate a new agent out of self agent under certain age conditions
-#             Args:
-#                 * age_1: integer. Lower age bound of reproduction period
-#                 * age_2: integer. Higher age bound of reproduction period
-#         """
-#         age_1, age_2 = age_1 * 36, age_2 * 36
-#         # check reproduction conditions
-#         if (age_1 <= self.info['age'] <= age_2) and (self.info['num_children'] < 1) and (random.random() < repr_prob_per_step):
-#             id_ = self.model.set_available_ids.pop()
-#             lang = self.info['language']
-#             # find closest school to parent home
-#             clust_ix = self.loc_info['home'].clust
-#             clust_schools_coords = [sc.pos for sc in self.model.geo.clusters_info[clust_ix]['schools']]
-#             closest_school_idx = np.argmin([pdist([self.loc_info['home'].pos, sc_coord])
-#                                             for sc_coord in clust_schools_coords])
-#             # instantiate new agent
-#             a = LanguageAgent(self.model, id_, lang, ag_home=self.loc_info['home'],
-#                               ag_school=self.model.geo.clusters_info[clust_ix]['schools'][closest_school_idx],
-#                               ag_job=None)
-#             # Add agent to model
-#             self.model.geo.add_agents_to_grid_and_schedule(a)
-#             self.model.nws.add_ags_to_networks(a)
-#             # add newborn agent to home presence list
-#             a.loc_info['home'].agents_in.add(a)
-#             # Update num of children
-#             self.info['num_children'] += 1
-#
-#     def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
-#         """ Method to randomly determine agent death or survival at each step
-#             The fitted function provides the death likelihood for a given rounded age
-#             In order to get the death-probability per step we divide
-#             by number of steps in a year (36)
-#             Fitting parameters are from
-#             https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
-#             " Smoothing and projecting age-specific probabilities of death by TOPALS "
-#             by Joop de Beer
-#             Resulting life expectancy is 77 years and std is ~ 15 years
-#         """
-#         if random.random() < a * (np.exp(b * self.info['age']) + c) / self.model.steps_per_year:
-#             self.model.remove_after_death(self)
-#
-#     def look_for_job(self):
-#         """ Method for agent to look for a job """
-#         # loop through shuffled job centers list until a job is found
-#         np.random.shuffle(self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs'])
-#         for job_c in self.model.geo.clusters_info[self.loc_info['home'].clust]['jobs']:
-#             if job_c.num_places:
-#                 job_c.num_places -= 1
-#                 self.loc_info['job'] = job_c
-#                 job_c.info['employees'].add(self)
-#                 job_c.agents_in.add(self)
-#                 break
-#
-#     def update_acquaintances(self, other, lang):
-#         """ Add edges to known_people network when meeting (speaking) for first time """
-#         if other not in self.model.nws.known_people_network[self]:
-#             self.model.nws.known_people_network.add_edge(self, other)
-#             self.model.nws.known_people_network[self][other].update({'num_meet': 1, 'lang': lang})
-#         elif (other not in self.model.nws.family_network[self] and
-#         other not in self.model.nws.friendship_network[self]):
-#             self.model.nws.known_people_network[self][other]['num_meet'] += 1
-#
-#     def make_friendship(self):
-#         """ Check num_meet in known people network to filter candidates """
-#         pass
-#
-#     def start_conversation(self, with_agents=None, num_other_agents=1):
-#         """ Method that starts a conversation. It picks either a list of known agents or
-#             a list of random agents from current cell and starts a conversation with them.
-#             This method can also simulate distance contact e.g.
-#             phone, messaging, etc ... by specifying an agent through 'with_agents' variable
-#
-#             Arguments:
-#                 * with_agents : specify a specific agent or list of agents
-#                                 with which conversation will take place
-#                                 If None, by default the agent will be picked randomly
-#                                 from all lang agents in current cell
-#             Returns:
-#                 * Runs conversation and determines language(s) in which it takes place.
-#                   Updates heard/used stats
-#         """
-#         if not with_agents:
-#             # get all agents currently placed on chosen cell
-#             others = self.model.grid.get_cell_list_contents(self.pos)
-#             others.remove(self)
-#             # linguistic model of encounter with another random agent
-#             if len(others) >= num_other_agents:
-#                 others = random.sample(others, num_other_agents)
-#                 self.model.run_conversation(self, others, False)
-#         else:
-#             self.model.run_conversation(self, with_agents, False)
-#
-#     def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
-#                                real_spoken_tokens_per_day=16000):
-#         """ Computes number of words spoken per conversation for a given age
-#             drawing from a 'num_words vs age' curve
-#             It assumes a compression scale of 40 in SIMULATED vocabulary and
-#             16000 tokens per adult per day as REAL number of spoken words on average
-#             Args:
-#                 * long: boolean. Describes conversation length
-#                 * age_1, age_2: integers. Describe key ages for slope change in num_words vs age curve
-#                 * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
-#                 * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day"""
-#         # TODO : define 3 types of conv: short, average and long ( with close friends??)
-#         age_1, age_2 = 36 * age_1, 36 * age_2
-#         real_vocab_size = scale_f * self.model.vocab_red
-#         # define factor total_words/avg_words_per_day
-#         f = real_vocab_size / real_spoken_tokens_per_day
-#         if self.info['age'] < age_1:
-#             delta = 0.0001
-#             decay = -np.log(delta / 100) / (age_1)
-#             factor =  f + 400 * np.exp(-decay * self.info['age'])
-#         elif age_1 <= self.info['age'] <= age_2:
-#             factor = f
-#         else:
-#             factor = f - 1 + np.exp(0.0005 * (self.info['age'] - age_2 ) )
-#         if long:
-#             return self.model.num_words_conv[1] / factor
-#         else:
-#             return self.model.num_words_conv[0] / factor
-#
-#     def pick_vocab(self, lang, long=True, min_age_interlocs=None,
-#                    biling_interloc=False, num_days=10):
-#         """ Method that models word choice by self agent in a conversation
-#             Word choice is governed by vocabulary knowledge constraints
-#             Args:
-#                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
-#                 * long: boolean that defines conversation length
-#                 * min_age_interlocs: integer. The youngest age among all interlocutors, EXPRESSED IN STEPS.
-#                     It is used to modulate conversation vocabulary to younger agents
-#                 * biling_interloc : boolean. If True, speaker word choice might be mixed, since
-#                     he/she is certain interlocutor will understand
-#                 * num_days : integer [1, 10]. Number of days in one 10day-step this kind of speech is done
-#             Output:
-#                 * spoken words: dict where keys are lang labels and values are lists with words spoken
-#                     in lang key and corresponding counts
-#         """
-#
-#         # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
-#
-#         # TODO : model 'Grammatical foreigner talk' =>
-#         # TODO : how word choice is adapted by native speakers when speaking to adult learners
-#         # TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
-#
-#         # sample must come from AVAILABLE words in R (retrievability) !!!! This can be modeled in following STEPS
-#
-#         # 1. First sample from lang CDF ( that encapsulates all to-be-known concepts at a given age-step)
-#         # These are the thoughts or concepts a speaker tries to convey
-#         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
-#         num_words = int(self.get_num_words_per_conv(long) * num_days)
-#         if min_age_interlocs:
-#             word_samples = randZipf(self.model.cdf_data['s'][min_age_interlocs], num_words)
-#         else:
-#             word_samples = randZipf(self.model.cdf_data['s'][self.info['age']], num_words)
-#
-#         # get unique words and counts
-#         bcs = np.bincount(word_samples)
-#         act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
-#         # SLOWER BUT CLEANER APPROACH =>  act, act_c = np.unique(word_samples, return_counts=True)
-#
-#         # check if conversation is btw bilinguals and therefore lang switch is possible
-#         # TODO : key is that most biling agents will not express surprise to lang mixing or switch
-#         # TODO : whereas monolinguals will. Feedback for correction
-#         # if biling_interloc:
-#         #     if lang == 'L1':
-#         #         # find all words among 'act' words where L2 retrievability is higher than L1 retrievability
-#         #         # Then fill L12 container with a % of those words ( their knowledge is known at first time of course)
-#         #
-#         #         self.lang_stats['L1']['R'][act] <= self.lang_stats['L2']['R'][act]
-#         #         L2_strongest = self.lang_stats['L2']['R'][act] == 1.
-#                 #act[L2_strongest]
-#
-#                 # rand_info_access = np.random.rand(4, len(act))
-#                 # mask_L1 = rand_info_access[0] <= self.lang_stats['L1']['R'][act]
-#                 # mask_L12 = rand_info_access[1] <= self.lang_stats['L12']['R'][act]
-#                 # mask_L21 = rand_info_access[2] <= self.lang_stats['L21']['R'][act]
-#                 # mask_L2 = rand_info_access[3] <= self.lang_stats['L2']['R'][act]
-#
-#         # 2. Given a lang, pick the variant that is most familiar to agent
-#         lang = 'L1' if lang == 0 else 'L2'
-#         if lang == 'L1':
-#             pct1, pct2 = self.lang_stats['L1']['pct'][self.info['age']] , self.lang_stats['L12']['pct'][self.info['age']]
-#             lang = 'L1' if pct1 >= pct2 else 'L12'
-#         elif lang == 'L2':
-#             pct1, pct2 = self.lang_stats['L2']['pct'][self.info['age']], self.lang_stats['L21']['pct'][self.info['age']]
-#             lang = 'L2' if pct1 >= pct2 else 'L21'
-#
-#         # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
-#         # get mask for words successfully retrieved from memory
-#         mask_R = np.random.rand(len(act)) <= self.lang_stats[lang]['R'][act]
-#         spoken_words = {lang: [act[mask_R], act_c[mask_R]]}
-#         # if there are missing words-concepts, they might be found in the other known language(s)
-#         if np.count_nonzero(mask_R) < len(act):
-#             if lang in ['L1', 'L12']:
-#                 lang2 = 'L12' if lang == 'L1' else 'L1'
-#             elif lang in ['L2', 'L21']:
-#                 lang2 = 'L21' if lang == 'L2' else 'L2'
-#             mask_R2 = np.random.rand(len(act[~mask_R])) <= self.lang_stats[lang2]['R'][act[~mask_R]]
-#             if act[~mask_R][mask_R2].size:
-#                 spoken_words.update({lang2: [act[~mask_R][mask_R2], act_c[~mask_R][mask_R2]]})
-#             # if still missing words, check in last lang available
-#             if (act[mask_R].size + act[~mask_R][mask_R2].size) < len(act):
-#                 lang3 = 'L2' if lang2 in ['L12', 'L1'] else 'L1'
-#                 rem_words = act[~mask_R][~mask_R2]
-#                 mask_R3 = np.random.rand(len(rem_words)) <= self.lang_stats[lang3]['R'][rem_words]
-#                 if rem_words[mask_R3].size:
-#                     # VERY IMP: add to transition language instead of 'pure' one.
-#                     # This is the process of creation/adaption/translation
-#                     tr_lang = max([lang, lang2], key=len)
-#                     spoken_words.update({lang2: [rem_words[mask_R3], act_c[~mask_R][~mask_R2][mask_R3]]})
-#
-#         return spoken_words
-#
-#     def update_lang_arrays(self, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
-#                            delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
-#         """ Function to compute and update main arrays that define agent linguistic knowledge
-#             Args:
-#                 * sample_words: dict where keys are lang labels and values are tuples of
-#                     2 NumPy integer arrays. First array is of conversation-active unique word indices,
-#                     second is of corresponding counts of those words
-#                 * speak: boolean. Defines whether agent is speaking or listening
-#                 * a, b, c, d: float parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
-#                 * delta_s_factor: positive float < 1.
-#                     Defines increase of mem stability due to passive rehearsal
-#                     as a fraction of that due to active rehearsal
-#                 * min_mem_times: positive integer. Minimum number of times to start remembering a word.
-#                     It should be understood as average time it takes for a word meaning to be incorporated
-#                     in memory
-#                 * pct_threshold: positive float < 1. Value to define lang knowledge in percentage.
-#                     If retrievability R for a given word is higher than pct_threshold,
-#                     the word is considered as well known. Otherwise, it is not
-#                 * pct_threshold_und : positive float < 1. If retrievability R for a given word
-#                     is higher than pct_threshold, the word can be correctly understood.
-#                     Otherwise, it cannot
-#
-#
-#             MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
-#
-#             Assumptions ( see "HOW MANY WORDS DO WE KNOW ???" By Marc Brysbaert*,
-#             Michaël Stevens, Paweł Mandera and Emmanuel Keuleers):
-#                 * ~16000 spoken tokens per day + 16000 heard tokens per day + TV, RADIO
-#                 * 1min reading -> 220-300 tokens with large individual differences, thus
-#                   in 1 h we get ~ 16000 words
-#         """
-#
-#         # TODO: need to define similarity matrix btw language vocabularies?
-#         # TODO: cat-spa have dist mean ~ 2 and std ~ 1.6 ( better to normalize distance ???)
-#         # TODO for cat-spa np.random.choice(range(7), p=[0.05, 0.2, 0.45, 0.15, 0.1, 0.025,0.025], size=500)
-#         # TODO 50% of unknown words with edit distance == 1 can be understood, guessed
-#
-#         for lang, (act, act_c) in sample_words.items():
-#             # UPDATE WORD COUNTING +  preprocessing for S, t, R UPDATE
-#             # If words are from listening, they might be new to agent
-#             # ds_factor value will depend on action type (speaking or listening)
-#             if not speak:
-#                 known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
-#                 # boolean mask of known active words
-#                 known_act_bool = np.in1d(act, known_words, assume_unique=True)
-#                 if np.all(known_act_bool):
-#                     # all active words in conversation are known
-#                     # update all active words
-#                     self.lang_stats[lang]['wc'][act] += act_c
-#                 else:
-#                     # some heard words are unknown. Find them in 'act' words vector base
-#                     unknown_act_bool = np.invert(known_act_bool)
-#                     unknown_act , unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
-#                     # Select most frequent unknown word
-#                     ix_most_freq_unk = np.argmax(unknown_act_c)
-#                     most_freq_unknown = unknown_act[ix_most_freq_unk]
-#                     # update most active unknown word's count (the only one actually grasped)
-#                     self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
-#                     # update known active words count
-#                     self.lang_stats[lang]['wc'][act[known_act_bool]] += act_c[known_act_bool]
-#                     # get words available for S, t, R update
-#                     if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
-#                         known_act_ixs = np.concatenate((np.nonzero(known_act_bool)[0], [ix_most_freq_unk]))
-#                         act, act_c = act[known_act_ixs ], act_c[known_act_ixs ]
-#                     else:
-#                         act, act_c = act[known_act_bool], act_c[known_act_bool]
-#                 ds_factor = delta_s_factor
-#             else:
-#                 # update word counter with newly active words
-#                 self.lang_stats[lang]['wc'][act] += act_c
-#                 ds_factor = 1
-#             # check if there are any words for S, t, R update
-#             if act.size:
-#                 # compute increase in memory stability S due to (re)activation
-#                 # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
-#                 S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
-#                 R_act = self.lang_stats[lang]['R'][act]
-#                 delta_S = ds_factor * (a * S_act_b * np.exp(c * 100 * R_act) + d)
-#                 # update memory stability value
-#                 self.lang_stats[lang]['S'][act] += delta_S
-#                 # discount one to counts
-#                 act_c -= 1
-#                 # Simplification with good approx : we apply delta_S without iteration !!
-#                 S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
-#                 R_act = self.lang_stats[lang]['R'][act]
-#                 delta_S = ds_factor * (act_c * (a * S_act_b * np.exp(c * 100 * R_act) + d))
-#                 # update
-#                 self.lang_stats[lang]['S'][act] += delta_S
-#                 # update daily boolean mask to update elapsed-steps array t
-#                 self.day_mask[lang][act] = True
-#                 # set last activation time counter to zero if word act
-#                 self.lang_stats[lang]['t'][self.day_mask[lang]] = 0
-#                 # compute new memory retrievability R and current lang_knowledge from t, S values
-#                 self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
-#                 self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > pct_threshold)[0].shape[0] /
-#                                                           self.model.vocab_red)
-#
-#     def listen(self, conversation=True):
-#         """ Method to listen to conversations, media, etc... and update corresponding vocabulary
-#             Args:
-#                 * conversation: Boolean. If True, agent will listen to potential conversation taking place
-#                 on its current cell.If False, agent will listen to media"""
-#         # get all agents currently placed on chosen cell
-#         if conversation:
-#             others = self.model.grid.get_cell_list_contents(self.pos)
-#             others.remove(self)
-#             # if two or more agents in cell, conversation is possible
-#             if len(others) >= 2:
-#                 ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
-#                 # call run conversation with bystander
-#                 self.model.run_conversation(ag_1, ag_2, bystander=self)
-#
-#         # TODO : implement 'listen to media' option
-#
-#
-#     def read(self):
-#         pass
-#
-#     def study_lang(self, lang):
-#         pass
-#
-#     def update_lang_switch(self, switch_threshold=0.1):
-#         """Switch to a new linguistic regime when threshold is reached
-#            If language knowledge falls below switch_threshold value, agent
-#            becomes monolingual"""
-#
-#         if self.info['language'] == 0:
-#             if self.lang_stats['L2']['pct'][self.info['age']] >= switch_threshold:
-#                 self.info['language'] = 1
-#         elif self.info['language'] == 2:
-#             if self.lang_stats['L1']['pct'][self.info['age']] >= switch_threshold:
-#                 self.info['language'] = 1
-#         elif self.info['language'] == 1:
-#             if self.lang_stats['L1']['pct'][self.info['age']] < switch_threshold:
-#                 self.info['language'] == 2
-#             elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
-#                 self.info['language'] == 0
-#
-#     def stage_1(self):
-#         self.start_conversation()
-#
-#     def stage_2(self):
-#         self.loc_info['home'].agents_in.remove(self)
-#         self.move_random()
-#         self.start_conversation()
-#         self.move_random()
-#         #self.listen()
-#
-#     def stage_3(self):
-#         if self.info['age'] < 720:
-#             self.model.grid.move_agent(self, self.loc_info['school'].pos)
-#             self.loc_info['school'].agents_in.add(self)
-#             # TODO : DEFINE GROUP CONVERSATIONS !
-#             self.study_lang(0)
-#             self.study_lang(1)
-#             self.start_conversation() # WITH FRIENDS, IN GROUPS
-#         else:
-#             if self.loc_info['job']:
-#                 if not isinstance(self.loc_info['job'], list):
-#                     job = self.loc_info['job']
-#                 else:
-#                     job = self.loc_info['job'][0]
-#                 self.model.grid.move_agent(self, job.pos)
-#                 job.agents_in.add(self)
-#                 # TODO speak to people in job !!! DEFINE GROUP CONVERSATIONS !
-#                 self.start_conversation()
-#                 self.start_conversation()
-#             else:
-#                 self.look_for_job()
-#                 self.start_conversation()
-#
-#     def stage_4(self):
-#         if self.info['age'] < 720:
-#             self.loc_info['school'].agents_in.remove(self)
-#         elif self.loc_info['job']:
-#             self.loc_info['job'].agents_in.remove(self)
-#         self.move_random()
-#         self.start_conversation()
-#         if random.random() > 0.5 and self.model.nws.friendship_network[self]:
-#             picked_friend = np.random.choice(self.model.nws.friendship_network.neighbors(self))
-#             self.start_conversation(with_agents=picked_friend)
-#         self.model.grid.move_agent(self, self.loc_info['home'].pos)
-#         self.loc_info['home'].agents_in.add(self)
-#         try:
-#             for key in self.model.nws.family_network[self]:
-#                 if key.pos == self.loc_info['home'].pos:
-#                     lang = self.model.nws.family_network[self][key]['lang']
-#                     self.start_conversation(with_agents=key, lang=lang)
-#         except:
-#             pass
-#         # memory becomes ever shakier after turning 65...
-#         if self.info['age'] > 65 * 36:
-#             for lang in ['L1', 'L2']:
-#                 self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] >= 0.01,
-#                                                       self.lang_stats[lang]['S'] - 0.01,
-#                                                       0.000001)
-#         # Update at the end of each step
-#         # for lang in ['L1', 'L2']:
-#         #     self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
-#         #                                               self.model.vocab_red)
-#
-#     def __repr__(self):
-#         return 'Lang_Agent_{0.unique_id!r}'.format(self)
-#
