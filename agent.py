@@ -1372,10 +1372,7 @@ class Teacher(Adult):
                 break
 
     def random_death(self):
-        # school, course_key = self.loc_info['job']
-        dead = BaseAgent.random_death(self, ret_out=True)
-        # if dead and course_key:
-        #     school.hire_teachers([course_key])
+        BaseAgent.random_death(self, ret_out=True)
 
     def speak_to_class(self):
         job, course_key = self.loc_info['job']
@@ -1444,10 +1441,7 @@ class TeacherUniv(Teacher):
                 fac.assign_teacher(self)
 
     def random_death(self):
-        # univ, course_key, fac_key = self.loc_info['job']
-        dead = BaseAgent.random_death(self, ret_out=True)
-        # if dead and course_key:
-        #     univ.faculties[fac_key].hire_teachers([course_key])
+        BaseAgent.random_death(self)
 
     def speak_to_class(self):
         job, course_key, fac_key = self.loc_info['job']
