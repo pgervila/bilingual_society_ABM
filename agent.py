@@ -85,6 +85,10 @@ class BaseAgent:
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
 
+        # conv failure counter
+        self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
+
+
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
         """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
            at all of it
@@ -103,6 +107,9 @@ class BaseAgent:
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
+
+        # conv failure counter
+        self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
 
     def set_lang_ics(self, s_0=0.01, t_0=1000, biling_key=None):
         """ set agent's linguistic Initial Conditions by calling set up methods
@@ -601,8 +608,8 @@ class SchoolAgent(SpeakerAgent):
             if friend in educ_center[course_key]['students']:
                 self.model.run_conversation(self, friend, num_days=num_days)
 
-    def study_vocab(self, lang, delta_s_factor=0.25, num_words=100):
-        """ Method to update vocabulary without conversations
+    def study_vocab(self, lang, delta_s_factor=0.25, num_words=50):
+        """ Method to update vocabulary without conversations ( reading )
         Args:
             * lang: string. Language in which agent studies ['L1', 'L2']
             * delta_s_factor: positive float < 1. Defines increase of mem stability
@@ -787,8 +794,7 @@ class Baby(ListenerAgent):
             school_parent = self.get_family_relative(school_parent)
             if school_parent:
                 self.model.grid.move_agent(school_parent, school.pos)
-                self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'],
-                            num_days=num_days)
+                self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
             parents = [ag for ag in self.model.grid.get_cell_list_contents(school.pos)
                        if isinstance(ag, Adult)]
             if parents and school_parent:
@@ -926,14 +932,14 @@ class Adolescent(IndepAgent, SchoolAgent):
         self.speak_at_school(school, course_key, num_days=num_days)
         school.agents_in.remove(self)
         if school.info['lang_policy'] == [0, 1]:
-            self.study_vocab('L1', num_words=100)
-            self.study_vocab('L2', num_words=50)
+            self.study_vocab('L1', num_words=50)
+            self.study_vocab('L2', num_words=25)
         elif school.info['lang_policy'] == [1]:
             self.study_vocab('L1')
             self.study_vocab('L2')
         elif school.info['lang_policy'] == [1, 2]:
-            self.study_vocab('L1', num_words=50)
-            self.study_vocab('L2', num_words=100)
+            self.study_vocab('L1', num_words=25)
+            self.study_vocab('L2', num_words=50)
         if self.model.nws.friendship_network[self]:
             # TODO : add groups, more than one friend
             self.speak_to_random_friend(ix_agent, num_days=5)

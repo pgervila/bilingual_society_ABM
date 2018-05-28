@@ -25,7 +25,8 @@ class DataProcessor(DataCollector):
                                           "tokens_per_day_cat": lambda a: (a.wc_final['L2'] - a.wc_init['L2']).sum(),
                                           "x": lambda a: a.pos[0],
                                           "y": lambda a: a.pos[1],
-                                          "age": lambda a: a.info['age']
+                                          "age": lambda a: a.info['age'],
+                                          "excl_c": lambda a: a.lang_stats['L1']['excl_c'][a.info['age']] if a.info['language'] == 2 else a.lang_stats['L2']['excl_c'][a.info['age']],
                                           }
                          )
 

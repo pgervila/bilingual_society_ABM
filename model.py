@@ -34,7 +34,8 @@ class LanguageModel(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
-    school_lang_policy = [1]
+    school_lang_policy = [0]
+    media_lang = [0]
     steps_per_year = 36
 
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250),
@@ -84,7 +85,6 @@ class LanguageModel(Model):
         self.data_process = DataProcessor(self)
         # define dataviz
         self.data_viz = DataViz(self)
-
 
     @staticmethod
     def get_newborn_lang(parent1, parent2):
@@ -144,6 +144,10 @@ class LanguageModel(Model):
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
                     listener.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
+            else:
+                # update exclusion counter for excluded agent
+                ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] += 1
+
         # update acquaintances
         if isinstance(others, list):
             for ix, ag in enumerate(others):
