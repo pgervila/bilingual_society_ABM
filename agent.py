@@ -5,8 +5,7 @@ import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
 from collections import defaultdict
-
-#from city_objects import Job
+from copy import deepcopy
 
 #import private library to model lang zipf CDF
 from zipf_generator import randZipf, Zipf_Mand_CDF_compressed
@@ -320,7 +319,7 @@ class ListenerAgent(BaseAgent):
                     the word is considered as well known. Otherwise, it is not
                 * pct_threshold_und : positive float < 1. If retrievability R for a given word
                     is higher than pct_threshold, the word can be correctly understood.
-                    Otherwise, it cannot
+                    Otherwise, it cannot #TODO unless word is very similar to known one in other language
 
 
             MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
@@ -337,11 +336,13 @@ class ListenerAgent(BaseAgent):
         # TODO for cat-spa np.random.choice(range(7), p=[0.05, 0.2, 0.45, 0.15, 0.1, 0.025,0.025], size=500)
         # TODO 50% of unknown words with edit distance == 1 can be understood, guessed
 
-        for lang, (act, act_c) in sample_words.items():
+        for lang, (act, act_c) in deepcopy(sample_words).items():
+
             # UPDATE WORD COUNTING +  preprocessing for S, t, R UPDATE
             # If words are from listening, they might be new to agent
             # ds_factor value will depend on action type (speaking or listening)
             if not speak:
+                import ipdb; ipdb.set_trace()
                 known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
                 # boolean mask of known active words
                 known_act_bool = np.in1d(act, known_words, assume_unique=True)
@@ -352,7 +353,12 @@ class ListenerAgent(BaseAgent):
                 else:
                     # some heard words are unknown. Find them in 'act' words vector base
                     unknown_act_bool = np.invert(known_act_bool)
-                    unknown_act , unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
+                    unknown_act, unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
+
+                    #TODO MODIF, introduce similarity role
+
+
+
                     # Select most frequent unknown word
                     ix_most_freq_unk = np.argmax(unknown_act_c)
                     most_freq_unknown = unknown_act[ix_most_freq_unk]
@@ -368,8 +374,6 @@ class ListenerAgent(BaseAgent):
                         act, act_c = act[known_act_bool], act_c[known_act_bool]
                 ds_factor = delta_s_factor
             else:
-                # if len(sample_words.keys()) > 1:
-                #     import ipdb; ipdb.set_trace()
                 # update word counter with newly active words
                 self.lang_stats[lang]['wc'][act] += act_c
                 ds_factor = 1
@@ -382,7 +386,7 @@ class ListenerAgent(BaseAgent):
                 delta_S = ds_factor * (a * S_act_b * np.exp(c * 100 * R_act) + d)
                 # update memory stability value
                 self.lang_stats[lang]['S'][act] += delta_S
-                # discount one to counts
+                # discount counts by one unit
                 act_c -= 1
                 # Simplification with good approx : we apply delta_S without iteration !!
                 S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
@@ -621,6 +625,9 @@ class SchoolAgent(SpeakerAgent):
         bcs = np.bincount(word_samples)
         act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
         studied_words = {lang: [act, act_c]}
+
+        #TODO : model difference between known and unknown words !!!
+
         self.update_lang_arrays(studied_words, delta_s_factor=delta_s_factor, speak=False)
 
     def register_to_school(self):
