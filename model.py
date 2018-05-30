@@ -61,7 +61,9 @@ class LanguageModel(Model):
         self.random_seeds = np.random.randint(1, 10000, size=2)
 
         # define Levenshtein distances between corresponding words of two languages
-        self.lev_distances = np.random.binomial(10, mean_word_distance, size=self.vocab_red)
+        self.lev_distances = dict()
+        self.lev_distances['original'] = np.random.binomial(10, mean_word_distance, size=self.vocab_red)
+        self.lev_distances['mixed'] = np.random.binomial(10, 0.1, size=self.vocab_red)
 
         # define container for available ids
         self.set_available_ids = set(range(num_people, max_people_factor * num_people))

@@ -276,6 +276,7 @@ class ListenerAgent(BaseAgent):
         """
         if not to_agent:
             # get all agents currently placed on chosen cell
+            # TODO: agents should know each other
             others = self.model.grid.get_cell_list_contents(self.pos)
             others.remove(self)
             # if two or more agents in cell, conversation is possible
@@ -299,8 +300,8 @@ class ListenerAgent(BaseAgent):
 
         # TODO : implement 'listen to media' option
 
-    def update_lang_arrays(self, sample_words, speak=True, a=7.6, b=0.023, c=-0.031, d=-0.2,
-                           delta_s_factor=0.25, min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
+    def update_lang_arrays(self, sample_words, speak=True, delta_s_factor=0.25,
+                           min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * sample_words: dict where keys are lang labels and values are tuples of
@@ -338,11 +339,10 @@ class ListenerAgent(BaseAgent):
 
         for lang, (act, act_c) in deepcopy(sample_words).items():
 
-            # UPDATE WORD COUNTING +  preprocessing for S, t, R UPDATE
+            # UPDATE WORD COUNTING + pre-processing for S, t, R UPDATE
             # If words are from listening, they might be new to agent
             # ds_factor value will depend on action type (speaking or listening)
             if not speak:
-                import ipdb; ipdb.set_trace()
                 known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
                 # boolean mask of known active words
                 known_act_bool = np.in1d(act, known_words, assume_unique=True)
@@ -352,65 +352,92 @@ class ListenerAgent(BaseAgent):
                     self.lang_stats[lang]['wc'][act] += act_c
                 else:
                     # some heard words are unknown. Find them in 'act' words vector base
+
+                    # update known active words count
+                    self.lang_stats[lang]['wc'][act[known_act_bool]] += act_c[known_act_bool]
+
+                    # identify unknown words on global base
                     unknown_act_bool = np.invert(known_act_bool)
                     unknown_act, unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
 
-                    #TODO MODIF, introduce similarity role
+                    # First check if unknown words can be recognised because of similarity
+                    if lang in ['L1', 'L2']:
+                        ixs_rec_words = np.where(self.model.lev_distances['original'][unknown_act] < 2)[0]
+                    elif lang in ['L12', 'L21']:
+                        ixs_rec_words = np.where(self.model.lev_distances['mixed'][unknown_act] < 2)[0]
 
+                    rec_words, rec_words_c = unknown_act[ixs_rec_words], unknown_act_c[ixs_rec_words]
 
-
-                    # Select most frequent unknown word
-                    ix_most_freq_unk = np.argmax(unknown_act_c)
-                    most_freq_unknown = unknown_act[ix_most_freq_unk]
-                    # update most active unknown word's count (the only one actually grasped)
-                    self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
-                    # update known active words count
-                    self.lang_stats[lang]['wc'][act[known_act_bool]] += act_c[known_act_bool]
-                    # get words available for S, t, R update
-                    if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
-                        known_act_ixs = np.concatenate((np.nonzero(known_act_bool)[0], [ix_most_freq_unk]))
-                        act, act_c = act[known_act_ixs ], act_c[known_act_ixs ]
+                    known_act_ixs = known_act_bool
+                    # Check if there are recognised words
+                    if rec_words.size:
+                        self.lang_stats[lang]['wc'][rec_words] += rec_words_c
+                        # select only those recognised words whose memory can be updated (R, S, t)
+                        ixs_rec_words = np.where(self.lang_stats[lang]['wc'][rec_words] > min_mem_times)[0]
+                        if ixs_rec_words.size:
+                            # get indices of recognised words in global coords
+                            ixs_known_words = np.where(known_act_bool)[0]
+                            ixs_rec_word = np.where(unknown_act_bool)[0][ixs_rec_words]
+                            known_act_ixs = np.concatenate((ixs_known_words, ixs_rec_word))
                     else:
-                        act, act_c = act[known_act_bool], act_c[known_act_bool]
+                        # Unknown new words are too different. Only most frequent unknown word is retained
+                        ix_most_freq_unk = np.argmax(unknown_act_c)
+                        most_freq_unknown = unknown_act[ix_most_freq_unk]
+                        # update most active unknown word's count (the only one actually grasped)
+                        self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
+                        # select only those recognised words whose memory can be updated (R, S, t)
+                        if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
+                            # get indices of retained word in global coords
+                            ixs_known_words = np.where(known_act_bool)[0]
+                            ixs_ret_word = [np.where(unknown_act_bool)[0][ix_most_freq_unk]]
+                            known_act_ixs = np.concatenate((ixs_known_words, ixs_ret_word))
+
+                    act, act_c = act[known_act_ixs], act_c[known_act_ixs]
                 ds_factor = delta_s_factor
             else:
+                # when speaking, all words are known by definition
                 # update word counter with newly active words
                 self.lang_stats[lang]['wc'][act] += act_c
                 ds_factor = 1
+
             # check if there are any words for S, t, R update
             if act.size:
-                # compute increase in memory stability S due to (re)activation
-                # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
-                S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
-                R_act = self.lang_stats[lang]['R'][act]
-                delta_S = ds_factor * (a * S_act_b * np.exp(c * 100 * R_act) + d)
-                # update memory stability value
-                self.lang_stats[lang]['S'][act] += delta_S
-                # discount counts by one unit
-                act_c -= 1
-                # Simplification with good approx : we apply delta_S without iteration !!
-                S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
-                R_act = self.lang_stats[lang]['R'][act]
-                delta_S = ds_factor * (act_c * (a * S_act_b * np.exp(c * 100 * R_act) + d))
-                # update
-                self.lang_stats[lang]['S'][act] += delta_S
-                # update daily boolean mask to update elapsed-steps array t
-                self.day_mask[lang][act] = True
-                # set last activation time counter to zero if word act
-                self.lang_stats[lang]['t'][self.day_mask[lang]] = 0
-                # compute new memory retrievability R and current lang_knowledge from t, S values
-                self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
-                # compute language knowledge in percentage
-                if lang in ['L1', 'L12']:
-                    real_lang_knowledge = np.maximum(self.lang_stats['L1']['R'], self.lang_stats['L12']['R'])
-                    pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                 len(self.model.cdf_data['s'][self.info['age']]))
-                    self.lang_stats['L1']['pct'][self.info['age']] = pct_value
-                else:
-                    real_lang_knowledge = np.maximum(self.lang_stats['L2']['R'], self.lang_stats['L21']['R'])
-                    pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                 len(self.model.cdf_data['s'][self.info['age']]))
-                    self.lang_stats['L2']['pct'][self.info['age']] = pct_value
+                self.update_memory_stability(lang, act, act_c, ds_factor, pct_threshold)
+
+    def update_memory_stability(self, lang, act, act_c, ds_factor=0.25, pct_threshold=0.9,
+                                a=7.6, b=0.023, c=-0.031, d=-0.2):
+        # compute increase in memory stability S due to (re)activation
+        # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
+        S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+        R_act = self.lang_stats[lang]['R'][act]
+        delta_S = ds_factor * (a * S_act_b * np.exp(c * 100 * R_act) + d)
+        # update memory stability value
+        self.lang_stats[lang]['S'][act] += delta_S
+        # discount counts by one unit
+        act_c -= 1
+        # Simplification with good approx : we apply delta_S without iteration !!
+        S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+        R_act = self.lang_stats[lang]['R'][act]
+        delta_S = ds_factor * (act_c * (a * S_act_b * np.exp(c * 100 * R_act) + d))
+        # update
+        self.lang_stats[lang]['S'][act] += delta_S
+        # update daily boolean mask to update elapsed-steps array t
+        self.day_mask[lang][act] = True
+        # set last activation time counter to zero if word act
+        self.lang_stats[lang]['t'][self.day_mask[lang]] = 0
+        # compute new memory retrievability R and current lang_knowledge from t, S values
+        self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
+        # compute language knowledge in percentage
+        if lang in ['L1', 'L12']:
+            real_lang_knowledge = np.maximum(self.lang_stats['L1']['R'], self.lang_stats['L12']['R'])
+            pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+                         len(self.model.cdf_data['s'][self.info['age']]))
+            self.lang_stats['L1']['pct'][self.info['age']] = pct_value
+        else:
+            real_lang_knowledge = np.maximum(self.lang_stats['L2']['R'], self.lang_stats['L21']['R'])
+            pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+                         len(self.model.cdf_data['s'][self.info['age']]))
+            self.lang_stats['L2']['pct'][self.info['age']] = pct_value
 
 
 class SpeakerAgent(ListenerAgent):
@@ -951,6 +978,8 @@ class Adolescent(IndepAgent, SchoolAgent):
             # TODO : add groups, more than one friend
             self.speak_to_random_friend(ix_agent, num_days=5)
 
+        self.listen(num_days=5)
+
     def stage_4(self, ix_agent, num_days=7):
         self.go_back_home()
         self.stage_1(ix_agent, num_days=num_days)
@@ -1220,6 +1249,7 @@ class Young(IndepAgent):
             job = self.loc_info['job']
             colleagues = job.info['employees']
             self.speak_in_random_subgroups(colleagues)
+        self.listen(num_days=7)
 
     def stage_4(self, ix_agent):
         self.go_back_home()

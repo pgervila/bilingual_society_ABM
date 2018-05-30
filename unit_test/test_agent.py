@@ -193,6 +193,7 @@ def test_get_job(model, city_places, agent_class):
         assert ag in ag.loc_info['job'][0].info['employees']
 
 
+
                   
 # @pytest.mark.parametrize("sample_words, speak", test_data_update_lang_arrays)
 # def test_update_lang_arrays(model, sample_words, speak):

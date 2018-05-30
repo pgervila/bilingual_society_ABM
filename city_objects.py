@@ -750,6 +750,10 @@ class Job:
         return 'Job_{0.clust!r}_{0.pos!r}'.format(self)
 
 
+class MeetingPoint:
+    pass
+
+
 class Store:
     pass
 

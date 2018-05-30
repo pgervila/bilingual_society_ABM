@@ -162,7 +162,7 @@ class DataViz:
         else:
             s = ax4.scatter(data_2D['x'], data_2D['y'],
                             c=data_2D['values'], marker='s',
-                            vmin=0, vmax=2, s=35, cmap='viridis')
+                            vmin=0, vmax=2, s=25, cmap='viridis')
             ax4.set_xlim(0, 100)
             ax4.set_ylim(0, 100)
         ax4.text(0.02, 1.04, 'time = %.1f' % self.model.schedule.steps, transform=ax4.transAxes)
