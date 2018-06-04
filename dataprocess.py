@@ -18,15 +18,17 @@ class DataProcessor(DataCollector):
                                           "pct_cat_in_biling": lambda dp: dp.get_global_bilang_inner_evol()
                                          },
                          agent_reporters={"pct_cat_knowledge": lambda a: a.lang_stats['L2']['pct'][a.info['age']],
-                                          "pct_L21_knowledge": lambda a: a.lang_stats['L21']['pct'][a.info['age']],
+                                          "pct_L21_knowledge": lambda a: a.lang_stats['L21']['R'].mean(),
                                           "pct_spa_knowledge": lambda a: a.lang_stats['L1']['pct'][a.info['age']],
-                                          "pct_L12_knowledge": lambda a: a.lang_stats['L12']['pct'][a.info['age']],
-                                          "tokens_per_day_spa": lambda a: (a.wc_final['L1'] - a.wc_init['L1']).sum(),
-                                          "tokens_per_day_cat": lambda a: (a.wc_final['L2'] - a.wc_init['L2']).sum(),
+                                          "pct_L12_knowledge": lambda a: a.lang_stats['L12']['R'].mean(),
+                                          "tokens_per_step_spa": lambda a: (a.wc_final['L1'] - a.wc_init['L1']).sum(),
+                                          "tokens_per_step_cat": lambda a: (a.wc_final['L2'] - a.wc_init['L2']).sum(),
                                           "x": lambda a: a.pos[0],
                                           "y": lambda a: a.pos[1],
                                           "age": lambda a: a.info['age'],
+                                          "language": lambda a: a.info['language'],
                                           "excl_c": lambda a: a.lang_stats['L1']['excl_c'][a.info['age']] if a.info['language'] == 2 else a.lang_stats['L2']['excl_c'][a.info['age']],
+                                          "clust_id": lambda a: a.loc_info['home'].clust
                                           }
                          )
 
@@ -180,13 +182,32 @@ class DataViz:
         if plot_results:
             plt.show()
 
+
 class VizImpData:
 
     def __init__(self, file_name=None, key='/'):
         self.data = dd.io.load(file_name, key)
 
-
     def show_imported_results(self, key='/'):
         self.model
+
+
+class PostProcessor:
+    def __init__(self, data_filename):
+        self.results = self.load_model_data(data_filename)
+
+    @staticmethod
+    def load_model_data(data_filename, key='/'):
+        return dd.io.load(data_filename, key)
+
+    def ag_results_by_id(self, ag_id):
+
+        idx = pd.IndexSlice
+        # return self.results['agent_results'].unstack().loc[idx[:], idx[['tokens_per_day_cat', 'tokens_per_day_spa',
+        #                                                                 'pct_cat_knowledge', 'pct_spa_knowledge',
+        #                                                                 'pct_L21_knowledge', 'pct_L12_knowledge', ], ag_id]]
+        return self.results['agent_results'].unstack().loc[idx[:], idx[:, ag_id]]
+
+
 
 

@@ -37,6 +37,7 @@ class LanguageModel(Model):
     school_lang_policy = [0]
     media_lang = [0]
     steps_per_year = 36
+    similarity_corr = {'L1':'L2', 'L2':'L1', 'L12':'L2', 'L21':'L1'}
 
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250),
                  width=100, height=100,
@@ -61,9 +62,9 @@ class LanguageModel(Model):
         self.random_seeds = np.random.randint(1, 10000, size=2)
 
         # define Levenshtein distances between corresponding words of two languages
-        self.lev_distances = dict()
-        self.lev_distances['original'] = np.random.binomial(10, mean_word_distance, size=self.vocab_red)
-        self.lev_distances['mixed'] = np.random.binomial(10, 0.1, size=self.vocab_red)
+        self.edit_distances = dict()
+        self.edit_distances['original'] = np.random.binomial(10, mean_word_distance, size=self.vocab_red)
+        self.edit_distances['mixed'] = np.random.binomial(10, 0.1, size=self.vocab_red)
 
         # define container for available ids
         self.set_available_ids = set(range(num_people, max_people_factor * num_people))
@@ -150,7 +151,7 @@ class LanguageModel(Model):
                 # call listeners' updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
-                    listener.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
+                    listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.75)
             else:
                 # update exclusion counter for excluded agent
                 ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] += 1

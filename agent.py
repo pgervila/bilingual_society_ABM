@@ -296,18 +296,18 @@ class ListenerAgent(BaseAgent):
                     lang = conv_params['lang_group']
             words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs,
                                         num_days=num_days)
-            self.update_lang_arrays(words, speak=False, delta_s_factor=0.75)
+            self.update_lang_arrays(words, mode_type='listen', delta_s_factor=0.75)
 
         # TODO : implement 'listen to media' option
 
-    def update_lang_arrays(self, sample_words, speak=True, delta_s_factor=0.25,
-                           min_mem_times=5, pct_threshold=0.9, pct_threshold_und=0.1):
+    def update_lang_arrays(self, sample_words, mode_type='speak', delta_s_factor=0.25, min_mem_times=5,
+                           pct_threshold=0.9, pct_threshold_und=0.1, max_edit_dist=2):
         """ Function to compute and update main arrays that define agent linguistic knowledge
             Args:
                 * sample_words: dict where keys are lang labels and values are tuples of
                     2 NumPy integer arrays. First array is of conversation-active unique word indices,
                     second is of corresponding counts of those words
-                * speak: boolean. Defines whether agent is speaking or listening
+                * mode_type: string. Defines type of agent action with words: 'speak', 'listen', 'read', 'media'
                 * a, b, c, d: float parameters to define memory function from SUPERMEMO by Piotr A. Wozniak
                 * delta_s_factor: positive float < 1.
                     Defines increase of mem stability due to passive rehearsal
@@ -320,7 +320,10 @@ class ListenerAgent(BaseAgent):
                     the word is considered as well known. Otherwise, it is not
                 * pct_threshold_und : positive float < 1. If retrievability R for a given word
                     is higher than pct_threshold, the word can be correctly understood.
-                    Otherwise, it cannot #TODO unless word is very similar to known one in other language
+                    Otherwise, it cannot
+                * max_edit_dist : integer. Maximum value of edit distance between heard/read
+                    and known languages in order to recognise an unknown word. For values equal or higher than
+                    max_edit_dist, unknown words cannot be recognised.
 
 
             MEMORY MODEL: https://www.supermemo.com/articles/stability.htm
@@ -341,138 +344,118 @@ class ListenerAgent(BaseAgent):
 
             # UPDATE WORD COUNTING + pre-processing for S, t, R UPDATE
 
-            # If words are from listening, they might be new to agent
-            # ds_factor value will depend on action type (speaking or listening)
-            if not speak:
+            # If words are from listening/reading/media, they might be new to agent
+            # ds_factor value will depend on action type
+            if mode_type in ['listen', 'media', 'read']:
                 # get known words in global reference system
                 known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
-
                 # Of all active words, how many are known ??
                 # boolean mask of known-active words projected on active words reference system
-                known_act_bool = np.in1d(act, known_words, assume_unique=True)
+                kn_act_bool = np.in1d(act, known_words, assume_unique=True)
 
-                if np.all(known_act_bool):
-                    # all active words in conversation are known
-                    # update all active words
-                    self.lang_stats[lang]['wc'][act] += act_c
-                else:
-                    # some active words are unknown. Need to find them in active-words reference system
-                    # identify known-active words and update counting
-                    known_act, known_act_c = act[known_act_bool], act_c[known_act_bool]
-                    # For now, update only active-known words
-                    self.lang_stats[lang]['wc'][known_act] += known_act_c
+                # update counting of known words
+                kn_words_idxs = np.where(kn_act_bool)[0]
+                self.lang_stats[lang]['wc'][act[kn_words_idxs]] += act_c[kn_words_idxs]
 
-                    # Now identify unknown-active words
-                    unknown_act_bool = np.invert(known_act_bool)
-                    unknown_act, unknown_act_c = act[unknown_act_bool], act_c[unknown_act_bool]
-
-                    # Initialize array of indices of words whose memory will be updated
-                    # Initially include only already known words
-                    # Indices of known words in active-words ref system
-                    known_act_ixs = np.where(known_act_bool)[0]
-
-                    ####
-
-                    # First check if unknown words can be recognised because of similarity
-                    # Get indices of recognised words in unknown-active words ref system
-                    if lang in ['L1', 'L2']:
-                        ixs_rec_words = np.where(self.model.lev_distances['original'][unknown_act] < 2)[0]
-                    elif lang in ['L12', 'L21']:
-                        ixs_rec_words = np.where(self.model.lev_distances['mixed'][unknown_act] < 2)[0]
-
-                    # recognised words and their counting
-                    rec_words, rec_words_c = unknown_act[ixs_rec_words], unknown_act_c[ixs_rec_words]
-
-                    # Check if there are recognised words
-                    if rec_words.size:
-                        # update counts of recognised words
-                        self.lang_stats[lang]['wc'][rec_words] += rec_words_c
-
-                        # select only those recognised words whose memory can be updated (R, S, t)
-                        # first get cond in rec_w ref system
-                        cond_upd = np.where(self.lang_stats[lang]['wc'][rec_words] > min_mem_times)[0]
-                        # out of indices of all rec words, get indices in unk act words ref system
-                        ixs_rec_words = ixs_rec_words[cond_upd]
-
-                        if ixs_rec_words.size:
-                            # get indices of recognised and updatable words in act-words ref system
-                            rec_upd_ixs = np.where(unknown_act_bool)[0][ixs_rec_words]
-                            # concatenate indices of known and rec words in act-word ref system
-                            known_act_ixs = np.concatenate((known_act_ixs, rec_upd_ixs))
-                    else:
-                        # Unknown new words are too different. Only most frequent unknown word is retained
-                        # get index of most frequent unknown word in unk-act ref system
-                        ix_most_freq_unk = np.argmax(unknown_act_c)
-                        most_freq_unknown = unknown_act[ix_most_freq_unk]
-                        # update most active unknown word's count (the only one actually grasped)
-                        self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
-                        # select only those recognised words whose memory can be updated (R, S, t)
-                        if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
-                            # get indices of retained word in act coords
-                            ret_word_ixs = [np.where(unknown_act_bool)[0][ix_most_freq_unk]]
-                            known_act_ixs = np.concatenate((known_act_ixs, ret_word_ixs))
-
-                    act, act_c = act[known_act_ixs], act_c[known_act_ixs]
-
-                    ####
+                # check if all active words in conversation are known
+                if not np.all(kn_act_bool):
+                    # find new words whose memory will be updated
+                    new_words_idxs = self.process_unknown_words(lang, act, act_c, kn_act_bool)
+                    if new_words_idxs is not None:
+                        upd_idxs = np.concatenate((kn_words_idxs, new_words_idxs))
+                        # find words whose memory will be updated and corresponding counts
+                        act, act_c = act[upd_idxs], act_c[upd_idxs]
 
                 ds_factor = delta_s_factor
             else:
                 # when speaking, all words are known by definition
-                # update word counter with newly active words
+                # update word counts
                 self.lang_stats[lang]['wc'][act] += act_c
                 ds_factor = 1
 
             # check if there are any words for S, t, R update
             if act.size:
-                self.update_memory_stability(lang, act, act_c, ds_factor, pct_threshold)
+                self.update_words_memory(lang, act, act_c, ds_factor, pct_threshold)
 
-    # def process_new_words(self, lang, unknown_act, unknown_act_c, min_mem_times=5):
-    #     # First check if unknown words can be recognised because of similarity
-    #     # Get indices of recognised words in unknown-active words ref system
-    #     if lang in ['L1', 'L2']:
-    #         ixs_rec_words = np.where(self.model.lev_distances['original'][unknown_act] < 2)[0]
-    #     elif lang in ['L12', 'L21']:
-    #         ixs_rec_words = np.where(self.model.lev_distances['mixed'][unknown_act] < 2)[0]
-    #
-    #     # recognised words and their counting
-    #     rec_words, rec_words_c = unknown_act[ixs_rec_words], unknown_act_c[ixs_rec_words]
-    #
-    #     # Check if there are recognised words
-    #     if rec_words.size:
-    #         # update counts of recognised words
-    #         self.lang_stats[lang]['wc'][rec_words] += rec_words_c
-    #
-    #         # select only those recognised words whose memory can be updated (R, S, t)
-    #         # first get cond in rec_w ref system
-    #         cond_upd = np.where(self.lang_stats[lang]['wc'][rec_words] > min_mem_times)[0]
-    #         # out of indices of all rec words, get indices in unk act words ref system
-    #         ixs_rec_words = ixs_rec_words[cond_upd]
-    #
-    #         if ixs_rec_words.size:
-    #             # get indices of recognised and updatable words in act-words ref system
-    #             rec_upd_ixs = np.where(unknown_act_bool)[0][ixs_rec_words]
-    #             # concatenate indices of known and rec words in act-word ref system
-    #             known_act_ixs = np.concatenate((known_act_ixs, rec_upd_ixs))
-    #     else:
-    #         # Unknown new words are too different. Only most frequent unknown word is retained
-    #         # get index of most frequent unknown word in unk-act ref system
-    #         ix_most_freq_unk = np.argmax(unknown_act_c)
-    #         most_freq_unknown = unknown_act[ix_most_freq_unk]
-    #         # update most active unknown word's count (the only one actually grasped)
-    #         self.lang_stats[lang]['wc'][most_freq_unknown] += unknown_act_c[ix_most_freq_unk]
-    #         # select only those recognised words whose memory can be updated (R, S, t)
-    #         if self.lang_stats[lang]['wc'][most_freq_unknown] > min_mem_times:
-    #             # get indices of retained word in act coords
-    #             ret_word_ixs = [np.where(unknown_act_bool)[0][ix_most_freq_unk]]
-    #             known_act_ixs = np.concatenate((known_act_ixs, ret_word_ixs))
-    #
-    #     act, act_c = act[known_act_ixs], act_c[known_act_ixs]
+    def process_unknown_words(self, lang, act, act_c, kn_act_bool,
+                              max_edit_dist=2, min_mem_times=5, pct_threshold_und=0.1):
+        """
+            Method to track recognised words among unknown ones, or to randomly single out
+            a new word out of unknown ones. Ability to recognise new words depend on similarity array.
+            Probability to single out a new word depends on degree of language knowledge
+            It updates counting of recognised or identified new words
+            Args:
+                * lang: string.
+                * act, act_c: numpy arrays. Indices and counting of active words in conversation
+                * kn_act_bool:
+                * max_edit_distance: int. For values of edit distance higher or equal to it,
+                    words cannot be recognised
+                * min_mem_times: int. Minimum number of counts to update word's memory
+                * pct_threshold_und: float. Minimum retention value to consider a word as known
 
+            Output:
+                * act, act_c: arrays
+        """
+        # set default value for indices of new words.
+        new_words_idxs = None
 
+        idx_ukn_act = np.where(~kn_act_bool)[0]
+        val_ukn_act = act[idx_ukn_act]
 
-    def update_memory_stability(self, lang, act, act_c, ds_factor=0.25, pct_threshold=0.9,
-                                a=7.6, b=0.023, c=-0.031, d=-0.2):
+        # find recognised words: words similar to those already known in other language
+        other_lang = self.model.similarity_corr[lang]
+        if lang in ['L1', 'L2']:
+            rec_cond1 = self.model.edit_distances['original'][val_ukn_act] < max_edit_dist
+        else:
+            rec_cond1 = self.model.edit_distances['mixed'][val_ukn_act] < max_edit_dist
+        rec_cond2 = self.lang_stats[other_lang]['R'][val_ukn_act] > pct_threshold_und
+        rec_cond = rec_cond1 * rec_cond2
+        ukn_act_rec, ukn_act_rec_idx = val_ukn_act[rec_cond], idx_ukn_act[rec_cond]
+
+        # TODO: select percentage of recognised words as function of action
+        # TODO: listen, media - > 1 max
+        # TODO : read -> all
+
+        if ukn_act_rec.size:
+            # update counting of recognised words
+            self.lang_stats[lang]['wc'][ukn_act_rec] += act_c[ukn_act_rec_idx]
+            # find words that can be updated among recognised ones
+            # TODO : memory of recognised words should be updated regardless of count value ?
+            upd_cond = self.lang_stats[lang]['wc'][ukn_act_rec] > min_mem_times
+            ukn_act_upd_idx = ukn_act_rec_idx[upd_cond]
+            if ukn_act_upd_idx.size:
+                new_words_idxs = ukn_act_upd_idx
+        else:
+            # Probability that a new unknown word is identified increases with lang knowledge
+            # Define proportion of words understood in conversations.
+            # The higher it is, the more likely that a new word is identified
+            pct_understood = (kn_act_bool.sum() / kn_act_bool.size)
+            # set minimum different than zero to allow beginners to learn
+            pct_understood = 0.1 if pct_understood == 0 else pct_understood
+            if random.random() < pct_understood:
+                # find most frequent unknown active word
+                idx_mf_ukn_act_loc = np.argmax(act_c[idx_ukn_act])
+                idx_mf_ukn_act = idx_ukn_act[idx_mf_ukn_act_loc]
+                val_mf_ukn_act = val_ukn_act[idx_mf_ukn_act_loc]
+                # update counting of identified new word
+                self.lang_stats[lang]['wc'][val_mf_ukn_act] += act_c[idx_mf_ukn_act]
+                # check if memory of this word can be updated
+                if self.lang_stats[lang]['wc'][val_mf_ukn_act] > min_mem_times:
+                    new_words_idxs = np.array([idx_mf_ukn_act])
+        return new_words_idxs
+
+    def update_words_memory(self, lang, act, act_c, ds_factor=0.25, pct_threshold=0.9,
+                            a=7.6, b=0.023, c=-0.031, d=-0.2):
+        """ Method to compute word memory update
+            Args:
+                * lang: string. Label to identify lang that to-be-updated words belong to
+                * act: numpy array of integers. words whose memory will be updated
+                * act_c: numpy array of integers. Counts of each word
+                * ds_factor: float
+            Output:
+                * Updated word retention(R), stability(S) and last-activation time-counter(t) arrays
+        """
+
         # compute increase in memory stability S due to (re)activation
         # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_conv] < dS[speaking]
         S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
@@ -512,7 +495,7 @@ class SpeakerAgent(ListenerAgent):
     """ ListenerAgent class augmented with speaking-related methods """
 
     def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
-                               real_spoken_tokens_per_day=16000):
+                               real_spoken_tokens_per_day=18000):
         """ Computes number of words spoken per conversation for a given age
             based on a 'num_words vs age' curve
             It assumes a compression scale of 40 in SIMULATED vocabulary and
@@ -527,7 +510,7 @@ class SpeakerAgent(ListenerAgent):
         # TODO : define 3 types of conv: short, average and long ( with close friends??)
         age_1, age_2 = [age * self.model.steps_per_year for age in [age_1, age_2]]
         real_vocab_size = scale_f * self.model.vocab_red
-        # define factor total_words/avg_words_per_day
+        # define factor total_words / avg_words_per_day
         f = real_vocab_size / real_spoken_tokens_per_day
         if self.info['age'] < age_1:
             delta = 0.0001
@@ -722,7 +705,7 @@ class SchoolAgent(SpeakerAgent):
 
         #TODO : model difference between known and unknown words !!!
 
-        self.update_lang_arrays(studied_words, delta_s_factor=delta_s_factor, speak=False)
+        self.update_lang_arrays(studied_words, mode_type='read', delta_s_factor=delta_s_factor)
 
     def register_to_school(self):
         # find closest school in cluster
@@ -774,7 +757,7 @@ class IndepAgent(SpeakerAgent):
                                        biling_interloc=biling_interloc, num_days=num_days)
         self.update_lang_arrays(spoken_words, delta_s_factor=1)
         for ag in group:
-            ag.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
+            ag.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.75)
 
     def pick_random_friend(self, ix_agent):
         """
