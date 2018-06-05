@@ -37,7 +37,7 @@ class LanguageModel(Model):
     school_lang_policy = [0]
     media_lang = [0]
     steps_per_year = 36
-    similarity_corr = {'L1':'L2', 'L2':'L1', 'L12':'L2', 'L21':'L1'}
+    similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
 
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250),
                  width=100, height=100,

@@ -28,7 +28,8 @@ class DataProcessor(DataCollector):
                                           "age": lambda a: a.info['age'],
                                           "language": lambda a: a.info['language'],
                                           "excl_c": lambda a: a.lang_stats['L1']['excl_c'][a.info['age']] if a.info['language'] == 2 else a.lang_stats['L2']['excl_c'][a.info['age']],
-                                          "clust_id": lambda a: a.loc_info['home'].clust
+                                          "clust_id": lambda a: a.loc_info['home'].clust,
+                                          "agent_type": lambda a: type(a).__name__
                                           }
                          )
 
@@ -194,20 +195,25 @@ class VizImpData:
 
 class PostProcessor:
     def __init__(self, data_filename):
-        self.results = self.load_model_data(data_filename)
+        self.data = self.load_model_data(data_filename)
+        self.agent_data = self.data['agent_results']
+        self.model_data = self.data['model_results']
 
     @staticmethod
     def load_model_data(data_filename, key='/'):
         return dd.io.load(data_filename, key)
 
     def ag_results_by_id(self, ag_id):
-
+        """ Args:
+                * ag_id: integer. Agent unique id
+        """
         idx = pd.IndexSlice
-        # return self.results['agent_results'].unstack().loc[idx[:], idx[['tokens_per_day_cat', 'tokens_per_day_spa',
-        #                                                                 'pct_cat_knowledge', 'pct_spa_knowledge',
-        #                                                                 'pct_L21_knowledge', 'pct_L12_knowledge', ], ag_id]]
-        return self.results['agent_results'].unstack().loc[idx[:], idx[:, ag_id]]
+        return self.agent_data.unstack().loc[idx[:], idx[:, ag_id]]
 
-
+    def ag_results_by_type(self, type):
+        """ Args:
+                * type: string. Agent class type
+        """
+        return self.agent_data[self.agent_data['agent_type'] == type].unstack()
 
 

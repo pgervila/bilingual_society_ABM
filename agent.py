@@ -87,7 +87,6 @@ class BaseAgent:
         # conv failure counter
         self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
 
-
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
         """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
            at all of it
@@ -365,7 +364,8 @@ class ListenerAgent(BaseAgent):
                         upd_idxs = np.concatenate((kn_words_idxs, new_words_idxs))
                         # find words whose memory will be updated and corresponding counts
                         act, act_c = act[upd_idxs], act_c[upd_idxs]
-
+                    else:
+                        act, act_c = act[kn_words_idxs], act_c[kn_words_idxs]
                 ds_factor = delta_s_factor
             else:
                 # when speaking, all words are known by definition
@@ -385,9 +385,10 @@ class ListenerAgent(BaseAgent):
             Probability to single out a new word depends on degree of language knowledge
             It updates counting of recognised or identified new words
             Args:
-                * lang: string.
-                * act, act_c: numpy arrays. Indices and counting of active words in conversation
-                * kn_act_bool:
+                * lang: string. Label that identifies language ('L1', 'L2', 'L12', 'L21')
+                * act, act_c: numpy arrays. Indices and number of occurrences of active words in conversation
+                * kn_act_bool: numpy array of booleans. Values are True if word is known.
+                    Expressed on active words base
                 * max_edit_distance: int. For values of edit distance higher or equal to it,
                     words cannot be recognised
                 * min_mem_times: int. Minimum number of counts to update word's memory
@@ -441,7 +442,7 @@ class ListenerAgent(BaseAgent):
                 self.lang_stats[lang]['wc'][val_mf_ukn_act] += act_c[idx_mf_ukn_act]
                 # check if memory of this word can be updated
                 if self.lang_stats[lang]['wc'][val_mf_ukn_act] > min_mem_times:
-                    new_words_idxs = np.array([idx_mf_ukn_act])
+                    new_words_idxs = np.array([idx_mf_ukn_act], dtype=np.int32)
         return new_words_idxs
 
     def update_words_memory(self, lang, act, act_c, ds_factor=0.25, pct_threshold=0.9,

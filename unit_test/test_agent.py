@@ -17,6 +17,7 @@ from model import LanguageModel
 def model():
     return LanguageModel(251, num_clusters=2)
 
+
 @pytest.fixture(scope='module')
 def dummy_agent(model):
     # find agent that speaks L1
@@ -25,7 +26,6 @@ def dummy_agent(model):
             agent = ag
             break
     return agent
-
 
 
 @pytest.fixture(scope="module")
@@ -48,9 +48,6 @@ def jobs_in_diff_clusts(model):
     j2 = model.geo.clusters_info[1]['jobs'][0]
 
 
-
-    
-
 test_data_evolve = [(Baby, Child, ('school', 'school', False)),
                     (Child, Adolescent, ('school', 'school', False)),
                     (Adolescent, Young, ('school', 'job', False)), 
@@ -66,7 +63,9 @@ test_data_evolve = [(Baby, Child, ('school', 'school', False)),
 test_data_update_lang_arrays = [({'L1': (np.array([0, 1, 10, 450, 470, 490]),
                                          np.array([3, 2, 1, 2, 1, 3]))}, 'listen'),
                                 ({'L1': (np.array([0, 1, 5, 10]),
-                                         np.array([3, 2, 1, 1]))}, 'speak')]
+                                         np.array([3, 2, 1, 1]))}, 'speak'),
+                                ({'L1': (np.array([450, 470, 490]),
+                                         np.array([3, 2, 1]))}, 'listen')]
 
 test_data_vocab_choice_model = [True, False]
 
@@ -208,7 +207,7 @@ def test_get_job(model, city_places, agent_class):
 
 
 @pytest.mark.parametrize("sample_words, mode_type", test_data_update_lang_arrays)
-def test_update_lang_arrays(model, dummy_agent, sample_words, mode_type):
+def test_update_lang_arrays(dummy_agent, sample_words, mode_type):
 
     ag = dummy_agent
 
@@ -222,16 +221,26 @@ def test_update_lang_arrays(model, dummy_agent, sample_words, mode_type):
 
     wc_init = ag.lang_stats['L1']['wc'][act_upd].copy()
 
-
     # check calls through patches
     with patch.object(ag, 'process_unknown_words') as proc_uw:
-        proc_uw.return_value = np.array([ix for ix, val in enumerate(act) if val not in known_words[0]])
-        # call method to test
-        ag.update_lang_arrays(sample_words, mode_type=mode_type)
-        if np.all(kn_act_bool):
-            assert proc_uw.call_count == 0
-        else:
-            assert proc_uw.call_count == 1
+        with patch.object(ag, 'update_words_memory') as uwm:
+            if np.all(kn_act_bool):
+                # call method to test
+                ag.update_lang_arrays(sample_words, mode_type=mode_type)
+                assert proc_uw.call_count == 0
+                assert uwm.call_count == 1
+            elif np.all(~kn_act_bool):
+                proc_uw.return_value = np.array([], dtype=np.int32)
+                # call method to test
+                ag.update_lang_arrays(sample_words, mode_type=mode_type)
+                assert uwm.call_count == 0
+            else:
+                proc_uw.return_value = np.array([ix for ix, val in enumerate(act)
+                                                 if val not in known_words[0]])
+                # call method to test
+                ag.update_lang_arrays(sample_words, mode_type=mode_type)
+                assert proc_uw.call_count == 1
+                assert uwm.call_count == 1
 
     # check updated counts
     if mode_type == 'speak':
