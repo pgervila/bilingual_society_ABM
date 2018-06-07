@@ -37,12 +37,13 @@ class LanguageModel(Model):
     school_lang_policy = [0]
     media_lang = [0]
     steps_per_year = 36
+    similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
 
     def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250),
                  width=100, height=100,
                  max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1],
                  num_clusters=10, max_run_steps=1000,
-                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
+                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
         if spoken_only:
@@ -59,6 +60,11 @@ class LanguageModel(Model):
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.random_seeds = np.random.randint(1, 10000, size=2)
+
+        # define Levenshtein distances between corresponding words of two languages
+        self.edit_distances = dict()
+        self.edit_distances['original'] = np.random.binomial(10, mean_word_distance, size=self.vocab_red)
+        self.edit_distances['mixed'] = np.random.binomial(10, 0.1, size=self.vocab_red)
 
         # define container for available ids
         self.set_available_ids = set(range(num_people, max_people_factor * num_people))
@@ -137,13 +143,15 @@ class LanguageModel(Model):
         conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
-                spoken_words = ag.pick_vocab(lang, long=conv_params['long'], num_days=num_days)
+                spoken_words = ag.pick_vocab(lang, long=conv_params['long'],
+                                             min_age_interlocs=conv_params['min_group_age'],
+                                             num_days=num_days)
                 # call 'self' agent update
                 ag.update_lang_arrays(spoken_words, delta_s_factor=1)
                 # call listeners' updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
-                    listener.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
+                    listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.75)
             else:
                 # update exclusion counter for excluded agent
                 ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] += 1
@@ -186,7 +194,6 @@ class LanguageModel(Model):
         conv_params = dict(multilingual=False, mute_type=None, long=True)
 
         # get lists of favorite language per agent and set of language types involved
-
         ags_lang_types = set([ag.info['language'] for ag in ags])
 
         # define lists with agent competences and preferences in each language

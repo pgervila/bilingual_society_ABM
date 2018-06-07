@@ -15,7 +15,17 @@ from model import LanguageModel
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(250, num_clusters=2)
+    return LanguageModel(251, num_clusters=2)
+
+
+@pytest.fixture(scope='module')
+def dummy_agent(model):
+    # find agent that speaks L1
+    for ag in model.schedule.agents:
+        if ag.info['language'] == 0:
+            agent = ag
+            break
+    return agent
 
 
 @pytest.fixture(scope="module")
@@ -36,7 +46,7 @@ def jobs_in_diff_clusts(model):
     h2 = model.geo.clusters_info[1]['homes'][1]
     j1 = model.geo.clusters_info[0]['jobs'][0]
     j2 = model.geo.clusters_info[1]['jobs'][0]
-    
+
 
 test_data_evolve = [(Baby, Child, ('school', 'school', False)),
                     (Child, Adolescent, ('school', 'school', False)),
@@ -50,10 +60,12 @@ test_data_evolve = [(Baby, Child, ('school', 'school', False)),
                     (Adult, TeacherUniv, ('job', 'job', False))]
 
 
-test_data_update_lang_arrays = [({0: (np.array([0, 1, 10, 450, 470, 490]), 
-                                      np.array([3, 2, 1, 2, 1, 3]))}, False), 
-                                ({0: (np.array([0, 1, 5, 10]), 
-                                      np.array([3, 2, 1, 1]))}, True)]
+test_data_update_lang_arrays = [({'L1': (np.array([0, 1, 10, 450, 470, 490]),
+                                         np.array([3, 2, 1, 2, 1, 3]))}, 'listen'),
+                                ({'L1': (np.array([0, 1, 5, 10]),
+                                         np.array([3, 2, 1, 1]))}, 'speak'),
+                                ({'L1': (np.array([450, 470, 490]),
+                                         np.array([3, 2, 1]))}, 'listen')]
 
 test_data_vocab_choice_model = [True, False]
 
@@ -185,33 +197,79 @@ def test_get_job(model, city_places, agent_class):
     # get a job
     ag.get_job()
 
-    if type(ag) is Adult:
-        assert ag in ag.loc_info['job'].info['employees']
-    elif type(ag) is Teacher:
-        assert ag in ag.loc_info['job'][0].info['employees']
-    elif type(ag) is TeacherUniv:
-        assert ag in ag.loc_info['job'][0].info['employees']
+    if ag.loc_info['job']:
+        if type(ag) is Adult:
+            assert ag in ag.loc_info['job'].info['employees']
+        elif type(ag) is Teacher:
+            assert ag in ag.loc_info['job'][0].info['employees']
+        elif type(ag) is TeacherUniv:
+            assert ag in ag.loc_info['job'][0].info['employees']
 
 
-                  
-# @pytest.mark.parametrize("sample_words, speak", test_data_update_lang_arrays)
-# def test_update_lang_arrays(model, sample_words, speak):
-#     agent = model.schedule.agents[0]
-#     if not speak:
-#         agent.lang_stats['L1']['R'][:100] = 1.
-#         agent.lang_stats['L1']['R'][-100:] = 0.
-#         agent.lang_stats['L1']['wc'][-100:] = 10
-#     R_init = agent.lang_stats['L1']['R'][sample_words[0]].copy()
-#     S_init = agent.lang_stats['L1']['S'][sample_words[0]].copy()
-#     wc_init = agent.lang_stats['L1']['wc'][sample_words[0]].copy()
-#     # call method to test
-#     agent.update_lang_arrays(lang, sample_words, speak)
-#     if not speak:
-#         assert np.all(agent.lang_stats['L1']['S'][[0, 1, 10]] > S_init[[0, 1, 2]])
-#         assert agent.lang_stats['L1']['S'][490] == S_init[5]
-#         assert np.all(agent.lang_stats['L1']['wc'][[0, 1, 10, 490]] > wc_init[[0, 1, 2, 5]])
-#     else:
-#         assert np.all(agent.lang_stats['L1']['S'][sample_words[0]] > S_init)
+@pytest.mark.parametrize("sample_words, mode_type", test_data_update_lang_arrays)
+def test_update_lang_arrays(dummy_agent, sample_words, mode_type):
+
+    ag = dummy_agent
+
+    # adapt agent retention levels
+    ag.lang_stats['L1']['R'][-100:] = 0.
+    # get words whose counting will be updated
+    act, act_c = sample_words['L1']
+    known_words = np.nonzero(ag.lang_stats['L1']['R'] > 0.1)
+    kn_act_bool = np.in1d(act, known_words, assume_unique=True)
+    act_upd, act_upd_c = act[kn_act_bool], act_c[kn_act_bool]
+
+    wc_init = ag.lang_stats['L1']['wc'][act_upd].copy()
+
+    # check calls through patches
+    with patch.object(ag, 'process_unknown_words') as proc_uw:
+        with patch.object(ag, 'update_words_memory') as uwm:
+            if np.all(kn_act_bool):
+                # call method to test
+                ag.update_lang_arrays(sample_words, mode_type=mode_type)
+                assert proc_uw.call_count == 0
+                assert uwm.call_count == 1
+            elif np.all(~kn_act_bool):
+                proc_uw.return_value = np.array([], dtype=np.int32)
+                # call method to test
+                ag.update_lang_arrays(sample_words, mode_type=mode_type)
+                assert uwm.call_count == 0
+            else:
+                proc_uw.return_value = np.array([ix for ix, val in enumerate(act)
+                                                 if val not in known_words[0]])
+                # call method to test
+                ag.update_lang_arrays(sample_words, mode_type=mode_type)
+                assert proc_uw.call_count == 1
+                assert uwm.call_count == 1
+
+    # check updated counts
+    if mode_type == 'speak':
+        assert np.all(ag.lang_stats['L1']['wc'][act_upd] > wc_init)
+    elif mode_type == 'listen':
+        assert np.all(ag.lang_stats['L1']['wc'][act_upd] > wc_init)
+
+
+@pytest.mark.parametrize("sample_words, mode_type", test_data_update_lang_arrays)
+def test_process_unknown_words(model, sample_words, mode_type):
+    pass
+
+
+
+@pytest.mark.parametrize("sample_words, mode_type", test_data_update_lang_arrays)
+def test_update_words_memory(model, dummy_agent, sample_words, mode_type):
+
+    agent = dummy_agent
+
+    for lang_label, (act, act_c) in sample_words.items():
+        R_init = agent.lang_stats[lang_label]['R'][act].copy()
+        S_init = agent.lang_stats[lang_label]['S'][act].copy()
+        t_init = agent.lang_stats[lang_label]['t'][act].copy()
+
+        agent.update_words_memory(lang_label, act, act_c)
+
+        assert np.all(agent.lang_stats[lang_label]['R'][act] >= R_init)
+        assert np.all(agent.lang_stats[lang_label]['S'][act] > S_init)
+        assert np.all(agent.lang_stats[lang_label]['t'][act] <= t_init)
 
 # @pytest.mark.parametrize("long", test_data_vocab_choice_model)
 # def test_vocab_choice_model(model, long):
