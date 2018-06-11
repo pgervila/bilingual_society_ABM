@@ -699,20 +699,28 @@ class Job:
         self.info = {'employees': set(), 'lang_policy': lang_policy,
                      'skill_level': skill_level }
         self.agents_in = set()
+        # set lang policy
+        if not lang_policy:
+            self.set_lang_policy()
 
     def set_lang_policy(self, min_pct=0.1):
-        """ Computes langs distribution in cluster job object belongs to,
+        """ Computes langs distribution in cluster the job instance belongs to,
             and sets value for job lang policy accordingly. In order to be taken
             into account, monolinguals need to make > min_pct % cluster population
             Args:
-                * min_pct: float. minimum percentage for monolinguals to be taken into account
+                * min_pct: float. minimum percentage for monolinguals to be taken into account.
+                Defaults to 0.1
             Output:
                 * sets value of self.info['lang_policy]
         """
         lang_distrib = self.model.geo.get_lang_distrib_per_clust(self.clust)
-        lang_policy = np.where((lang_distrib != 0) & (lang_distrib > min_pct))[0]
-        if 1 not in self.info['lang_policy']:
+        lang_policy = np.where(lang_distrib > min_pct)[0]
+        if 1 not in lang_policy and lang_policy.size < 2:
             self.info['lang_policy'] = np.insert(lang_policy, np.searchsorted(lang_policy, 1), 1)
+        elif 1 not in lang_policy and lang_policy.size == 2:
+            self.info['lang_policy'] = np.array([1])
+        elif 1 in lang_policy and lang_policy.size > 2:
+            self.info['lang_policy'] = np.array([1])
         else:
             self.info['lang_policy'] = lang_policy
 

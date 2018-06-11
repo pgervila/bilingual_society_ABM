@@ -23,6 +23,8 @@ class GeoMapper:
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
         self.set_clusters_info()
+        # generate lang distribution for each cluster
+        self.generate_langs_per_clust()
 
     def map_model_objects(self):
         """ Instantiate and position all model objects on 2-D grid """
@@ -195,8 +197,7 @@ class GeoMapper:
                     self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places,
                                                                      lang_policy=self.model.jobs_lang_policy))
                 else:
-                    self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places,
-                                                                     lang_policy=[0, 1]))
+                    self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places))
 
     def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
@@ -245,9 +246,9 @@ class GeoMapper:
             for x, y in zip(x_h, y_h):
                 self.clusters_info[clust_idx]['homes'].append(Home(clust_idx, (x, y)))
 
-    def generate_lang_distrib(self):
-        """ Method that generates a list of lists of lang labels in the requested order
-            Returns:
+    def generate_langs_per_clust(self):
+        """ Method that generates a list of lists of lang labels. Each sublist represents a cluster
+            Output:
                 * A list of lists where each list contains lang labels per cluster
         """
         # generate random array with lang labels ( no sorting at all )
@@ -284,7 +285,8 @@ class GeoMapper:
                     clust_subsorted_by_fam = [val for group in clust_subsorted_by_fam
                                               for val in group]
                     clust[:len(clust_subsorted_by_fam)] = clust_subsorted_by_fam
-        return langs_per_clust
+
+        self.langs_per_clust = langs_per_clust
 
     def map_lang_agents(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
         """
@@ -295,12 +297,11 @@ class GeoMapper:
             Output:
                 * Assign family, home and job to all agents. Assign home and job to lonely agents
         """
-        # get lang distribution for each cluster
-        langs_per_clust = self.generate_lang_distrib()
+
         # set agents ids
         lang_ags_ids = set(range(self.model.num_people))
         for clust_idx, clust_info in self.clusters_info.items():
-            for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.model.family_size)):
+            for idx, family_langs in enumerate(zip(*[iter(self.langs_per_clust[clust_idx])] * self.model.family_size)):
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
@@ -348,7 +349,7 @@ class GeoMapper:
             len_clust = clust_info['num_agents']
             num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
-                for idx2, lang in enumerate(langs_per_clust[clust_idx][-num_left_agents:]):
+                for idx2, lang in enumerate(self.langs_per_clust[clust_idx][-num_left_agents:]):
                     sex = 'M' if random.random() < 0.5 else 'F'
                     ag = Adult(self.model, lang_ags_ids.pop(), lang, sex)
                     ag.info['age'] = self.model.steps_per_year * np.random.randint(parents_age_range[0],
@@ -408,16 +409,22 @@ class GeoMapper:
                 break
         return sorted_clusts[:ix_max_univ]
 
-    def get_lang_distrib_per_clust(self, clust_ix):
+    def get_lang_distrib_per_clust(self, clust_ix, use_agents_lang_attrs=False):
         """ Method to find language percentages for each language cathegory
             in a given cluster 0-> mono L1, 1-> biling, 2-> mono L2
             Args:
                 * clust_ix: integer. Identifies cluster by its index in model
+                * use_agents_lang_attrs: boolean. If False, geomapper instance
+                 'langs_per_clust' attribute is used to compute lang statistics. Otherwise,
+                  agents' lang attributes are used for the calculation. Default False.
             Output:
                 * numpy array where indices are lang cathegories and values are percentages
         """
-        clust_lang_cts = Counter([ag.info['language']
-                                 for ag in self.clusters_info[clust_ix]['agents']])
+        if use_agents_lang_attrs:
+            clust_lang_cts = Counter([ag.info['language']
+                                     for ag in self.clusters_info[clust_ix]['agents']])
+        else:
+            clust_lang_cts = Counter(self.langs_per_clust[clust_ix])
         clust_size = self.cluster_sizes[clust_ix]
         return np.array([clust_lang_cts[lang] / clust_size for lang in range(3)])
 
