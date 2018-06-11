@@ -4,7 +4,7 @@ import numpy as np
 import random
 from scipy.spatial.distance import pdist
 from itertools import product
-from collections import defaultdict
+from collections import defaultdict, Counter
 from math import ceil
 
 # IMPORT AGENTS AND  ENTITIES
@@ -176,19 +176,27 @@ class GeoMapper:
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
+            # adults account for approximately half of the cluster size
+            clust_size = int(clust_size / 2)
             x_j, y_j = self.generate_points_coords(clust_c_coords,
                                                    ceil(clust_size * num_job_cs_per_agent),
                                                    clust_idx)
             # compute percentage number places per each job center in cluster using lognormal distrib
+            # many small companies and a few of very large ones
             p = np.random.lognormal(1, 1, size=int(clust_size * num_job_cs_per_agent))
             pcts = p / p.sum()
             # compute num of places out of percentages
             num_places_job_c = np.random.multinomial(int(clust_size * self.model.max_people_factor), pcts)
+            # adapt array to minimum and maximum number of places
             num_places_job_c = np.clip(num_places_job_c, min_places, max_places)
 
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
-                self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y),
-                                                                 num_places, lang_policy=[0, 1, 2]))
+                if self.model.jobs_lang_policy:
+                    self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places,
+                                                                     lang_policy=self.model.jobs_lang_policy))
+                else:
+                    self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places,
+                                                                     lang_policy=[0, 1]))
 
     def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
@@ -279,7 +287,14 @@ class GeoMapper:
         return langs_per_clust
 
     def map_lang_agents(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
-        """ Method to instantiate all agents according to requested linguistic order """
+        """
+            Method to instantiate all agents according to requested linguistic order
+            Args:
+                * parents_age_range: tuple. Minimum and maximum parent's age
+                * children_age_range: tuple. Minimum and maximum children's age
+            Output:
+                * Assign family, home and job to all agents. Assign home and job to lonely agents
+        """
         # get lang distribution for each cluster
         langs_per_clust = self.generate_lang_distrib()
         # set agents ids
@@ -316,11 +331,8 @@ class GeoMapper:
                 self.add_agents_to_grid_and_schedule(family_agents)
                 # assign job to parents
                 for parent in family_agents[:2]:
-                    while True:
-                        job = np.random.choice(clust_info['jobs'])
-                        if job.num_places:
-                            job.hire_employee(parent, move_home=False)
-                            break
+                    parent.get_job(keep_cluster=True, move_home=False)
+
                 # assign school to children
                 # find closest school to home
                 # TODO : introduce also University for age > 18
@@ -347,11 +359,7 @@ class GeoMapper:
                     home = clust_info['homes'][idx + idx2 + 1]
                     home.assign_to_agent(ag)
                     # assign job
-                    while True:
-                        job = np.random.choice(clust_info['jobs'])
-                        if job.num_places:
-                            job.hire_employee(ag, move_home=False)
-                            break
+                    ag.get_job(keep_cluster=True, move_home=False)
 
     def assign_school_jobs(self):
         # assign school jobs
@@ -399,4 +407,46 @@ class GeoMapper:
                 ix_max_univ = ix
                 break
         return sorted_clusts[:ix_max_univ]
+
+    def get_lang_distrib_per_clust(self, clust_ix):
+        """ Method to find language percentages for each language cathegory
+            in a given cluster 0-> mono L1, 1-> biling, 2-> mono L2
+            Args:
+                * clust_ix: integer. Identifies cluster by its index in model
+            Output:
+                * numpy array where indices are lang cathegories and values are percentages
+        """
+        clust_lang_cts = Counter([ag.info['language']
+                                 for ag in self.clusters_info[clust_ix]['agents']])
+        clust_size = self.cluster_sizes[clust_ix]
+        return np.array([clust_lang_cts[lang] / clust_size for lang in range(3)])
+
+    def get_dominant_lang_per_clust(self, clust_ix):
+        """
+            Method to compute the dominant language per cluster
+            as measured by the average percentage knowledge of
+            cluster inhabitants.
+            Args:
+                * clust_ix: integer. Identifies cluster by its index in model
+            Output:
+                * integer that identifies dominant language or None if no language is dominant
+        """
+
+        L1_pcts, L2_pcts = list(zip(*[ [ag.lang_stats['L1']['pct'][ag.info['age']],
+                                        ag.lang_stats['L2']['pct'][ag.info['age']]]
+                                        for ag in self.clusters_info[clust_ix]['agents']
+                                     ]))
+        L1_pct, L2_pct = np.array(L1_pcts).mean(), np.array(L2_pcts).mean()
+
+        # For a lang to be dominant, its quality must be on average 10% higher than the other's
+
+        if L1_pct >= L2_pct + 0.1:
+            return 0
+        elif L2_pct >= L1_pct + 0.1:
+            return 1
+        else:
+            return None
+
+
+
 

@@ -84,7 +84,7 @@ class BaseAgent:
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
 
-        # conv failure counter
+        # conversation failure counter
         self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
@@ -106,7 +106,7 @@ class BaseAgent:
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
 
-        # conv failure counter
+        # conversation failure counter
         self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
 
     def set_lang_ics(self, s_0=0.01, t_0=1000, biling_key=None):
@@ -447,7 +447,7 @@ class ListenerAgent(BaseAgent):
 
     def update_words_memory(self, lang, act, act_c, ds_factor=0.25, pct_threshold=0.9,
                             a=7.6, b=0.023, c=-0.031, d=-0.2):
-        """ Method to compute word memory update
+        """ Method to compute the update of word memory parameters: S, R, t
             Args:
                 * lang: string. Label to identify lang that to-be-updated words belong to
                 * act: numpy array of integers. words whose memory will be updated
@@ -1165,16 +1165,23 @@ class Young(IndepAgent):
 
         return job_clust
 
-    def get_job(self, keep_cluster=False):
-        """ Assign agent to a random job
+    def get_job(self, keep_cluster=False, move_home=True):
+        """
+            Assign agent to a random job
             Args:
                 * keep_cluster: boolean. If True, job search will be limited to agent's current cluster
-                    Otherwise, all clusters might be searched. It defaults to False"""
+                    Otherwise, all clusters might be searched. It defaults to False
+                * move_home: boolean.
+            Output:
+                * If job lang constraints allow it, it assigns a new job to agent
+        """
         job_clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # pick a job from chosen cluster
-        job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
-        if job.num_places and self.info['language'] in job.info['lang_policy']:
-            job.hire_employee(self)
+        while True:
+            job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
+            if job.num_places:
+                job.hire_employee(self, move_home=move_home)
+                break
 
     def move_to_new_home(self, marriage=True):
         """
@@ -1280,7 +1287,6 @@ class Young(IndepAgent):
             for child in children:
                 if child.info['age'] > self.model.steps_per_year:
                     child.register_to_school()
-
 
     def stage_1(self, ix_agent, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -1456,7 +1462,7 @@ class Teacher(Adult):
         if ret_output:
             return grown_agent
 
-    def get_job(self, keep_cluster=False):
+    def get_job(self, keep_cluster=False, move_home=True):
         # get cluster where job will be found
         clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # assign teacher to first school that matches teacher lang profile
@@ -1474,7 +1480,7 @@ class Teacher(Adult):
             # teacher speaks to entire course
             studs = list(job.grouped_studs[course_key]['students'])
             if studs:
-                self.speak_to_group(studs, 0)
+                self.speak_to_group(studs, lang=0, num_days=7)
 
     def speak_with_colleagues(self):
         pass
@@ -1522,7 +1528,7 @@ class TeacherUniv(Teacher):
         educ_center = educ_center.faculties[fac_key]
         return educ_center, course_key
 
-    def get_job(self, keep_cluster=False):
+    def get_job(self, keep_cluster=False, move_home=True):
         if keep_cluster:
             clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         else:

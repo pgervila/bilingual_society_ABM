@@ -35,7 +35,8 @@ class LanguageModel(Model):
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
     school_lang_policy = [0]
-    media_lang = [0]
+    jobs_lang_policy = None
+    media_lang_policy = None
     steps_per_year = 36
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
 

@@ -695,14 +695,30 @@ class Job:
         self.model = model
         self.clust = clust
         self.pos = pos
-        self.num_places=num_places
+        self.num_places = num_places
         self.info = {'employees': set(), 'lang_policy': lang_policy,
                      'skill_level': skill_level }
         self.agents_in = set()
 
+    def set_lang_policy(self, min_pct=0.1):
+        """ Computes langs distribution in cluster job object belongs to,
+            and sets value for job lang policy accordingly. In order to be taken
+            into account, monolinguals need to make > min_pct % cluster population
+            Args:
+                * min_pct: float. minimum percentage for monolinguals to be taken into account
+            Output:
+                * sets value of self.info['lang_policy]
+        """
+        lang_distrib = self.model.geo.get_lang_distrib_per_clust(self.clust)
+        lang_policy = np.where((lang_distrib != 0) & (lang_distrib > min_pct))[0]
+        if 1 not in self.info['lang_policy']:
+            self.info['lang_policy'] = np.insert(lang_policy, np.searchsorted(lang_policy, 1), 1)
+        else:
+            self.info['lang_policy'] = lang_policy
+
     def look_for_employee(self, excluded_ag=None):
         """
-            Look for employee that meets requirements
+            Look for employee that meets requirements: lang policy and currently unemployed
             Args:
                 * excluded_ag: agent excluded from search
         """
@@ -710,6 +726,7 @@ class Job:
         # look for suitable agents in any cluster
         for ag in set(self.model.schedule.agents).difference(set([excluded_ag])):
             if isinstance(ag, Young) and not isinstance(ag, (Teacher, Pensioner)):
+                # check agent knows right languages and is currently unemployed
                 if ag.info['language'] in self.info['lang_policy'] and not ag.loc_info['job']:
                     self.hire_employee(ag)
                     break

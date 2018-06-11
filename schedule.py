@@ -21,6 +21,9 @@ class StagedActivationModif(StagedActivation):
             ag.info['age'] += 1
             for lang in ['L1', 'L12', 'L21', 'L2']:
 
+                # set exclusion counter to zero
+                ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
+
                 #save wc for each agent
                 ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
 
