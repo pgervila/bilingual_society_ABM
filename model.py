@@ -136,7 +136,10 @@ class LanguageModel(Model):
                 * bystander: extra agent that may listen to conversation words without actually being involved.
                     Agent vocabulary gets correspondingly updated if bystander agent is specified
                 * num_days: integer [1, 10]. Number of days in one 10day-step this kind of speech is done
+            Output:
+                * Method updates lang arrays for all active agents involved. It also updates acquaintances
         """
+
         # define list of all agents involved
         ags = [ag_init]
         ags.extend(others) if (type(others) is list) else ags.append(others)
@@ -250,7 +253,8 @@ class LanguageModel(Model):
                 # There are real L1 monolinguals in the group
                 # Everybody partially understands L1, but some agents don't understand L2 at all
                 # Some agents only understand and speak L1, while others partially understand but can't speak L1
-                # slight bias towards l1 => conversation in l1 but some speakers will stay mute = > short conversation
+                # slight bias towards L1 => conversation in L1 (if initiator belongs to this group)
+                # but some speakers will stay mute = > short conversation
                 mute_type = 2
                 if ag_init.info['language'] != mute_type:
                     lang_group = 0
@@ -261,7 +265,7 @@ class LanguageModel(Model):
             elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
                 # There are real L2 monolinguals in the group
                 # Everybody partially understands L2, but some agents don't understand L1 at all
-                # Some agents only understand and speak l2, while others partially understand but can't speak l2
+                # Some agents only understand and speak l2, while others partially understand but can't speak L2
                 # slight bias towards l2 => conversation in L2 but some speakers will stay mute = > short conversation
                 mute_type = 0
                 if ag_init.info['language'] != mute_type:

@@ -696,8 +696,9 @@ class Job:
         self.clust = clust
         self.pos = pos
         self.num_places = num_places
+        # TODO : define network of companies (customers) where nodes are companies
         self.info = {'employees': set(), 'lang_policy': lang_policy,
-                     'skill_level': skill_level }
+                     'skill_level': skill_level}
         self.agents_in = set()
         # set lang policy
         if not lang_policy:

@@ -210,10 +210,10 @@ class PostProcessor:
         idx = pd.IndexSlice
         return self.agent_data.unstack().loc[idx[:], idx[:, ag_id]]
 
-    def ag_results_by_type(self, type):
+    def ag_results_by_type(self, ag_type):
         """ Args:
-                * type: string. Agent class type
+                * ag_type: string. Agent class type
         """
-        return self.agent_data[self.agent_data['agent_type'] == type].unstack()
+        return self.agent_data[self.agent_data['agent_type'] == ag_type].unstack()
 
 

@@ -22,7 +22,6 @@ class NetworkBuilder:
         self.create_networks()
         self.add_ags_to_networks(self.model.schedule.agents)
 
-
     def create_networks(self):
         # INITIALIZE KNOWN PEOPLE NETWORK => label is lang spoken
         self.known_people_network = nx.DiGraph()
@@ -34,6 +33,9 @@ class NetworkBuilder:
         #              reverse = True)
         # INITIALIZE FAMILY NETWORK
         self.family_network = nx.DiGraph()
+
+        # INITIALIZE JOBS NETWORK
+        self.jobs_network = nx.Graph()
 
     def add_ags_to_networks(self, ags, *more_ags):
         """Method that adds agents to all networks in model
@@ -49,6 +51,7 @@ class NetworkBuilder:
     def build_networks(self):
         self.define_family_networks()
         self.define_friendship_networks()
+        self.define_jobs_network()
 
     def define_family_networks(self):
         """
@@ -129,6 +132,14 @@ class NetworkBuilder:
                 if len(self.friendship_network[ag]) > num_friends - 1:
                     break
 
+    def define_jobs_network(self, p=0.3):
+        """ Defines random graph with probability p where nodes are job instances"""
+        jobs = [j for cl in range(self.model.geo.num_clusters)
+                for j in self.model.geo.clusters_info[cl]['jobs']]
+        self.jobs_network = nx.gnp_random_graph(len(jobs), p)
+        nodes_mapping = {i: j for i, j in enumerate(jobs)}
+        self.jobs_network = nx.relabel_nodes(self.jobs_network, nodes_mapping)
+
     def set_family_links(self, agent, father, mother, lang_with_father, lang_with_mother):
         """
             Method to define family links and interaction language of a new agent.
@@ -205,6 +216,11 @@ class NetworkBuilder:
                            for elem in self.model.schedule.agents}
         people_color = [elem.language for elem in self.family_network]
         nx.draw(self.family_network, pos=people_pos_dict, node_color=people_color)
+
+    def plot_jobs_network(self):
+        jobs_pos = {j: j.pos for cl in range(self.model.geo.num_clusters)
+                    for j in self.model.geo.clusters_info[cl]['jobs']}
+        nx.draw(self.jobs_network, pos=jobs_pos)
 
 
 
