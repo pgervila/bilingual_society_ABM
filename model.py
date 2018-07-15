@@ -71,8 +71,8 @@ class LanguageModel(Model):
         self.set_available_ids = set(range(num_people, max_people_factor * num_people))
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
-        self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_spoken_ics_vs_step.h5'))
-        self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_cdfs_vs_step.h5'))
+        self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'init_conds', 'lang_spoken_ics_vs_step.h5'))
+        self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'cdfs', 'lang_cdfs_vs_step.h5'))
 
         # define model grid and schedule
         self.grid = MultiGrid(height, width, False)
@@ -101,6 +101,8 @@ class LanguageModel(Model):
             Args:
                 * parent1: newborn parent agent
                 * parent2 : other newborn parent agent
+            Output:
+                * Method returns 3 integers: newborn lang_type, lang_with_father, lang_with_mother
         """
         # TODO : implement a more elaborated decision process
         pcts = np.array(parent1.get_langs_pcts() + parent2.get_langs_pcts())
@@ -148,9 +150,8 @@ class LanguageModel(Model):
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, long=conv_params['long'],
-                                             min_age_interlocs=conv_params['min_group_age'],
-                                             num_days=num_days)
-                # call 'self' agent update
+                                             min_age_interlocs=conv_params['min_group_age'], num_days=num_days)
+                # call speaking agent's update
                 ag.update_lang_arrays(spoken_words, delta_s_factor=1)
                 # call listeners' updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
@@ -171,7 +172,7 @@ class LanguageModel(Model):
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])
                 others.update_acquaintances(ag_init, conv_params['lang_group'][1])
 
-    def get_conv_params(self, ags):
+    def get_conv_params(self, ags): # TODO: add higher thresholds for job conversation
         """
         Method to find out parameters of conversation between 2 or more agents:
             conversation lang or lang spoken by each involved speaker,
@@ -182,8 +183,9 @@ class LanguageModel(Model):
         Args:
             * ags : list of all agent class instances that take part in conversation
         Returns:
-            * conv_params dict with following keys and values:
-                * lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
+            * 'conv_params' dict with following keys and values:
+                * lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1]
+                    if multilingual conversation
                 * mute_type: integer. Agent lang type that is unable to speak in conversation
                 * multilingual: boolean. True if conv is held in more than one language
                 * long: boolean. True if conv is long
@@ -215,6 +217,7 @@ class LanguageModel(Model):
         elif ags_lang_types == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
+            # ( TODO: best language has to be compatible with constraints !!!!)
             # who starts conversation matters, but also average lang spoken with already known agents
             lang_init = fav_lang_per_agent[0]
             # TODO : why known agents only checked for this option ??????????????
@@ -379,6 +382,21 @@ class LanguageModel(Model):
             lang_siblings = siblings_lang_params['lang_group'][0]
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
+
+    def add_new_agent_to_model(self, agent):
+        """
+            Method to add a new agent instance to all relevant model entities
+            Args:
+                * agent: agent class instance
+            Output:
+                * Mehtod adds specified agent to grid, schedule, networks and clusters info
+        """
+
+        # Add agent to grid, schedule, network and clusters info
+        self.geo.add_agents_to_grid_and_schedule(agent)
+        self.nws.add_ags_to_networks(agent)
+        home = agent.loc_info['home']
+        self.geo.clusters_info[home.clust]['agents'].append(agent)
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """

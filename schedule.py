@@ -15,32 +15,30 @@ class StagedActivationModif(StagedActivation):
     # TODO : add/separate agents by type ??? Is it a good idea ??
 
     def step(self, pct_threshold=0.9):
-        """ Executes all the stages for all agents. """
+        """ Executes all the stages for all agents """
 
         for ag in self.agents[:]:
+            # new step -> older age
             ag.info['age'] += 1
-            for lang in ['L1', 'L12', 'L21', 'L2']:
+            # set exclusion counter to zero
+            ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
 
-                # set exclusion counter to zero
-                ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
+            for lang in ['L1', 'L12', 'L21', 'L2']:
 
                 #save wc for each agent
                 ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
 
                 # update last-time word use vector
-                ag.lang_stats[lang]['t'][~ag.day_mask[lang]] += 1
+                ag.lang_stats[lang]['t'][~ag.step_mask[lang]] += 1
+                # compute new memory retrievability R using updated t values
+                ag.lang_stats[lang]['R'] = np.exp(-ag.k * ag.lang_stats[lang]['t'] / ag.lang_stats[lang]['S'])
+
                 # set current lang knowledge
                 # compute current language knowledge in percentage after 't' update
-                if lang in ['L1', 'L12']:
-                    real_lang_knowledge = np.maximum(ag.lang_stats['L1']['R'], ag.lang_stats['L12']['R'])
-                    ag.lang_stats['L1']['pct'][ag.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                  len(ag.model.cdf_data['s'][ag.info['age']]))
-                else:
-                    real_lang_knowledge = np.maximum(ag.lang_stats['L2']['R'], ag.lang_stats['L21']['R'])
-                    ag.lang_stats['L2']['pct'][ag.info['age']] = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                                                                  len(ag.model.cdf_data['s'][ag.info['age']]))
+                ag.update_lang_knowledge(lang, pct_threshold=pct_threshold)
+
                 # reset day mask
-                ag.day_mask[lang] = np.zeros(ag.model.vocab_red, dtype=np.bool)
+                ag.step_mask[lang] = np.zeros(ag.model.vocab_red, dtype=np.bool)
             # Update lang switch
             ag.update_lang_switch()
         if self.shuffle:
