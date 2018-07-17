@@ -248,18 +248,16 @@ class BaseAgent:
         if ret_output:
             return grown_agent
 
-    def random_death(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01, ret_out=False):
-        """ Method to randomly determine agent death or survival at each step
-            The fitted function provides the death likelihood for a given rounded age
-            In order to get the death-probability per step we divide
-            by number of steps in a year (36)
-            Fitting parameters are from
-            https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
-            " Smoothing and projecting age-specific probabilities of death by TOPALS "
-            by Joop de Beer
-            Resulting life expectancy is 77 years and std is ~ 15 years
+    def random_death(self, ret_out=False):
         """
-        if random.random() < a * (np.exp(b * self.info['age']) + c) / self.model.steps_per_year:
+            Method to randomly determine agent death or survival at each step
+            Args:
+                * ret_out: boolean. True if random death boolean result needs to be returned in case of death
+            Output:
+                * If random event results into agent death, method calls 'remove_after_death' method.
+                    Otherwise no action is performed
+        """
+        if random.random() < self.model.death_prob_curve[self.info['age']]:
             self.model.remove_after_death(self)
             if ret_out:
                 return True
@@ -555,36 +553,19 @@ class SpeakerAgent(ListenerAgent):
 
     """ ListenerAgent class augmented with speaking-related methods """
 
-    def get_num_words_per_conv(self, long=True, age_1=14, age_2=65, scale_f=40,
-                               real_spoken_tokens_per_day=18000):
+    def get_num_words_per_conv(self, long=True):
         """ Computes number of words spoken per conversation for a given age
             based on a 'num_words vs age' curve
-            It assumes a compression scale of 40 in SIMULATED vocabulary and
-            16000 tokens per adult per day as REAL number of spoken words on average
             Args:
-                * long: boolean. Describes conversation length
-                * age_1: integer. Defines lower key age for slope change in num_words vs age curve
-                * age_2: integer. Defines higher key age for slope change in num_words vs age curve
-                * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
-                * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day
+                * long: boolean. Describes conversation length using values model attribute 'num_words_conv'
         """
         # TODO : define 3 types of conv: short, average and long ( with close friends??)
-        age_1, age_2 = [age * self.model.steps_per_year for age in [age_1, age_2]]
-        real_vocab_size = scale_f * self.model.vocab_red
-        # define factor total_words / avg_words_per_day
-        f = real_vocab_size / real_spoken_tokens_per_day
-        if self.info['age'] < age_1:
-            delta = 0.0001
-            decay = -np.log(delta / 100) / age_1
-            factor =  f + 400 * np.exp(-decay * self.info['age'])
-        elif age_1 <= self.info['age'] <= age_2:
-            factor = f
-        else:
-            factor = f - 1 + np.exp(0.0005 * (self.info['age'] - age_2 ) )
+
+        factor = self.model.conv_length_age_factor[self.info['age']]
         if long:
-            return self.model.num_words_conv[1] / factor
+            return max(int(self.model.num_words_conv[1] / factor), 1)
         else:
-            return self.model.num_words_conv[0] / factor
+            return max((self.model.num_words_conv[0] / factor), 1)
 
     def study_vocab(self, lang, delta_s_factor=1, num_words=50):
         """
@@ -637,7 +618,7 @@ class SpeakerAgent(ListenerAgent):
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
 
         if not num_words:
-            num_words = int(self.get_num_words_per_conv(long) * num_days)
+            num_words = self.get_num_words_per_conv(long) * num_days
         if min_age_interlocs:
             word_samples = randZipf(self.model.cdf_data['s'][min_age_interlocs], num_words)
         else:
@@ -821,7 +802,15 @@ class IndepAgent(SpeakerAgent):
 
     def speak_to_group(self, group, lang=None, long=True,
                        biling_interloc=False, num_days=10):
-        """ Make agent speak to a group of listening people """
+        """
+            Make self agent speak to a group of listening people
+            Args:
+                * group:
+                * lang:
+                * long: boolean. Conversation length
+            Output:
+                *  Updated lang arrays for both self agent and listening group
+        """
 
         min_age_interlocs = min([ag.info['age'] for ag in group])
         # TODO : use 'get_conv_params' to get the parameters ???
@@ -957,7 +946,7 @@ class Baby(ListenerAgent):
             if 'school' not in self.loc_info or not self.loc_info['school'][1]:
                 self.register_to_school()
 
-    def stage_2(self, num_days=7):
+    def stage_2(self, num_days=7, prob_father=0.2):
         # go to daycare with mom or dad - 7 days out of 10
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
         if self.info['age'] > self.model.steps_per_year:
@@ -967,7 +956,7 @@ class Baby(ListenerAgent):
             school.agents_in.add(self)
             teacher = school.grouped_studs[course_key]['teacher']
             # check if school parent is available
-            school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
+            school_parent = 'mother' if random.random() > prob_father else 'father'
             school_parent = self.get_family_relative(school_parent)
             if school_parent:
                 self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
@@ -977,12 +966,12 @@ class Baby(ListenerAgent):
             self.listen(to_agent=teacher, min_age_interlocs=self.info['age'], num_days=num_days)
         # model week-ends time are modeled in PARENTS stages
 
-    def stage_3(self, num_days=7):
+    def stage_3(self, num_days=7, prob_father=0.2):
         # parent comes to pick up and speaks with other parents. Then baby listens to parent on way back
         if self.info['age'] > self.model.steps_per_year:
             school, course_key = self.loc_info['school']
             # check if school parent is available
-            school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
+            school_parent = 'mother' if random.random() > prob_father else 'father'
             school_parent = self.get_family_relative(school_parent)
             if school_parent:
                 self.model.grid.move_agent(school_parent, school.pos)
@@ -1541,7 +1530,10 @@ class Adult(Young): # from 30 to 65
         grown_agent = super().evolve(new_class, ret_output=True)
         # new agent will not have a job if Pensioner
         if not isinstance(grown_agent, Teacher):
-            del grown_agent.loc_info['job']
+            try:
+                del grown_agent.loc_info['job']
+            except KeyError:
+                pass
         if ret_output:
             return grown_agent
 

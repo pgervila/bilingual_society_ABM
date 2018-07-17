@@ -38,11 +38,11 @@ class LanguageModel(Model):
     jobs_lang_policy = None
     media_lang_policy = None
     steps_per_year = 36
+    max_lifetime = 4000
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
 
-    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250),
-                 width=100, height=100,
-                 max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1],
+    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 100),
+                 width=100, height=100, max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1],
                  num_clusters=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3):
         # TODO: group all attrs in a dict to keep it more tidy
@@ -61,6 +61,9 @@ class LanguageModel(Model):
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.random_seeds = np.random.randint(1, 10000, size=2)
+
+        self.conv_length_age_factor = None
+        self.death_prob_curve = None
 
         # define Levenshtein distances between corresponding words of two languages
         self.edit_distances = dict()
@@ -92,6 +95,62 @@ class LanguageModel(Model):
         self.data_process = DataProcessor(self)
         # define dataviz
         self.data_viz = DataViz(self)
+
+        # set model curves
+        self.set_conv_length_age_factor()
+        self.set_death_prob_curve()
+
+    def set_conv_length_age_factor(self, age_1=14, age_2=65, scale_f=40,
+                                   real_spoken_tokens_per_day=18000):
+        """
+            Method to compute the correction factor
+            for conversation lengths as a function of age
+            It assumes a compression scale of 40 in SIMULATED vocabulary and
+            18000 tokens per adult per day as REAL number of spoken words on average
+            Args:
+                * age_1: integer. Defines lower key age for slope change in num_words vs age curve
+                * age_2: integer. Defines higher key age for slope change in num_words vs age curve
+                * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
+                * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day
+            Output:
+                * Method sets the factor value as instance attribute. The factor value is a numpy array
+                    where values are a function of index (index == age)
+        """
+        age = np.arange(self.max_lifetime)
+        factor = np.zeros(self.max_lifetime)
+
+        real_vocab_size = scale_f * self.vocab_red
+        # define factor total_words / avg_words_per_day
+        f = real_vocab_size / real_spoken_tokens_per_day
+        # pivot ages
+        age_1, age_2 = [self.steps_per_year * age for age in (age_1, age_2 )]
+
+        # define sector 1
+        delta = 0.0001
+        decay = -np.log(delta / 100) / age_1
+        factor[:age_1] = f + 400 * np.exp(- decay * age[:age_1])
+        # define sector 2
+        factor[age_1:age_2] = f
+        # define sector 3
+        factor[age_2:] = f - 1 + np.exp(0.0005 * (age[age_2:] - age_2))
+
+        # set factor value
+        self.conv_length_age_factor = factor
+
+    def set_death_prob_curve(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
+        """
+            Computes fitted function that provides the death likelihood for a given rounded age
+            In order to get the death-probability per step we divide by number of steps per year
+            Fitting parameters are from
+            https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
+            ' Smoothing and projecting age-specific probabilities of death by TOPALS ' by Joop de Beer
+            Resulting life expectancy is 77 years and std is ~ 15 years
+
+            Args:
+                * a, b, c : float. Fitted model parameters
+        """
+        self.death_prob_curve = a * (np.exp(b * np.arange(self.max_lifetime)) + c) / self.steps_per_year
+
 
     @staticmethod
     def get_newborn_lang(parent1, parent2):
@@ -128,9 +187,10 @@ class LanguageModel(Model):
         return newborn_lang, lang_with_father, lang_with_mother
 
     def run_conversation(self, ag_init, others, bystander=None, num_days=10):
-        """ Method that models conversation between ag_init and others
-            Calls method to determine conversation parameters
-            Then makes each speaker speak and the rest listen (loop through all involved agents)
+        """
+            Method that models conversation between ag_init (initiator) and others
+            Calls 'get_conv_params' model method to determine conversation parameters
+            Then it makes each speaker speak and the rest listen (loop through all involved agents)
             Args:
                 * ag_init : agent object instance. Agent that starts conversation
                 * others : list of agent class instances. Rest of agents that take part in conversation
@@ -184,12 +244,12 @@ class LanguageModel(Model):
             * ags : list of all agent class instances that take part in conversation
         Returns:
             * 'conv_params' dict with following keys and values:
-                * lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1]
+                - lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1]
                     if multilingual conversation
-                * mute_type: integer. Agent lang type that is unable to speak in conversation
-                * multilingual: boolean. True if conv is held in more than one language
-                * long: boolean. True if conv is long
-                * fav_langs: list of integers in [0, 1].
+                - mute_type: integer. Agent lang type that is unable to speak in conversation
+                - multilingual: boolean. True if conv is held in more than one language
+                - long: boolean. True if conv is long
+                - fav_langs: list of integers in [0, 1].
         """
 
         # redefine separate agents for readability
