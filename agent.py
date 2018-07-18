@@ -323,7 +323,7 @@ class ListenerAgent(BaseAgent):
                     lang = conv_params['lang_group'][0]
                 else:
                     lang = conv_params['lang_group']
-            words = to_agent.pick_vocab(lang, long=False, min_age_interlocs=min_age_interlocs, num_days=num_days)
+            words = to_agent.pick_vocab(lang, conv_length='S', min_age_interlocs=min_age_interlocs, num_days=num_days)
             self.update_lang_arrays(words, mode_type='listen', delta_s_factor=0.75)
 
         # TODO : implement 'listen to media' option
@@ -553,19 +553,16 @@ class SpeakerAgent(ListenerAgent):
 
     """ ListenerAgent class augmented with speaking-related methods """
 
-    def get_num_words_per_conv(self, long=True):
+    def get_num_words_per_conv(self, conv_length='M'):
         """ Computes number of words spoken per conversation for a given age
             based on a 'num_words vs age' curve
             Args:
-                * long: boolean. Describes conversation length using values model attribute 'num_words_conv'
+                * conv_length: string. Describes conversation length using keys from
+                    model attribute dict 'num_words_conv' ('VS', 'S', 'M', 'L')
         """
-        # TODO : define 3 types of conv: short, average and long ( with close friends??)
-
         factor = self.model.conv_length_age_factor[self.info['age']]
-        if long:
-            return max(int(self.model.num_words_conv[1] / factor), 1)
-        else:
-            return max((self.model.num_words_conv[0] / factor), 1)
+        return max(int(self.model.num_words_conv[conv_length] / factor), 1)
+
 
     def study_vocab(self, lang, delta_s_factor=1, num_words=50):
         """
@@ -587,15 +584,16 @@ class SpeakerAgent(ListenerAgent):
 
         self.update_lang_arrays(studied_words, mode_type='read', delta_s_factor=delta_s_factor)
 
-    def pick_vocab(self, lang, num_words=None, long=True, min_age_interlocs=None,
+    def pick_vocab(self, lang, num_words=None, conv_length='M', min_age_interlocs=None,
                    biling_interloc=False, num_days=10):
         """ Method that models word choice by self agent in a conversation
             Word choice is governed by vocabulary knowledge constraints
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
                 * num_words: integer. Number of words to be uttered. If None, number of words will be
-                    picked from that of a standard short or long conversation
-                * long: boolean that defines conversation length if num_words is not specified
+                    picked from that of a standard short or long conversation. Default None
+                * conv_length: string. If num_words is not specified, it describes conversation length
+                    using keys from model attribute dict 'num_words_conv' ('VS', 'S', 'M', 'L').
                 * min_age_interlocs: integer. The youngest age among all interlocutors, EXPRESSED IN STEPS.
                     It is used to modulate conversation vocabulary to younger agents
                 * biling_interloc : boolean. If True, speaker word choice might be mixed (code switching), since
@@ -618,7 +616,7 @@ class SpeakerAgent(ListenerAgent):
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
 
         if not num_words:
-            num_words = self.get_num_words_per_conv(long) * num_days
+            num_words = self.get_num_words_per_conv(conv_length) * num_days
         if min_age_interlocs:
             word_samples = randZipf(self.model.cdf_data['s'][min_age_interlocs], num_words)
         else:
@@ -664,7 +662,6 @@ class SpeakerAgent(ListenerAgent):
         # TODO : model depending on interlocutor (whether he is bilingual or not)
         # TODO : should pure language always get priority in computing random access ????
         # TODO : if word not yet heard in hybrid, set random creation at 50% if interloc is biling
-
 
         # TODO : if word is similar, go for it ( need to quantify similarity !!)
 
@@ -729,7 +726,7 @@ class SchoolAgent(SpeakerAgent):
     """ SpeakerAgent augmented with methods related to school activity """
 
     def go_to_school(self):
-        school = self.loc_info['school']
+        school = self.loc_info['school'][0]
         self.model.grid.move_agent(self, school.pos)
         school.agents_in.add(self)
 
@@ -800,14 +797,14 @@ class IndepAgent(SpeakerAgent):
         pass
         #self.model.grid.move_agent(self, school.pos)
 
-    def speak_to_group(self, group, lang=None, long=True,
+    def speak_to_group(self, group, lang=None, conv_length='M',
                        biling_interloc=False, num_days=10):
         """
             Make self agent speak to a group of listening people
             Args:
                 * group:
                 * lang:
-                * long: boolean. Conversation length
+                * conv_length: boolean. Conversation length
             Output:
                 *  Updated lang arrays for both self agent and listening group
         """
@@ -818,7 +815,7 @@ class IndepAgent(SpeakerAgent):
         if not lang:
             lang = self.model.get_conv_params([self] + group)['lang_group'][0]
 
-        spoken_words = self.pick_vocab(lang, long=long, min_age_interlocs=min_age_interlocs,
+        spoken_words = self.pick_vocab(lang, conv_length=conv_length, min_age_interlocs=min_age_interlocs,
                                        biling_interloc=biling_interloc, num_days=num_days)
         self.update_lang_arrays(spoken_words, delta_s_factor=1)
         for ag in group:
@@ -1224,7 +1221,7 @@ class Young(IndepAgent):
                         self.model, id_baby, newborn_lang, sex,
                         home=self.loc_info['home'])
             # Add agent to grid, schedule, network and clusters info
-            self.model.add_new_agent_to_model(baby, self.loc_info['home'])
+            self.model.add_new_agent_to_model(baby)
             # Update num of children for both self and consort
             self.info['num_children'] += 1
             consort.info['num_children'] += 1
@@ -1397,9 +1394,10 @@ class Young(IndepAgent):
 
     def speak_to_customer(self, num_days=5):
         job = self.loc_info['job']
-        rand_cust_job = random.choice(list(self.model.nws.jobs_network[job]))
-        customer = random.choice(list(rand_cust_job.info['employees']))
-        self.model.run_conversation(self, customer, num_days=num_days)
+        if self.model.nws.jobs_network[job]:
+            rand_cust_job = random.choice(list(self.model.nws.jobs_network[job]))
+            customer = random.choice(list(rand_cust_job.info['employees']))
+            self.model.run_conversation(self, customer, num_days=num_days)
 
     def stage_1(self, ix_agent, num_days=7):
         self.evaluate_lang_exclusion()

@@ -40,10 +40,10 @@ class LanguageModel(Model):
     steps_per_year = 36
     max_lifetime = 4000
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
+    num_words_conv = {'VS': 1, 'S': 3, 'M': 25, 'L': 100}
 
-    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 100),
-                 width=100, height=100, max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1],
-                 num_clusters=10, max_run_steps=1000,
+    def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
+                 init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
@@ -51,7 +51,6 @@ class LanguageModel(Model):
             self.vocab_red = 500
         else:
             self.vocab_red = 1000
-        self.num_words_conv = num_words_conv
         self.grid_width = width
         self.grid_height = height
         self.max_people_factor = max_people_factor
@@ -209,7 +208,7 @@ class LanguageModel(Model):
         conv_params = self.get_conv_params(ags)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
-                spoken_words = ag.pick_vocab(lang, long=conv_params['long'],
+                spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
                                              min_age_interlocs=conv_params['min_group_age'], num_days=num_days)
                 # call speaking agent's update
                 ag.update_lang_arrays(spoken_words, delta_s_factor=1)
@@ -248,7 +247,8 @@ class LanguageModel(Model):
                     if multilingual conversation
                 - mute_type: integer. Agent lang type that is unable to speak in conversation
                 - multilingual: boolean. True if conv is held in more than one language
-                - long: boolean. True if conv is long
+                - conv_length: string. Values are from keys of 'num_words_conv'
+                    model class attribute ('VS', 'S', 'M', 'L')
                 - fav_langs: list of integers in [0, 1].
         """
 
@@ -257,7 +257,7 @@ class LanguageModel(Model):
         others = ags[1:]
 
         # set output default parameters
-        conv_params = dict(multilingual=False, mute_type=None, long=True)
+        conv_params = dict(multilingual=False, mute_type=None, conv_length='M')
 
         # get lists of favorite language per agent and set of language types involved
         ags_lang_types = set([ag.info['language'] for ag in ags])
@@ -311,7 +311,7 @@ class LanguageModel(Model):
                                     else fav_lang_per_agent[ix]
                                     for ix, ag in enumerate(ags)])
                 conv_params.update({'lang_group': lang_group,
-                                    'multilingual': True, 'long': False})
+                                    'multilingual': True, 'conv_length': 'S'})
             elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
                 # There are real L1 monolinguals in the group
                 # Everybody partially understands L1, but some agents don't understand L2 at all
@@ -323,7 +323,7 @@ class LanguageModel(Model):
                     lang_group = 0
                 else:
                     lang_group, mute_type = 1, 0
-                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
 
             elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
                 # There are real L2 monolinguals in the group
@@ -335,7 +335,7 @@ class LanguageModel(Model):
                     lang_group = 1
                 else:
                     lang_group, mute_type = 0, 2
-                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
 
             else:
                 # There are agents on both lang sides unable to follow other's speech.
@@ -357,7 +357,7 @@ class LanguageModel(Model):
                     # init agent is monolang
                     lang_group = fav_lang_per_agent[0]
                     mute_type = 2 if lang_group == 0 else 0
-                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
 
         if not conv_params['multilingual']:
             conv_params['lang_group'] = (conv_params['lang_group'],) * len(ags)
