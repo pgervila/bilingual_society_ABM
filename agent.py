@@ -147,15 +147,20 @@ class BaseAgent:
         # set weights to model reaction to linguistic exclusion
         self.set_excl_weights()
 
-    def set_memory_effort_per_word(self, lang, min_num_t=40, max_num_t=100):
+    def set_memory_effort_per_word(self, lang, min_num_t=40):
         """ Method that assigns a  minimum number of times to ach token
             before it ca start to be memorized. It represents the effort to
-            lear a compressed token
+            learn a compressed token. Minimum number of times to start remembering a word.
+            Since one compressed token corresponds to 40 real words, it takes repetition
+            to start memorizing this information. It should be understood as average time it takes
+            for a word meaning to be incorporated in memory
             Args:
                 * lang: string. Language
+                * min_num_t: integer. Minimum number of interactions with a token
+                    to start remembering it
         """
         m = 1 / self.model.vocab_red
-        self.lang_stats[lang]['mmt'] = (m * np.arange(self.model.vocab_red)**1 + min_num_t).astype(int)
+        self.lang_stats[lang]['mem_eff'] = (m * np.arange(self.model.vocab_red)**1 + min_num_t).astype(int)
 
     def set_excl_weights(self, mem_window_length=5):
         """ Method to set values for weights to assess degree of exclusion
@@ -324,12 +329,12 @@ class ListenerAgent(BaseAgent):
                 else:
                     lang = conv_params['lang_group']
             words = to_agent.pick_vocab(lang, conv_length='S', min_age_interlocs=min_age_interlocs, num_days=num_days)
-            self.update_lang_arrays(words, mode_type='listen', delta_s_factor=0.75)
+            self.update_lang_arrays(words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
 
         # TODO : implement 'listen to media' option
 
-    def update_lang_arrays(self, sample_words, mode_type='speak', delta_s_factor=0.25, min_mem_times=5,
-                           pct_threshold=0.9, pct_threshold_und=0.1, max_edit_dist=2, min_prob_und=0.1):
+    def update_lang_arrays(self, sample_words, mode_type='speak', delta_s_factor=0.1, pct_threshold=0.9,
+                           pct_threshold_und=0.1, max_edit_dist=2, min_prob_und=0.1, num_days=1):
         """
             Method to compute and update main arrays that define agent linguistic knowledge
             Args:
@@ -354,6 +359,7 @@ class ListenerAgent(BaseAgent):
                     and known languages in order to recognise an unknown word. For values equal or higher than
                     max_edit_dist, unknown words cannot be recognised.
                 * min_prob_und: 0 < float < 1 . Minimum probability to understand a fraction of conversation
+                * num_days: integer. Number of times per step conversation takes place
         """
 
         for lang, (act, act_c) in deepcopy(sample_words).items():
@@ -368,21 +374,20 @@ class ListenerAgent(BaseAgent):
                 # Of all active words, how many are known ??
                 # boolean mask of known-active words projected on active words reference system
                 kn_act_bool = np.in1d(act, known_words, assume_unique=True)
-
-                # update counting of known words
+                # get indices of known words on active words reference system
                 kn_words_idxs = np.where(kn_act_bool)[0]
+                # update counting of known words
                 self.lang_stats[lang]['wc'][act[kn_words_idxs]] += act_c[kn_words_idxs]
-
                 # check if all active words in conversation are known
                 if not np.all(kn_act_bool):
-                    # find new words whose counting will be updated
+                    # find indices of new words whose memory will be updated
                     new_words_idxs = self.process_unknown_words(lang, act, act_c, kn_act_bool,
-                                                                min_mem_times=min_mem_times,
                                                                 max_edit_dist=max_edit_dist,
-                                                                min_prob_und=min_prob_und)
+                                                                min_prob_und=min_prob_und,
+                                                                num_days=num_days)
                     if new_words_idxs is not None:
                         upd_idxs = np.concatenate((kn_words_idxs, new_words_idxs))
-                        # find words whose memory will be updated and corresponding counts
+                        # words whose memory will be updated and corresponding counts
                         act, act_c = act[upd_idxs], act_c[upd_idxs]
                     else:
                         act, act_c = act[kn_words_idxs], act_c[kn_words_idxs]
@@ -398,7 +403,7 @@ class ListenerAgent(BaseAgent):
                 self.update_words_memory(lang, act, act_c, ds_factor, pct_threshold)
 
     def process_unknown_words(self, lang, act, act_c, kn_act_bool, max_edit_dist=2,
-                              min_mem_times=5, pct_threshold_und=0.1, min_prob_und=0.1):
+                              pct_threshold_und=0.1, min_prob_und=0.1, num_days=1):
         """
             Method to track recognised words among unknown ones, or to randomly single out
             a new word out of unknown ones. Ability to recognise new words depends on similarity array.
@@ -412,22 +417,24 @@ class ListenerAgent(BaseAgent):
                     Expressed on active words base
                 * max_edit_distance: int. For values of edit distance higher or equal to it,
                     words cannot be recognised
-                * min_mem_times: int. Minimum number of counts to update word's memory ( average number of times
-                    a word needs to be heard before it can be memorized )
                 * pct_threshold_und: float. Minimum retention value to consider a word as known
                 * min_prob_und: 0 < float < 1 . Minimum probability to understand a fraction of conversation
                     regardless of language knowledge. Must be different than zero to allow learners to catch new words
+                * num_days: integer. Number of times per step conversation takes place
 
             Output:
-                * new_words_idxs: numpy arrays. Indices of unknown words whose memory can be updated
+                * new_words_idxs: numpy arrays. Indices of unknown words whose memory can be updated,
+                    EXPRESSED on active words coordinates (to be processed by 'update_lang_arrays_method')
         """
 
         # set default value for indices of new words.
         new_words_idxs = None
 
-        idx_ukn_act = np.where(~kn_act_bool)[0]
-        val_ukn_act = act[idx_ukn_act]
+        idx_ukn_act = np.where(~kn_act_bool)[0] # indices of unknown words on active coordinates
+        val_ukn_act = act[idx_ukn_act] # unknown words values ( indices on global coordinates == the words themselves)
 
+        # TODO : make following check for word recognition only if agent is bilingual !!!!!
+        # TODO : word recognition and integration of new words should not be excluding actions
         # find recognised words: words SIMILAR ENOUGH (cond1) to those ALREADY KNOWN (cond2) in other language
         other_lang = self.model.similarity_corr[lang]
         if lang in ['L1', 'L2']:
@@ -435,41 +442,52 @@ class ListenerAgent(BaseAgent):
         else:
             rec_cond1 = self.model.edit_distances['mixed'][val_ukn_act] < max_edit_dist
         rec_cond2 = self.lang_stats[other_lang]['R'][val_ukn_act] > pct_threshold_und
+        # Since both conditions are expressed on act words ref system
         rec_cond = rec_cond1 * rec_cond2
-        ukn_act_rec, ukn_act_rec_idx = val_ukn_act[rec_cond], idx_ukn_act[rec_cond]
+        val_ukn_act_rec, idx_ukn_act_rec = val_ukn_act[rec_cond], idx_ukn_act[rec_cond]
 
-        # TODO: select percentage of recognised words as function of action
-        # TODO: listen, media - > 1 max
-        # TODO : read -> variable percentage, much higher than when listening
-
-        if ukn_act_rec.size:
+        # check if there are recognised words
+        if val_ukn_act_rec.size:
             # update counting of recognised words
-            self.lang_stats[lang]['wc'][ukn_act_rec] += act_c[ukn_act_rec_idx]
-            # find words that can be updated among recognised ones
-            upd_cond = self.lang_stats[lang]['wc'][ukn_act_rec] >= self.lang_stats[lang]['mmt'][ukn_act_rec]
-            ukn_act_upd_idx = ukn_act_rec_idx[upd_cond]
-            if ukn_act_upd_idx.size:
-                new_words_idxs = ukn_act_upd_idx
+            #self.lang_stats[lang]['wc'][val_ukn_act_rec] += act_c[idx_ukn_act_rec]
+            self.lang_stats[lang]['wc'][val_ukn_act_rec] += np.ones(len(idx_ukn_act_rec))
+            # find words whose memory can be updated among recognised ones
+            upd_cond = self.lang_stats[lang]['wc'][val_ukn_act_rec] >= self.lang_stats[lang]['mem_eff'][val_ukn_act_rec]
+
+            idx_ukn_act_upd = idx_ukn_act_rec[upd_cond]
+            if idx_ukn_act_upd.size:
+                new_words_idxs = idx_ukn_act_upd
         else:
             # Probability that a new unknown word is identified increases with lang knowledge
             # Define proportion of words understood in conversations.
             # The higher it is, the more likely that a new word is identified
             pct_understood = (kn_act_bool.sum() / kn_act_bool.size)
-            # print('quotient', pct_understood)
             # set minimum probability different than zero to allow beginners to learn
             pct_understood = min_prob_und if pct_understood <= min_prob_und else pct_understood
-            # print('effective', pct_understood)
-            if random.random() < pct_understood:
-                # find most frequent unknown active word
-                idx_mf_ukn_act_loc = np.argmax(act_c[idx_ukn_act])
-                idx_mf_ukn_act = idx_ukn_act[idx_mf_ukn_act_loc]
-                val_mf_ukn_act = val_ukn_act[idx_mf_ukn_act_loc]
-                # update counting of identified new word
-                # TODO : maybe better to update counting of new word by just one unit
-                self.lang_stats[lang]['wc'][val_mf_ukn_act] += act_c[idx_mf_ukn_act]
-                # check if memory of this word can be updated
-                if self.lang_stats[lang]['wc'][val_mf_ukn_act] >= self.lang_stats[lang]['mmt'][val_mf_ukn_act]:
-                    new_words_idxs = np.array([idx_mf_ukn_act], dtype=np.int32)
+            # get max number new words that can be POTENTIALLY identified
+            max_num_pot_new_words = np.random.binomial(num_days, pct_understood)
+            # compute probabs of each new token to be incorporated into wc
+            wc_ukn_words = act_c[idx_ukn_act]
+            # get max number new words that can be EFFECTIVELY identified
+            max_num_new_words = min(max_num_pot_new_words, wc_ukn_words.sum())
+            p = wc_ukn_words / wc_ukn_words.sum()
+            # effective wc of unknown words ( same reference as wc_unkn_words)
+            wc_new_words = np.random.multinomial(max_num_new_words, p)
+            # find words whose counting is non zero
+            nnz = np.nonzero(wc_new_words)
+            # get new words
+            idx_ukn_act_new = idx_ukn_act[nnz]
+            val_ukn_act_new = act[idx_ukn_act_new]
+            # update new words counting
+            self.lang_stats[lang]['wc'][val_ukn_act_new] += wc_new_words[nnz]
+            # check if memory of some of these words can be updated
+            upd_cond = self.lang_stats[lang]['wc'][val_ukn_act_new] > self.lang_stats[lang]['mem_eff'][val_ukn_act_new]
+            # find indices of to be updated new words on act word coordinates
+            idx_ukn_act_upd = idx_ukn_act_new[upd_cond]
+            if idx_ukn_act_upd.size:
+                new_words_idxs = idx_ukn_act_upd
+
+
         return new_words_idxs
 
     def update_words_memory(self, lang, act, act_c, ds_factor=0.25, pct_threshold=0.9,
@@ -562,7 +580,6 @@ class SpeakerAgent(ListenerAgent):
         """
         factor = self.model.conv_length_age_factor[self.info['age']]
         return max(int(self.model.num_words_conv[conv_length] / factor), 1)
-
 
     def study_vocab(self, lang, delta_s_factor=1, num_words=50):
         """
@@ -817,9 +834,9 @@ class IndepAgent(SpeakerAgent):
 
         spoken_words = self.pick_vocab(lang, conv_length=conv_length, min_age_interlocs=min_age_interlocs,
                                        biling_interloc=biling_interloc, num_days=num_days)
-        self.update_lang_arrays(spoken_words, delta_s_factor=1)
+        self.update_lang_arrays(spoken_words, delta_s_factor=1, num_days=num_days)
         for ag in group:
-            ag.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.75)
+            ag.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
 
     def pick_random_friend(self, ix_agent):
         """
