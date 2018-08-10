@@ -150,7 +150,6 @@ class LanguageModel(Model):
         """
         self.death_prob_curve = a * (np.exp(b * np.arange(self.max_lifetime)) + c) / self.steps_per_year
 
-
     @staticmethod
     def get_newborn_lang(parent1, parent2):
         """
