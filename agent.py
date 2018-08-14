@@ -310,7 +310,7 @@ class ListenerAgent(BaseAgent):
                     If not specified, self agent will listen to a random conversation taking place on his cell
                 * min_age_interlocs: integer. Allows to adapt vocabulary choice to the youngest
                     participant in the conversation
-                * num_days: integer. Number of days per step listening action takes place on average.
+                * num_days: integer. Number of days per step in which listening action takes place on average.
                     A step equals 10 days.
         """
         if not to_agent:
@@ -333,8 +333,11 @@ class ListenerAgent(BaseAgent):
                     lang = conv_params['lang_group'][0]
                 else:
                     lang = conv_params['lang_group']
-            words = to_agent.pick_vocab(lang, conv_length='S', min_age_interlocs=min_age_interlocs, num_days=num_days)
-            self.update_lang_arrays(words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
+            spoken_words = to_agent.pick_vocab(lang, conv_length='S', min_age_interlocs=min_age_interlocs,
+                                               num_days=num_days)
+            # update lang arrays
+            to_agent.update_lang_arrays(spoken_words, delta_s_factor=1, num_days=num_days)
+            self.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
 
         # TODO : implement 'listen to media' option
 
@@ -562,7 +565,7 @@ class ListenerAgent(BaseAgent):
                 * lang: string. Language whose knowledge level has to be updated
                 * pct_threshold: float. Value below which words are not considered fully known
             Output:
-                * Updates value of self.lang_stats[lang]['pct'] array
+                * Updates value of self.lang_stats[lang]['pct'] array for agent's current age
         """
         # compute language knowledge in percentage
         if lang in ['L1', 'L12']:

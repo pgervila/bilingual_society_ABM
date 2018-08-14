@@ -209,9 +209,9 @@ class LanguageModel(Model):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
                                              min_age_interlocs=conv_params['min_group_age'], num_days=num_days)
-                # call speaking agent's update
+                # call speaking agent's lang arrays update
                 ag.update_lang_arrays(spoken_words, delta_s_factor=1)
-                # call listeners' updates ( check if there is a bystander)
+                # call listeners' lang arrays updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
                     listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.75)
