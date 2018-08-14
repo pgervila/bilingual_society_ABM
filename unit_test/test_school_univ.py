@@ -10,7 +10,7 @@ import agent
 import model
 reload(agent)
 reload(model)
-from agent import BaseAgent, Child, Adolescent, YoungUniv, Young, Adult, Worker, Teacher
+from agent import BaseAgent, Child, Adolescent, YoungUniv, Young, Adult, Teacher
 from model import LanguageModel
 
 @pytest.fixture(scope="module")
@@ -192,7 +192,7 @@ def test_teachers_course_swap(model):
     for i in range(model.num_clusters):
         school = model.geo.clusters_info[i]['schools'][0]
         sorted_keys = sorted(list(school.grouped_studs.keys()))
-        sorted_keys =  sorted_keys if not len(sorted_keys) % 2 else sorted_keys[:-1]
+        sorted_keys = sorted_keys if not len(sorted_keys) % 2 else sorted_keys[:-1]
         ts_bf = [school.grouped_studs[k]['teacher'] for k in sorted_keys]
         school.swap_teachers_courses()
         ts_after = [school.grouped_studs[k]['teacher'] for k in sorted_keys]

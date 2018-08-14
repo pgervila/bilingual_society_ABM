@@ -9,7 +9,7 @@ import agent
 import model
 reload(agent)
 reload(model)
-from agent import Baby, Child, Adolescent, Young, YoungUniv, Adult, Worker, Teacher, TeacherUniv, Pensioner
+from agent import Baby, Child, Adolescent, Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
 from model import LanguageModel
 
 
