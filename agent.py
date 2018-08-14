@@ -335,8 +335,7 @@ class ListenerAgent(BaseAgent):
                     lang = conv_params['lang_group']
             spoken_words = to_agent.pick_vocab(lang, conv_length='S', min_age_interlocs=min_age_interlocs,
                                                num_days=num_days)
-            # update lang arrays
-            to_agent.update_lang_arrays(spoken_words, delta_s_factor=1, num_days=num_days)
+            # update listener's lang arrays
             self.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
 
         # TODO : implement 'listen to media' option
@@ -620,7 +619,8 @@ class SpeakerAgent(ListenerAgent):
 
     def pick_vocab(self, lang, num_words=None, conv_length='M', min_age_interlocs=None,
                    biling_interloc=False, num_days=10):
-        """ Method that models word choice by self agent in a conversation
+        """ Method that models word choice by self agent in a conversation and
+            updates agent's corresponding lang arrays
             Word choice is governed by vocabulary knowledge constraints
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
@@ -636,6 +636,7 @@ class SpeakerAgent(ListenerAgent):
             Output:
                 * spoken words: dict where keys are lang labels and values are lists with words spoken
                     in lang key and corresponding counts
+                * Method automatically updates self agent lang arrays after uttering spoken words
         """
 
         # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
@@ -718,6 +719,9 @@ class SpeakerAgent(ListenerAgent):
                     # This is the process of creation/adaption/translation
                     tr_lang = max([lang, lang2], key=len)
                     spoken_words.update({tr_lang: [rem_words[mask_R3], act_c[~mask_r][~mask_R2][mask_R3]]})
+        # update speaker's lang arrays
+        self.update_lang_arrays(spoken_words, delta_s_factor=1, num_days=num_days)
+
         return spoken_words
 
     def update_acquaintances(self, other, lang):
@@ -861,7 +865,7 @@ class IndepAgent(SpeakerAgent):
 
         spoken_words = self.pick_vocab(lang, conv_length=conv_length, min_age_interlocs=min_age_interlocs,
                                        biling_interloc=biling_interloc, num_days=num_days)
-        self.update_lang_arrays(spoken_words, delta_s_factor=1, num_days=num_days)
+        # update listeners' lang arrays
         for ag in group:
             ag.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
 
