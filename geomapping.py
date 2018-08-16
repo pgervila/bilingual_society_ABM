@@ -27,19 +27,22 @@ class GeoMapper:
         self.generate_langs_per_clust()
 
     def map_model_objects(self):
-        """ Instantiate and position all model objects on 2-D grid """
+        """ Instantiate and locate all model objects on 2-D grid """
         self.map_jobs()
         self.map_schools()
         self.map_universities()
         self.map_homes()
         self.map_lang_agents()
 
-    def compute_cluster_centers(self, min_dist=0.20, min_grid_pct_val=0.1, max_grid_pct_val=0.9):
+    def compute_cluster_centers(self, min_dist=0.10, min_grid_pct_val=0.1, max_grid_pct_val=0.9):
 
-        """ Generate 2D coordinates for all cluster (towns/villages) centers
+        """
+            Generate 2D coordinates for all cluster (towns/villages) centers
             Args:
                 * min_dist: float. Minimum distance between cluster centers
                             expressed as percentage of square grid AVAILABLE side dimension
+                * min_grid_pct_val: float
+                * max_grid_pct_val: float
 
             Returns:
                 * A numpy array with 2D coordinates of cluster centers
@@ -247,9 +250,11 @@ class GeoMapper:
                 self.clusters_info[clust_idx]['homes'].append(Home(clust_idx, (x, y)))
 
     def generate_langs_per_clust(self):
-        """ Method that generates a list of lists of lang labels. Each sublist represents a cluster
+        """ Method that generates a list of lists of lang labels.
+            Each sublist represents a cluster
             Output:
-                * A list of lists where each list contains lang labels per cluster
+                * Sets value of attribute 'langs_per_clust'.
+                    A list of lists where each list contains lang labels per cluster
         """
         # generate random array with lang labels ( no sorting at all )
         langs_per_ag_array = np.random.choice([0, 1, 2],
@@ -290,12 +295,15 @@ class GeoMapper:
 
     def map_lang_agents(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
         """
-            Method to instantiate all agents according to requested linguistic order
+            Method to instantiate all agents grouped by families of 4 members and
+            according to requested linguistic order.
+            It also assigns a home and an occupation to each agent
             Args:
                 * parents_age_range: tuple. Minimum and maximum parent's age
                 * children_age_range: tuple. Minimum and maximum children's age
             Output:
-                * Assign family, home and job to all agents. Assign home and job to lonely agents
+                * Assigns home and job/school to all agents grouped by families of four members.
+                    Assigns home and job to lonely agents
         """
 
         # set agents ids
@@ -323,18 +331,19 @@ class GeoMapper:
                  ag4.info['age']) = self.model.steps_per_year * np.random.randint(children_age_range[0],
                                                                                   children_age_range[1],
                                                                                   2)
-                # assign same home to all family members to locate them at step=0
+                # assign same home to all family members to locate them at step = 0
                 family_agents = [ag1, ag2, ag3, ag4]
                 home = clust_info['homes'][idx]
                 home.assign_to_agent(family_agents)
                 # add agents to clust_info, schedule and grid
                 clust_info['agents'].extend(family_agents)
                 self.add_agents_to_grid_and_schedule(family_agents)
+
                 # assign job to parents
                 for parent in family_agents[:2]:
                     parent.get_job(keep_cluster=True, move_home=False)
 
-                # assign school to children
+                # assign school to children ( but not yet course !!!!)
                 # find closest school to home
                 # TODO : introduce also University for age > 18
                 home = clust_info['homes'][idx]
@@ -363,10 +372,16 @@ class GeoMapper:
                     ag.get_job(keep_cluster=True, move_home=False)
 
     def assign_school_jobs(self):
-        # assign school jobs
+        """ Method to set up all courses in all schools.
+            It calls 'set_up_courses' method for each school,
+            that hires teachers to all courses after grouping students
+            by age """
         # Loop over schools to assign teachers
         for clust_idx, clust_info in self.clusters_info.items():
             for school in clust_info['schools']:
+                # print('*****')
+                # print('{} is hiring'.format(school))
+                # print('*****')
                 school.set_up_courses()
 
     def add_agents_to_grid_and_schedule(self, ags):
@@ -402,6 +417,7 @@ class GeoMapper:
                 raise Exception('new cluster must be specified for switch option')
 
     def get_clusters_with_univ(self):
+        """ Convenience method to get ids of clusters with university """
         sorted_clusts = np.argsort(self.cluster_sizes)[::-1]
         for ix, clust in enumerate(sorted_clusts):
             if 'university' not in self.clusters_info[clust]:
@@ -439,7 +455,7 @@ class GeoMapper:
                 * integer that identifies dominant language or None if no language is dominant
         """
 
-        L1_pcts, L2_pcts = list(zip(*[ [ag.lang_stats['L1']['pct'][ag.info['age']],
+        L1_pcts, L2_pcts = list(zip(*[[ag.lang_stats['L1']['pct'][ag.info['age']],
                                         ag.lang_stats['L2']['pct'][ag.info['age']]]
                                         for ag in self.clusters_info[clust_ix]['agents']
                                      ]))

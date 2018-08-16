@@ -29,7 +29,8 @@ class DataProcessor(DataCollector):
                                           "language": lambda a: a.info['language'],
                                           "excl_c": lambda a: a.lang_stats['L1']['excl_c'][a.info['age']] if a.info['language'] == 2 else a.lang_stats['L2']['excl_c'][a.info['age']],
                                           "clust_id": lambda a: a.loc_info['home'].clust,
-                                          "agent_type": lambda a: type(a).__name__
+                                          "agent_type": lambda a: type(a).__name__,
+                                          "num_conv_step": lambda a: a.call_cnts_final - a.call_cnts_init
                                           }
                          )
 
@@ -190,7 +191,7 @@ class VizImpData:
         self.data = dd.io.load(file_name, key)
 
     def show_imported_results(self, key='/'):
-        self.model
+        pass
 
 
 class PostProcessor:

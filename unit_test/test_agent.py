@@ -123,8 +123,8 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
     # print(city_places['home'].agents_in)
 
     if labels[2]:
-        grown_ag = old_ag.evolve(new_class, ret_output=True, 
-                                 **{labels[1]:city_places[labels[1]]})
+        grown_ag = old_ag.evolve(new_class, ret_output=True,
+                                 **{labels[1]: city_places[labels[1]]})
     else:
         grown_ag = old_ag.evolve(new_class, ret_output=True)
 

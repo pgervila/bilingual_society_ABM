@@ -1,16 +1,12 @@
-import sys
-from importlib import reload
 import random
 import numpy as np
-from scipy.spatial.distance import pdist
 import networkx as nx
-import bisect
 
 from agent import Child, Young, Adult, Teacher
 
 
 class NetworkBuilder:
-    """ Class to deal with everything that has to do with networks in model"""
+    """ Class to deal with everything that has to do with networks in model """
 
     def __init__(self, model):
 
@@ -38,8 +34,9 @@ class NetworkBuilder:
         self.jobs_network = nx.Graph()
 
     def add_ags_to_networks(self, ags, *more_ags):
-        """Method that adds agents to all networks in model
-           Args:
+        """
+            Method that adds agents to all networks in model
+            Args:
                * ags: single agent instance or list of agents instances
         """
         ags = [ags] if type(ags) != list else ags
@@ -58,7 +55,9 @@ class NetworkBuilder:
             Method to define family links between agents. It also adds relatives to known_people_network
             It assumes that the distribution of languages in clusters has already been sorted at cluster level or
             by groups of four to ensure linguistic affinity within families.
-            Marriage, to make things simple, only allowed for combinations  0-1, 1-1, 1-2
+            Marriage, to make things simple, only allowed for linguistic combinations ->  0-1, 1-1, 1-2
+            Once all family links are defined, method also assigns school jobs to parents so that entire family
+            will move if needed
         """
         for clust_idx, clust_info in self.model.geo.clusters_info.items():
             # trick to iterate over groups of agents of size = self.model.family_size
@@ -152,23 +151,23 @@ class NetworkBuilder:
                 * lang_with_mother: integer [0, 1]. Defines lang of agent with mother
         """
         fam_nw = self.family_network
-        k_people_nw = self.known_people_network
+        kn_people_nw = self.known_people_network
 
         # get agent siblings from mother before agent birth
         siblings = mother.get_family_relative('child')
         # Define family links with parents
         for (i, j, fam_link) in [(agent, father, 'father'), (father, agent, 'child')]:
             fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_father)
-            k_people_nw.add_edge(i, j, family=True, lang=lang_with_father)
+            kn_people_nw.add_edge(i, j, family=True, lang=lang_with_father)
         for (i, j, fam_link) in [(agent, mother, 'mother'), (mother, agent, 'child')]:
             fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_mother)
-            k_people_nw.add_edge(i, j, family=True, lang=lang_with_mother)
+            kn_people_nw.add_edge(i, j, family=True, lang=lang_with_mother)
         # Define links with agent siblings if any
         for sibling in siblings:
             lang_with_sibling = sibling.get_dominant_lang()
             for (i, j, fam_link) in [(agent, sibling, 'sibling'), (sibling, agent, 'sibling')]:
                 fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_sibling)
-                k_people_nw.add_edge(i, j, family=True, lang=lang_with_sibling)
+                kn_people_nw.add_edge(i, j, family=True, lang=lang_with_sibling)
         # rest of family will if possible speak same language with baby as their link agent to the baby
         for elder, lang in zip([father, mother], [lang_with_father, lang_with_mother]):
             for relat, labels in fam_nw[elder].items():
@@ -180,18 +179,18 @@ class NetworkBuilder:
                 if labels["fam_link"] == 'father':
                     for (i, j, fam_link) in [(agent, relat, 'grandfather'), (relat, agent, 'grandchild')]:
                         fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
-                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                        kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
                 elif labels["fam_link"] == 'mother':
                     for (i, j, fam_link) in [(agent, relat, 'grandmother'), (relat, agent, 'grandchild')]:
                         fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
-                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                        kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
                 elif labels["fam_link"] == 'sibling':
                     fam_nw.add_edge(agent, relat,
                                     fam_link='uncle' if relat.info['sex'] == 'M' else 'aunt',
                                     lang=com_lang)
                     fam_nw.add_edge(relat, agent, fam_link='nephew', lang=com_lang)
                     for (i, j) in [(agent, relat), (relat, agent)]:
-                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                        kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
                     if isinstance(relat, Young) and relat.info['married']:
                         consort = [key for key, value in fam_nw[relat].items()
                                    if value['fam_link'] == 'consort'][0]
@@ -199,16 +198,15 @@ class NetworkBuilder:
                                         fam_link ='uncle' if consort.info['sex'] == 'M' else 'aunt')
                         fam_nw.add_edge(consort, agent, fam_link='nephew', lang=com_lang)
                         for (i, j) in [(agent, consort), (consort, agent)]:
-                            k_people_nw.add_edge(i, j, family=True, lang=com_lang)
+                            kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
                 elif labels["fam_link"] == 'nephew':
                     fam_nw.add_edge(agent, relat, fam_link='cousin', lang=com_lang)
                     fam_nw.add_edge(relat, agent, fam_link='cousin', lang=com_lang)
                     for (i, j) in [(agent, relat), (relat, agent)]:
-                        k_people_nw.add_edge(i, j, family=True, lang=com_lang)
-
+                        kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
 
     def plot_family_networks(self):
-        """PLOT NETWORK with lang colors and position"""
+        """ PLOT NETWORK with lang colors and position """
         #        people_pos = [elem.pos for elem in self.schedule.agents if elem.agent_type == 'language']
         #        # Following works because lang agents are added before other agent types
         #        people_pos_dict= dict(zip(self.schedule.agents, people_pos))

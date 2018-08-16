@@ -1,7 +1,6 @@
 # IMPORT RELEVANT LIBRARIES
 import os, sys
 from importlib import reload
-import random
 import bisect
 import numpy as np
 import networkx as nx
@@ -60,6 +59,8 @@ class LanguageModel(Model):
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.random_seeds = np.random.randint(1, 10000, size=2)
+        # set init mode while building the model
+        self.init_mode = True
 
         self.conv_length_age_factor = None
         self.death_prob_curve = None
@@ -99,16 +100,24 @@ class LanguageModel(Model):
         self.set_conv_length_age_factor()
         self.set_death_prob_curve()
 
-    def set_conv_length_age_factor(self, age_1=14, age_2=65, scale_f=40,
-                                   real_spoken_tokens_per_day=18000):
+        # switch to run mode once model initialization is completed
+        self.init_mode = False
+
+    def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,
+                                   exp_mult=400):
         """
-            Method to compute the correction factor
-            for conversation lengths as a function of age
-            It assumes a compression scale of 40 in SIMULATED vocabulary and
-            18000 tokens per adult per day as REAL number of spoken words on average
+            Method to compute the correction factor for conversation lengths as a function of age
+            The correction factor is a curve with three different sections, defined by the values
+            of age_1 and age_2. The middle section defines the plateau value that is equal to one.
+            The first section grows from a very small value up to one, according to an S curve whose
+            shape is defined by rate_1 and exp_mult. The third section decays from the max value
+            according to the exponential rate defined by rate_3.
             Args:
                 * age_1: integer. Defines lower key age for slope change in num_words vs age curve
                 * age_2: integer. Defines higher key age for slope change in num_words vs age curve
+                * rate_1: float. Value to set exponential growth rate for factor in section 1
+                * rate_3: float. Value to set exponential decay rate in section 3
+                * exp_mult: integer. Value that multiplies exponential function in section 1
                 * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
                 * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day
             Output:
@@ -117,24 +126,21 @@ class LanguageModel(Model):
         """
         age = np.arange(self.max_lifetime)
         factor = np.zeros(self.max_lifetime)
-
-        real_vocab_size = scale_f * self.vocab_red
-        # define factor total_words / avg_words_per_day
-        f = real_vocab_size / real_spoken_tokens_per_day
-        # pivot ages
-        age_1, age_2 = [self.steps_per_year * age for age in (age_1, age_2 )]
+        # define maximum value for factor
+        f = 1.
+        # convert pivot ages into steps values
+        age_1, age_2 = [self.steps_per_year * age for age in (age_1, age_2)]
 
         # define sector 1
-        delta = 0.0001
-        decay = -np.log(delta / 100) / age_1
-        factor[:age_1] = f + 400 * np.exp(- decay * age[:age_1])
+        decay = -np.log(rate_1 / 100) / age_1
+        factor[:age_1] = f + exp_mult * np.exp(- decay * age[:age_1])
         # define sector 2
         factor[age_1:age_2] = f
         # define sector 3
-        factor[age_2:] = f - 1 + np.exp(0.0005 * (age[age_2:] - age_2))
+        factor[age_2:] = f - 1 + np.exp(rate_3 * (age[age_2:] - age_2))
 
         # set factor value
-        self.conv_length_age_factor = factor
+        self.conv_length_age_factor = 1 / factor
 
     def set_death_prob_curve(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
         """
@@ -184,7 +190,8 @@ class LanguageModel(Model):
 
         return newborn_lang, lang_with_father, lang_with_mother
 
-    def run_conversation(self, ag_init, others, bystander=None, num_days=10):
+    def run_conversation(self, ag_init, others, bystander=None,
+                         def_conv_length='M', num_days=10):
         """
             Method that models conversation between ag_init (initiator) and others
             Calls 'get_conv_params' model method to determine conversation parameters
@@ -195,6 +202,9 @@ class LanguageModel(Model):
                     It can be a single agent object that will be automatically converted into a list
                 * bystander: extra agent that may listen to conversation words without actually being involved.
                     Agent vocabulary gets correspondingly updated if bystander agent is specified
+                * def_conv_length: string. Default conversation length. Value may be modified
+                    depending on agents linguistic knowledge. Values are from keys of 'num_words_conv'
+                    model class attribute ('VS', 'S', 'M', 'L')
                 * num_days: integer [1, 10]. Number of days in one 10day-step this kind of speech is done
             Output:
                 * Method updates lang arrays for all active agents involved. It also updates acquaintances
@@ -203,8 +213,14 @@ class LanguageModel(Model):
         # define list of all agents involved
         ags = [ag_init]
         ags.extend(others) if (type(others) is list) else ags.append(others)
+
+        if self.schedule.steps >=1:
+            for ag in ags:
+                ag.call_cnts += 1
+
+
         # get all parameters of conversation
-        conv_params = self.get_conv_params(ags)
+        conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
@@ -212,7 +228,7 @@ class LanguageModel(Model):
                 # call listeners' lang arrays updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
-                    listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.75)
+                    listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1)
             else:
                 # update exclusion counter for excluded agent
                 ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] += 1
@@ -228,7 +244,7 @@ class LanguageModel(Model):
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])
                 others.update_acquaintances(ag_init, conv_params['lang_group'][1])
 
-    def get_conv_params(self, ags): # TODO: add higher thresholds for job conversation
+    def get_conv_params(self, ags, def_conv_length='M'): # TODO: add higher thresholds for job conversation
         """
         Method to find out parameters of conversation between 2 or more agents:
             conversation lang or lang spoken by each involved speaker,
@@ -238,6 +254,9 @@ class LanguageModel(Model):
         It implements MAXIMIN language rule from Van Parijs
         Args:
             * ags : list of all agent class instances that take part in conversation
+            * def_conv_length: string. Default conversation length. Value may be modified
+                depending on agents linguistic knowledge. Values are from keys of 'num_words_conv'
+                model class attribute ('VS', 'S', 'M', 'L')
         Returns:
             * 'conv_params' dict with following keys and values:
                 - lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1]
@@ -254,7 +273,7 @@ class LanguageModel(Model):
         others = ags[1:]
 
         # set output default parameters
-        conv_params = dict(multilingual=False, mute_type=None, conv_length='M')
+        conv_params = dict(multilingual=False, mute_type=None, conv_length=def_conv_length)
 
         # get lists of favorite language per agent and set of language types involved
         ags_lang_types = set([ag.info['language'] for ag in ags])
@@ -413,14 +432,13 @@ class LanguageModel(Model):
                     member.set_lang_ics()
 
     def get_lang_fam_members(self, family):
-        """ Find out lang of interaction btw family members in a 4-members family
+        """ Method to find out lang of interaction btw family members in a 4-members family
             Args:
                 * family: list of family agents
             Output:
-                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: list of integers
+                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: tuple of integers
         """
         # language between consorts
-
         consorts_lang_params = self.get_conv_params([family[0], family[1]])
         lang_consorts = consorts_lang_params['lang_group'][0]
 
@@ -446,7 +464,7 @@ class LanguageModel(Model):
             Args:
                 * agent: agent class instance
             Output:
-                * Mehtod adds specified agent to grid, schedule, networks and clusters info
+                * Method adds specified agent to grid, schedule, networks and clusters info
         """
 
         # Add agent to grid, schedule, network and clusters info
@@ -457,8 +475,18 @@ class LanguageModel(Model):
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """
-            Method to remove agent instance from locations in agent loc_info dict attribute
+            Method to remove agent instance from locations in agent 'loc_info' dict attribute
             Replacement by grown_agent will depend on self type
+            Args:
+                * agent: agent instance to be removed
+                * replace: boolean. True if agent has to replaced. Default False
+                * grown_agent: agent instance. It must be specified in case 'replace'
+                    is set to True
+                * upd_course: boolean. True if removal action is because of periodic updating
+                every academic year. Only applies to removal from school or university. Default False.
+            Output:
+                * agent removed from all instances it belonged to. If replace is set to True,
+                    agent is replaced in all locations by specified 'grown_agent'
         """
         # TODO : should it be a geomapping method ?
 
@@ -491,8 +519,7 @@ class LanguageModel(Model):
                         if isinstance(grown_agent, Pensioner):
                             univ.faculties[fac_key].remove_employee(agent)
                         else:
-                            univ.faculties[fac_key].remove_employee(agent, replace=replace,
-                                                                    new_teacher=grown_agent)
+                            univ.faculties[fac_key].remove_employee(agent, replace=replace)
                     except TypeError:
                         pass
                 elif isinstance(agent, Teacher):
@@ -501,14 +528,16 @@ class LanguageModel(Model):
                         if isinstance(grown_agent, Pensioner):
                             school.remove_employee(agent)
                         else:
-                            school.remove_employee(agent, replace=replace,
-                                                   new_teacher=grown_agent)
+                            school.remove_employee(agent, replace=replace)
                     except TypeError:
                         pass
                 elif isinstance(agent, Adult):
+                    # if Adult, remove from job without replacement
                     job = agent.loc_info['job']
+                    # print('remove {} from job in model remove from locations'.format(agent))
                     if job: job.remove_employee(agent)
                 elif isinstance(agent, Young):
+                    # if Young, remove from job with replacement
                     job = agent.loc_info['job']
                     if job: job.remove_employee(agent, replace=replace, new_agent=grown_agent)
             elif key == 'university':
