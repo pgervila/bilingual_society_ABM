@@ -295,10 +295,15 @@ class BaseAgent:
     def go_back_home(self):
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
 
+    def __getitem__(self, clust):
+        return self.loc_info['home'].info[clust]
+
     def __repr__(self):
-        if self.loc_info['home']:
+        home = self.loc_info['home']
+        if home:
             return "".join([type(self).__name__,
-                            "_{0.unique_id!r}_clust{1!r}"]).format(self, self.loc_info['home'].clust)
+                            "_{0.unique_id!r}_clust{1!r}"]).format(self,
+                                                                   home.info['clust'])
         else:
             return "".join([type(self).__name__, "_{0.unique_id!r}"]).format(self)
 
@@ -806,7 +811,7 @@ class SchoolAgent(SpeakerAgent):
 
     def register_to_school(self):
         # find closest school in cluster
-        clust_info = self.model.geo.clusters_info[self.loc_info['home'].clust]
+        clust_info = self.model.geo.clusters_info[self['clust']]
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
@@ -972,7 +977,7 @@ class Baby(ListenerAgent):
 
     def register_to_school(self):
         # find closest school in cluster
-        clust_info = self.model.geo.clusters_info[self.loc_info['home'].clust]
+        clust_info = self.model.geo.clusters_info[self['clust']]
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
         school = clust_info['schools'][idx_school]
@@ -1138,7 +1143,7 @@ class Adolescent(IndepAgent, SchoolAgent):
                 fac = university.faculties[fac_key]
                 fac.assign_student(grown_agent, course_key=19, hire_t=False)
                 # agent moves to new home if he has to change cluster to attend univ
-                if fac.info['clust'] != grown_agent.loc_info['home'].clust:
+                if fac.info['clust'] != grown_agent['clust']:
                     grown_agent.move_to_new_home()
             else:
                 raise Exception('university instance must be provided to grow into a YoungUniv')
@@ -1291,7 +1296,7 @@ class Young(IndepAgent):
         # TODO: make model that takes majority language of clusters into account
         # TODO: create weights for choice that depend on distance and language
         # get current agent cluster
-        clust = self.loc_info['home'].clust
+        clust = self['clust']
         if not keep_cluster:
             # look for job on any cluster with bias towards the current one
             # make array of cluster indexes with equal weight equal to one
@@ -1353,14 +1358,14 @@ class Young(IndepAgent):
             return job
 
         # get 'self' agent cluster and job
-        clust_1 = self.loc_info['home'].clust
+        clust_1 = self['clust']
         job_1 = check_job(self)
         # get free homes in self agent cluster
         free_homes_clust_1 = [home for home in self.model.geo.clusters_info[clust_1]['homes']
                               if not home.info['occupants']]
         if marriage:
             consort = self.get_family_relative('consort')
-            clust_2 = consort.loc_info['home'].clust
+            clust_2 = consort['clust']
             job_2 = check_job(consort)
             # check if consort has a job
             if job_2:
@@ -1411,7 +1416,9 @@ class Young(IndepAgent):
             # moving for job reasons -> family, if any, will follow
             # new job already assigned to self
             # find free homes in new job cluster
+
             job_clust = job_1.info['clust']
+
             free_homes_new_job_clust = [home for home in self.model.geo.clusters_info[job_clust]['homes']
                                         if not home.info['occupants']]
             # find new home as close as possible to new job
@@ -1444,6 +1451,7 @@ class Young(IndepAgent):
             # remove children from old school, enroll them in a new one
             for child in children:
                 if child.info['age'] > self.model.steps_per_year:
+                    # print(child, 'registers to school', 'in cluster {}'.format(child['clust']))
                     child.register_to_school()
 
     def go_to_job(self):
@@ -1518,7 +1526,8 @@ class YoungUniv(Adolescent):
         return educ_center, course_key
 
     def evolve(self, new_class, ret_output=False, upd_course=False):
-        grown_agent = BaseAgent.evolve(new_class, ret_output=True, upd_course=upd_course)
+        grown_agent = BaseAgent.evolve(self, new_class, ret_output=True,
+                                       upd_course=upd_course)
         # new agent will not go to university in any case
         del grown_agent.loc_info['university']
         grown_agent.info.update({'married': False, 'num_children': 0})

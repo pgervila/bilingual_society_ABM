@@ -77,18 +77,12 @@ test_data_get_job = [Young, Teacher, TeacherUniv]
 def add_ag_to_world(m, city_places, ag_to_add):
     """ add agent to grid, schedule, clusters, networks """
     m.geo.add_agents_to_grid_and_schedule(ag_to_add)
-    m.geo.clusters_info[city_places['home'].clust]['agents'].append(ag_to_add)
+    m.geo.clusters_info[city_places['home'].info['clust']]['agents'].append(ag_to_add)
     m.nws.add_ags_to_networks(ag_to_add)
 
 
 @pytest.mark.parametrize("origin_class, new_class, labels", test_data_evolve)
 def test_evolve(model, city_places, origin_class, new_class, labels):
-
-    # def add_ag_to_world(m, ag_to_add):
-    #     """ add agent to grid, schedule, clusters, networks """
-    #     m.geo.add_agents_to_grid_and_schedule(ag_to_add)
-    #     m.geo.clusters_info[city_places['home'].clust]['agents'].append(ag_to_add)
-    #     m.nws.add_ags_to_networks(ag_to_add)
 
     if origin_class == Baby:
         father, mother = None, None

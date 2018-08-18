@@ -2,6 +2,7 @@
 import os, sys
 from importlib import reload
 import bisect
+import random
 import numpy as np
 import networkx as nx
 # import matplotlib
@@ -28,6 +29,17 @@ from geomapping import GeoMapper
 from networks import NetworkBuilder
 from dataprocess import DataProcessor, DataViz
 
+# setting random seed
+rand_seed = random.randint(0, 10000)
+rand_seed = 9479
+random.seed(rand_seed)
+# setting numpy seed
+np_seed = np.random.randint(10000)
+np_seed = 235
+np.random.seed(np_seed)
+
+print('rand_seed is {}'.format(rand_seed))
+print('np_seed is {}'.format(np_seed))
 
 class LanguageModel(Model):
 
@@ -43,7 +55,8 @@ class LanguageModel(Model):
 
     def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
-                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3):
+                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3,
+                 rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
         if spoken_only:
@@ -58,7 +71,7 @@ class LanguageModel(Model):
         self.max_run_steps = max_run_steps
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
-        self.random_seeds = np.random.randint(1, 10000, size=2)
+        self.seeds = [rand_seed, np_seed]
         # set init mode while building the model
         self.init_mode = True
 
@@ -102,6 +115,23 @@ class LanguageModel(Model):
 
         # switch to run mode once model initialization is completed
         self.init_mode = False
+
+        # check for model inconsistencies
+        try:
+            num_employees_per_school = [len(self.geo.clusters_info[x]['schools'][y].info['employees'])
+                                        for x in range(self.geo.num_clusters)
+                                        for y in range(len(self.geo.clusters_info[x]['schools']))]
+
+            num_courses_per_school = [len(self.geo.clusters_info[x]['schools'][y].grouped_studs)
+                                      for x in range(self.geo.num_clusters)
+                                      for y in range(len(self.geo.clusters_info[x]['schools']))]
+            assert num_employees_per_school == num_courses_per_school
+        except AssertionError:
+            raise Exception('MODELING ERROR: not all school courses have a '
+                            'teacher assigned. The specified school lang policy '
+                            'cannot be met by current population language knowledge.'
+                            )
+
 
     def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,
                                    exp_mult=400):
@@ -471,7 +501,7 @@ class LanguageModel(Model):
         self.geo.add_agents_to_grid_and_schedule(agent)
         self.nws.add_ags_to_networks(agent)
         home = agent.loc_info['home']
-        self.geo.clusters_info[home.clust]['agents'].append(agent)
+        self.geo.clusters_info[home.info['clust']]['agents'].append(agent)
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """
@@ -492,10 +522,10 @@ class LanguageModel(Model):
 
         # remove old instance from cluster (and replace with new one if requested)
         if replace:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust,
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].info['clust'],
                                              update_type='replace', grown_agent=grown_agent)
         else:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust)
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].info['clust'])
 
         # remove agent from all locations where it belongs to
         for key in agent.loc_info:
@@ -519,7 +549,8 @@ class LanguageModel(Model):
                         if isinstance(grown_agent, Pensioner):
                             univ.faculties[fac_key].remove_employee(agent)
                         else:
-                            univ.faculties[fac_key].remove_employee(agent, replace=replace)
+                            univ.faculties[fac_key].remove_employee(agent, replace=replace,
+                                                                    new_teacher=grown_agent)
                     except TypeError:
                         pass
                 elif isinstance(agent, Teacher):
@@ -528,7 +559,7 @@ class LanguageModel(Model):
                         if isinstance(grown_agent, Pensioner):
                             school.remove_employee(agent)
                         else:
-                            school.remove_employee(agent, replace=replace)
+                            school.remove_employee(agent, replace=replace, new_teacher=grown_agent)
                     except TypeError:
                         pass
                 elif isinstance(agent, Adult):

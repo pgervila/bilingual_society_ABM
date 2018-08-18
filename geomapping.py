@@ -382,6 +382,7 @@ class GeoMapper:
                 # print('*****')
                 # print('{} is hiring'.format(school))
                 # print('*****')
+
                 school.set_up_courses()
 
     def add_agents_to_grid_and_schedule(self, ags):

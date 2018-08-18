@@ -3,7 +3,6 @@ from unittest.mock import patch
 import numpy as np
 import os, sys
 from imp import reload
-#sys.path.append("/Users/PG/Paolo/python_repos/language_proj/lang_model_simple/")
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import agent
 import model
@@ -11,6 +10,12 @@ reload(agent)
 reload(model)
 from agent import BaseAgent, Child, Adolescent, YoungUniv, Young, Adult, Teacher
 from model import LanguageModel
+
+# set random seed
+np_seed = np.random.randint(10000)
+np_seed = 1432
+np.random.seed(np_seed)
+print('test seed is {}'.format(np_seed))
 
 @pytest.fixture(scope="module")
 def model():
@@ -26,6 +31,8 @@ def univ(model):
         except KeyError:
             continue
     return univ
+
+# TODO : add check that all teachers live in the same cluster they work
 
 
 def test_group_students_per_year(model):

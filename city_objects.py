@@ -10,10 +10,9 @@ from agent import Adolescent, Young, YoungUniv, Adult, Teacher, TeacherUniv, Pen
 
 class Home:
     def __init__(self, clust, pos):
-        self.clust = clust
         self.pos = pos
         self.agents_in = set()
-        self.info = {'occupants': set()}
+        self.info = {'occupants': set(), 'clust': clust}
 
     def assign_to_agent(self, agents):
         """ Assign the current home instance to each agent
@@ -26,12 +25,13 @@ class Home:
         for ag in agents:
             # check if agent already has a home
             if ag.loc_info['home']:
-                curr_clust = ag.loc_info['home'].clust
+                curr_clust = ag.loc_info['home'].info['clust']
                 ag.loc_info['home'].remove_agent(ag)
                 # change cluster info reference to agent if new home is in another cluster
-                if self.clust != curr_clust:
+                if self.info['clust'] != curr_clust:
                     ag.model.geo.update_agent_clust_info(ag, curr_clust=curr_clust,
-                                                         update_type='switch', new_clust=self.clust)
+                                                         update_type='switch',
+                                                         new_clust=self.info['clust'])
             # assign new home
             ag.loc_info['home'] = self
             self.info['occupants'].add(ag)
@@ -55,7 +55,7 @@ class Home:
             self.agents_in.remove(agent)
 
     def __repr__(self):
-        return 'Home_{0.clust!r}_{0.pos!r}'.format(self)
+        return 'Home_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
 
 class EducationCenter:
@@ -91,6 +91,7 @@ class EducationCenter:
             a teacher to each course. Method is called ONLY at model initialization
         """
         if not self.grouped_studs:
+            print('grouping', self)
             self.group_students_per_year()
         self.hire_teachers(self.grouped_studs.keys())
 
@@ -330,6 +331,8 @@ class EducationCenter:
                 * course_key: integer. Specify course_key
                 * hire_t: boolean. If True, a teacher will be hired if the assigned course did not exist.
                     Defaults to True
+            Output:
+                * course_key
         """
 
         # First check which center, if any, the student comes from, and remove links to it
@@ -340,18 +343,24 @@ class EducationCenter:
         if old_educ_center and old_educ_center is not self:
             old_educ_center.remove_student(student)
 
-        # Now assign student to new educ_center and corresponding course
-        if not course_key:
-            course_key = int(student.info['age'] / self.model.steps_per_year)
-        # assign student if course already exists, otherwise create course
-        if course_key in self.grouped_studs:
-            self[course_key]['students'].add(student)
+        # check if we are in initializat mode and if school has already been initialized
+        if self.model.init_mode and not self.grouped_studs:
+            student.loc_info['school'] = [self, None]
+            self.info['students'].add(student)
         else:
-            self.grouped_studs[course_key] = {'students': {student}, 'teacher': None}
-            if hire_t:
-                self.hire_teachers([course_key])
-        self.info['students'].add(student)
-        return course_key
+            # if no course_key from former school, create one to register into new school
+            if not course_key:
+                course_key = int(student.info['age'] / self.model.steps_per_year)
+            # Now assign student to new educ_center and corresponding course
+            # assign student if course already exists, otherwise create course
+            if course_key in self.grouped_studs:
+                self[course_key]['students'].add(student)
+            else:
+                self.grouped_studs[course_key] = {'students': {student}, 'teacher': None}
+                if hire_t:
+                    self.hire_teachers([course_key])
+            self.info['students'].add(student)
+            return course_key
 
     def remove_student(self, student):
         """ Method will be implemented in subclasses """
@@ -462,7 +471,7 @@ class School(EducationCenter):
             self.info['employees'].add(teacher)
         if move_home:
             # move to a new home if current home is not in same cluster of school
-            teacher_clust = teacher.loc_info['home'].clust
+            teacher_clust = teacher.loc_info['home'].info['clust']
             school_clust = self.info['clust']
             if teacher_clust is not school_clust:
                 teacher.move_to_new_home(marriage=False)
@@ -558,7 +567,7 @@ class School(EducationCenter):
                                      size=ceil(0.5 * len(studs)),
                                      replace=False)
         for st in univ_stds:
-            st.evolve(YoungUniv, upd_course=True)
+            st.evolve(YoungUniv, university=univ, upd_course=True)
         # rest of last year students to job market
         job_stds = set(studs).difference(set(univ_stds))
         for st in job_stds:
@@ -646,7 +655,7 @@ class Faculty(EducationCenter):
             self.univ.info['employees'].add(teacher)
         # check if moving to a new home is needed
         if move_home:
-            teacher_clust = teacher.loc_info['home'].clust
+            teacher_clust = teacher.loc_info['home'].info['clust']
             school_clust = self.info['clust']
             if teacher_clust is not school_clust:
                 teacher.move_to_new_home(marriage=False)
@@ -766,12 +775,11 @@ class Job:
     """
     def __init__(self, model, clust, pos, num_places, skill_level=0, lang_policy=None):
         self.model = model
-        self.clust = clust
         self.pos = pos
         self.num_places = num_places
         # TODO : define network of companies (customers) where nodes are companies
         self.info = {'employees': set(), 'lang_policy': lang_policy,
-                     'skill_level': skill_level}
+                     'skill_level': skill_level, 'clust': clust}
         self.agents_in = set()
         # set lang policy
         if not lang_policy:
@@ -787,7 +795,7 @@ class Job:
             Output:
                 * sets value of self.info['lang_policy]
         """
-        lang_distrib = self.model.geo.get_lang_distrib_per_clust(self.clust)
+        lang_distrib = self.model.geo.get_lang_distrib_per_clust(self.info['clust'])
         lang_policy = np.where(lang_distrib > min_pct)[0]
         if 1 not in lang_policy and lang_policy.size < 2:
             self.info['lang_policy'] = np.insert(lang_policy, np.searchsorted(lang_policy, 1), 1)
@@ -827,8 +835,8 @@ class Job:
             self.info['employees'].add(agent)
             # move agent to new home closer to job if necessary (and requested)
             if move_home:
-                agent_clust = agent.loc_info['home'].clust
-                job_clust = self.clust
+                agent_clust = agent.loc_info['home'].info['clust']
+                job_clust = self.info['clust']
                 if agent_clust is not job_clust:
                     agent.move_to_new_home(marriage=False)
     # TODO : update workers by department and send them to retirement when age reached
@@ -848,7 +856,7 @@ class Job:
                 self.look_for_employee(excluded_ag=agent)
 
     def __repr__(self):
-        return 'Job_{0.clust!r}_{0.pos!r}'.format(self)
+        return 'Job_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
 
 class MeetingPoint:

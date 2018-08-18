@@ -100,7 +100,7 @@ class NetworkBuilder:
                 if ag.loc_info['job']:
                     info_occupation = ag.loc_info['job'].info
                 else:
-                    clust = ag.loc_info['home'].clust
+                    clust = ag.loc_info['home'].info['clust']
                     info_occupation = random.choice(self.model.geo.clusters_info[clust]['jobs']).info
                 colleagues = 'employees'
             elif isinstance(ag, Teacher):
