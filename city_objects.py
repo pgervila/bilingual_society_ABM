@@ -471,7 +471,7 @@ class School(EducationCenter):
             self.info['employees'].add(teacher)
         if move_home:
             # move to a new home if current home is not in same cluster of school
-            teacher_clust = teacher.loc_info['home'].info['clust']
+            teacher_clust = teacher['clust']
             school_clust = self.info['clust']
             if teacher_clust is not school_clust:
                 teacher.move_to_new_home(marriage=False)
@@ -488,27 +488,18 @@ class School(EducationCenter):
         # TODO : sort employees by lang competence from lowest to highest
         # TODO : set conditions for hiring according to students age. Higher age, higher requirements
 
-
         new_teachers = self.find_teachers(courses_keys)
 
         # block hired teachers from being hired by other schools (avoid modifying set while looping)
-
         for teacher in new_teachers:
             teacher.blocked = True
-
-        # print('hired teachers by {} are {} '.format(self, new_teachers))
-
         # assign school and course keys to teachers
-        for (ck, teacher) in zip(courses_keys, new_teachers):
+        # make copy of zipped iterables to avoid 'dict changed size during iter' exception
+        # if a child of a new teacher is enrolled in a non existing course when moving, exception would occur
+        # because a new course would be added to courses_keys while iterating
+        for (ck, teacher) in list(zip(courses_keys, new_teachers)):
             # turn hired agent into Teacher instance if it's not yet one
             if not isinstance(teacher, Teacher):
-
-                # print(teacher, teacher.loc_info, self)
-                # try:
-                #     print('consort is ', teacher.get_family_relative('consort'))
-                # except KeyError:
-                #     print('NO CONSORT !!!')
-
                 teacher = teacher.evolve(Teacher, ret_output=True)
             self.assign_teacher(teacher, ck, move_home=move_home)
 

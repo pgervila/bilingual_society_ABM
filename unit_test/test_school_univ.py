@@ -13,7 +13,7 @@ from model import LanguageModel
 
 # set random seed
 np_seed = np.random.randint(10000)
-np_seed = 1432
+#np_seed = 1734
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
@@ -37,15 +37,12 @@ def univ(model):
 
 def test_group_students_per_year(model):
     # check that num_employees_per_school is the same as num_courses_per_school
-    num_employees_per_school = [len(model.geo.clusters_info[x]['schools'][y].info['employees'])
-                                for x in range(model.geo.num_clusters) 
-                                for y in range(len(model.geo.clusters_info[x]['schools']))]
-
-    num_courses_per_school = [len(model.geo.clusters_info[x]['schools'][y].grouped_studs)
-                              for x in range(model.geo.num_clusters) 
-                              for y in range(len(model.geo.clusters_info[x]['schools']))]
-    
-    assert num_employees_per_school == num_courses_per_school
+    employees_and_courses_per_school = [(len(model.geo.clusters_info[cl]['schools'][sch].info['employees']),
+                                         len(model.geo.clusters_info[cl]['schools'][sch].grouped_studs))
+                                         for cl in range(model.geo.num_clusters)
+                                         for sch in range(len(model.geo.clusters_info[cl]['schools']))]
+    num_employees_per_school, num_courses_per_school = zip(*employees_and_courses_per_school)
+    assert num_employees_per_school >= num_courses_per_school
 
 
 def test_school_set_up_and_update(model, univ):

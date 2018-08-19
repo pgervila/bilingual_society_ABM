@@ -31,23 +31,26 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-rand_seed = 9479
+rand_seed = 375
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-np_seed = 235
+np_seed = 6759
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
 print('np_seed is {}'.format(np_seed))
 
+
 class LanguageModel(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
-    school_lang_policy = [0]
+    # TODO : lang policies should be model params, not class attrs
+    school_lang_policy = [0, 1]
     jobs_lang_policy = None
     media_lang_policy = None
+
     steps_per_year = 36
     max_lifetime = 4000
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
@@ -115,22 +118,6 @@ class LanguageModel(Model):
 
         # switch to run mode once model initialization is completed
         self.init_mode = False
-
-        # check for model inconsistencies
-        try:
-            num_employees_per_school = [len(self.geo.clusters_info[x]['schools'][y].info['employees'])
-                                        for x in range(self.geo.num_clusters)
-                                        for y in range(len(self.geo.clusters_info[x]['schools']))]
-
-            num_courses_per_school = [len(self.geo.clusters_info[x]['schools'][y].grouped_studs)
-                                      for x in range(self.geo.num_clusters)
-                                      for y in range(len(self.geo.clusters_info[x]['schools']))]
-            assert num_employees_per_school == num_courses_per_school
-        except AssertionError:
-            raise Exception('MODELING ERROR: not all school courses have a '
-                            'teacher assigned. The specified school lang policy '
-                            'cannot be met by current population language knowledge.'
-                            )
 
 
     def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,

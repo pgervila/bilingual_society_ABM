@@ -372,18 +372,33 @@ class GeoMapper:
                     ag.get_job(keep_cluster=True, move_home=False)
 
     def assign_school_jobs(self):
-        """ Method to set up all courses in all schools.
-            It calls 'set_up_courses' method for each school,
-            that hires teachers to all courses after grouping students
-            by age """
+        """
+            Method to set up all courses in all schools at initialization.
+            It calls 'set_up_courses' school method for each school,
+            that hires teachers for all courses after grouping students
+            by age
+        """
         # Loop over schools to assign teachers
         for clust_idx, clust_info in self.clusters_info.items():
             for school in clust_info['schools']:
                 # print('*****')
                 # print('{} is hiring'.format(school))
                 # print('*****')
-
                 school.set_up_courses()
+
+        # check for model inconsistencies in school assignment
+        # check if there is a teacher for each created course
+        error_message = ('MODELING ERROR: not all school courses have a '
+                        'teacher assigned. The specified school lang policy '
+                        'cannot be met by current population language knowledge.')
+        try:
+            teachers_per_course = [course['teacher'] if 'teacher' in course else False
+                                   for cl in range(self.num_clusters)
+                                   for sch in self.clusters_info[cl]['schools']
+                                   for ck, course in sch.grouped_studs.items()]
+            assert all(teachers_per_course)
+        except AssertionError:
+            raise Exception(error_message)
 
     def add_agents_to_grid_and_schedule(self, ags):
         """ Method to add a number of agents to grid, schedule and system networks
