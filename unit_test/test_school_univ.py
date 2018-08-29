@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch
 import numpy as np
 import os, sys
+from collections import Counter
 from imp import reload
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import agent
@@ -11,9 +12,11 @@ reload(model)
 from agent import BaseAgent, Child, Adolescent, YoungUniv, Young, Adult, Teacher
 from model import LanguageModel
 
+print('python hash seed is', os.environ['PYTHONHASHSEED'])
+
 # set random seed
 np_seed = np.random.randint(10000)
-#np_seed = 1734
+np_seed = 4575
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
@@ -122,8 +125,10 @@ def test_univ_set_up_and_update(model, univ):
     schools = [school for cl_info in model.geo.clusters_info.values() 
                for school in cl_info['schools']]
     for school in schools:
-        # all_studs = [x for ags in school.grouped_studs.values()
-        #              for x in ags['students']]
+
+        # if school.pos == (23, 24):
+        #     import ipdb;ipdb.set_trace()
+
         while school.info['age_range'][1] not in school.grouped_studs:
             for st in list(school.info['students'])[:]:
                 st.info['age'] += 36
@@ -175,11 +180,13 @@ def test_univ_set_up_and_update(model, univ):
 def test_hire_teachers(model):
     i = np.random.randint(0, 3)
     school = model.geo.clusters_info[i]['schools'][0]
+
     if len(school.grouped_studs) >= 2:
         rand_courses = np.random.choice(list(school.grouped_studs), 
                                         size=2, replace=False)
         for rand_course in rand_courses:
-            school.grouped_studs[rand_course]['teacher'] = None
+            teacher = school.grouped_studs[rand_course]['teacher']
+            school.remove_teacher_from_course(teacher)
         school.hire_teachers(rand_courses)
         for rand_course in rand_courses:
             t = school.grouped_studs[rand_course]['teacher']
@@ -187,6 +194,8 @@ def test_hire_teachers(model):
             assert t.loc_info['job'][1] == rand_course
     else:
         pass
+
+    print('Counts are ', Counter([t.loc_info['job'][1] for t in school.info['employees']]))
 
     # test moving to a new home
 
@@ -217,10 +226,16 @@ def test_assign_new_stud_to_course(model):
 def test_teacher_death(model):
     school = model.geo.clusters_info[0]['schools'][0]
     ck = list(school.grouped_studs.keys())[0]
-    teacher = school[ck]['teacher']
 
+    print('current teachers with key {} assigned are {}'.format(ck, [t for t in school.info['employees']
+                                                                 if t.loc_info['job'][1] == ck]))
+    print('current teachers in school are', [t for t in school.info['employees'] if t.loc_info['job'][1]])
+
+    teacher = school[ck]['teacher']
+    assert len([t for t in school.info['employees'] if t.loc_info['job'][1] == ck]) == 1
     model.remove_after_death(teacher)
 
+    assert sys.getrefcount(teacher) == 2
     assert school[ck]['teacher'] != teacher
     assert school[ck]['teacher']
     # check only one teacher is assigned to course after previous teacher death

@@ -298,6 +298,14 @@ class BaseAgent:
     def __getitem__(self, clust):
         return self.loc_info['home'].info[clust]
 
+    def __hash__(self):
+        return hash(self.unique_id)
+
+    def __eq__(self, other):
+        if not isinstance(other, BaseAgent):
+            return NotImplemented
+        return self.unique_id == other.unique_id
+
     def __repr__(self):
         home = self.loc_info['home']
         if home:

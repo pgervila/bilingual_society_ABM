@@ -31,15 +31,16 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-rand_seed = 375
+rand_seed = 3299
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-np_seed = 6759
+np_seed = 1741
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
 print('np_seed is {}'.format(np_seed))
+print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 
 class LanguageModel(Model):
@@ -118,7 +119,6 @@ class LanguageModel(Model):
 
         # switch to run mode once model initialization is completed
         self.init_mode = False
-
 
     def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,
                                    exp_mult=400):
@@ -551,6 +551,10 @@ class LanguageModel(Model):
                         pass
                 elif isinstance(agent, Adult):
                     # if Adult, remove from job without replacement
+
+                    # if agent.unique_id == 100:
+                    #     import ipdb;ipdb.set_trace()
+
                     job = agent.loc_info['job']
                     # print('remove {} from job in model remove from locations'.format(agent))
                     if job: job.remove_employee(agent)

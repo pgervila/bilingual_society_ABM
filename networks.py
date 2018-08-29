@@ -92,6 +92,7 @@ class NetworkBuilder:
         self.model.geo.assign_school_jobs()
 
     def define_friendship_networks(self):
+        """ """
         # TODO : Apply small world graph to relevant nodes using networkx
         # TODO : change distribution to allow for extreme number of friends for a few agents
         friends_per_agent = np.random.randint(1, 5, size=self.model.num_people)
@@ -100,7 +101,7 @@ class NetworkBuilder:
                 if ag.loc_info['job']:
                     info_occupation = ag.loc_info['job'].info
                 else:
-                    clust = ag.loc_info['home'].info['clust']
+                    clust = ag['clust']
                     info_occupation = random.choice(self.model.geo.clusters_info[clust]['jobs']).info
                 colleagues = 'employees'
             elif isinstance(ag, Teacher):
