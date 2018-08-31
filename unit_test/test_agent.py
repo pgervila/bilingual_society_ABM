@@ -12,6 +12,11 @@ reload(model)
 from agent import Baby, Child, Adolescent, Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
 from model import LanguageModel
 
+np_seed = np.random.randint(10000)
+#np_seed = 3553
+np.random.seed(np_seed)
+print('test seed is {}'.format(np_seed))
+
 
 @pytest.fixture(scope="module")
 def model():
@@ -100,12 +105,11 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         add_ag_to_world(model, city_places, old_ag)
     elif origin_class == Teacher:
         ag_id = model.set_available_ids.pop()
-        old_ag = origin_class(model, ag_id , 0, 'M', age=1200, home=city_places['home'])
+        old_ag = origin_class(model, ag_id, 0, 'M', age=1200, home=city_places['home'])
         add_ag_to_world(model, city_places, old_ag)
         school = city_places['school']
         ckey = np.random.choice(list(school.grouped_studs.keys()))
         school.assign_teacher(old_ag, ckey)
-        # import pdb; pdb.set_trace()
     else:
         ag_id = model.set_available_ids.pop()
         old_ag = origin_class(model, ag_id, 0, 'M', age=100, home=city_places['home'],
@@ -144,43 +148,38 @@ def test_listen(model):
 
 @pytest.mark.parametrize("job1, job2, j2_teach", test_data_move_new_home)
 def test_move_to_new_home(model, job1, job2, j2_teach):
-    
+    # define home and job pairs for each agent so that each pair is in a different cluster
     h1 = model.geo.clusters_info[0]['homes'][1]
     j1 = model.geo.clusters_info[0]['jobs'][0] if job1 else None
     h2 = model.geo.clusters_info[1]['homes'][1]
     j2 = model.geo.clusters_info[1]['jobs'][0] if job2 else None
 
-    consort1 = Young(model, 1500, 0, 'M', age=1200, home=h1, job=j1)
+    new_ags_ids = [model.set_available_ids.pop() for _ in range(2)]
+    new_ags_age = 1200
+
+    consort1 = Young(model, new_ags_ids[0],
+                     0, 'M', age=new_ags_age, home=h1, job=j1)
     if j2_teach:
         # TODO: TO BE FIXED
         sc1 = model.geo.clusters_info[0]['schools'][0]
-        consort2 = Teacher(model, 1500, 0, 'F', age=1200, home=h2, job=j2)
+        consort2 = Teacher(model, new_ags_ids[1], 0, 'F', age=new_ags_age, home=h2, job=j2)
     else:
-        consort2 = Young(model, 1500, 0, 'F', age=1200, home=h2, job=j2)
+        consort2 = Young(model, new_ags_ids[1], 0, 'F', age=new_ags_age, home=h2, job=j2)
     
     ags = [consort1, consort2]
-    model.geo.add_agents_to_grid_and_schedule(ags)
-    model.geo.clusters_info[0]['agents'].append(consort1)
-    model.geo.clusters_info[1]['agents'].append(consort2)
-    model.nws.add_ags_to_networks(ags)
+    # add agents to model entities
+    for ag in ags:
+        model.add_new_agent_to_model(ag)
+    # update acquaintance status between agents
     consort1.update_acquaintances(consort2, 0)
-    
+
     # get married
-    consort1.info['married'] = True
-    consort2.info['married'] = True
-    fam_nw = model.nws.family_network
-    lang = model.nws.known_people_network[consort1][consort2]['lang']
-    # family network is directed Graph !!
-    fam_nw.add_edge(consort1, consort2, lang=lang, fam_link='consort')
-    fam_nw.add_edge(consort2, consort1, lang=lang, fam_link='consort')
-    
-    # find appartment to move in together
-    consort1.move_to_new_home(consort2)
+    consort1.get_married(consort2)
     
     if consort1.loc_info['job'] == j1:
-        assert consort1  in consort1.loc_info['job'].info['employees']
+        assert consort1 in consort1.loc_info['job'].info['employees']
     if consort2.loc_info['job'] == j2 and j2:
-        assert consort2  in consort2.loc_info['job'].info['employees']
+        assert consort2 in consort2.loc_info['job'].info['employees']
 
 
 @pytest.mark.parametrize('agent_class', test_data_get_job)

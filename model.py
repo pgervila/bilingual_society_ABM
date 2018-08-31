@@ -31,11 +31,11 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-rand_seed = 3299
+#rand_seed = 3021
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-np_seed = 1741
+#np_seed = 3746
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -88,7 +88,7 @@ class LanguageModel(Model):
         self.edit_distances['mixed'] = np.random.binomial(10, 0.1, size=self.vocab_red)
 
         # define container for available ids
-        self.set_available_ids = set(range(num_people, max_people_factor * num_people))
+        self.set_available_ids = set(range(0, max_people_factor * num_people))
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
         self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'init_conds', 'lang_spoken_ics_vs_step.h5'))
@@ -477,7 +477,8 @@ class LanguageModel(Model):
 
     def add_new_agent_to_model(self, agent):
         """
-            Method to add a new agent instance to all relevant model entities
+            Method to add a new agent instance to all relevant model entities,
+            i.e. grid, schedule, network and clusters info
             Args:
                 * agent: agent class instance
             Output:
@@ -487,8 +488,7 @@ class LanguageModel(Model):
         # Add agent to grid, schedule, network and clusters info
         self.geo.add_agents_to_grid_and_schedule(agent)
         self.nws.add_ags_to_networks(agent)
-        home = agent.loc_info['home']
-        self.geo.clusters_info[home.info['clust']]['agents'].append(agent)
+        self.geo.clusters_info[agent['clust']]['agents'].append(agent)
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """
@@ -551,12 +551,7 @@ class LanguageModel(Model):
                         pass
                 elif isinstance(agent, Adult):
                     # if Adult, remove from job without replacement
-
-                    # if agent.unique_id == 100:
-                    #     import ipdb;ipdb.set_trace()
-
                     job = agent.loc_info['job']
-                    # print('remove {} from job in model remove from locations'.format(agent))
                     if job: job.remove_employee(agent)
                 elif isinstance(agent, Young):
                     # if Young, remove from job with replacement

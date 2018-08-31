@@ -108,7 +108,6 @@ class EducationCenter:
         if not self.grouped_studs:
             self.group_students_per_year()
         else:
-            #print('STARTING UPDATE OF ', self)
             # define empty set to update school groups
             updated_groups = {}
             # define variable to store students from last year course( if there is such course )
@@ -275,11 +274,6 @@ class EducationCenter:
         for (ck, teacher) in list(zip(courses_keys, new_teachers)):
             # turn hired agent into appropriate teacher_type instance if it's not yet one
             if not isinstance(teacher, teacher_type):
-
-                if teacher.unique_id == 44:
-                    import ipdb;ipdb.set_trace()
-
-
                 teacher = teacher.evolve(teacher_type, ret_output=True)
             self.assign_teacher(teacher, ck, move_home=move_home)
         # delete blocked attribute

@@ -16,7 +16,9 @@ class BaseAgent:
         methods common to all lang agents subclasses
         Args:
             * model: model class instance
-            * unique_id: integer
+            * unique_id: integer. Value must be unique because it is used to construct
+                the instance hash value. It should never be modified. Value should be drawn
+                from available values in model.set_available_ids
             * language: integer in [0, 1, 2]. 0 -> mono L1, 1 -> bilingual, 2 -> mono L2
             * sex: string. Either 'M' or 'F'
             * age: integer
@@ -44,10 +46,10 @@ class BaseAgent:
             home.assign_to_agent(self)
 
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
-        # define list of all lang labels in model
-        all_langs = ['L1', 'L12', 'L21', 'L2']
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(lambda: defaultdict(dict))
+        # define list of all lang labels in model
+        all_langs = ['L1', 'L12', 'L21', 'L2']
         # define mask for each step
         self.step_mask = {l: np.zeros(self.model.vocab_red, dtype=np.bool) for l in all_langs}
         if import_ic:
@@ -304,7 +306,7 @@ class BaseAgent:
     def __eq__(self, other):
         if not isinstance(other, BaseAgent):
             return NotImplemented
-        return self.unique_id == other.unique_id
+        return self.unique_id == other.unique_id and self.__class__ == other.__class__
 
     def __repr__(self):
         home = self.loc_info['home']
@@ -1254,17 +1256,20 @@ class Young(IndepAgent):
             for ag in self.model.nws.known_people_network[self]:
                 if self.check_partner(ag, max_age_diff=max_age_diff,
                                       thresh_comm_lang=thresh_comm_lang):
-                    # set marriage flags and links between partners
-                    self.info['married'] = True
-                    ag.info['married'] = True
-                    fam_nw = self.model.nws.family_network
-                    lang = self.model.nws.known_people_network[self][ag]['lang']
-                    # family network is directed Graph !!
-                    fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
-                    fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
-                    # find appartment to move in together
-                    self.move_to_new_home(ag)
+                    self.get_married()
                     break
+
+    def get_married(self, ag):
+        # set marriage flags and links between partners
+        self.info['married'] = True
+        ag.info['married'] = True
+        fam_nw = self.model.nws.family_network
+        lang = self.model.nws.known_people_network[self][ag]['lang']
+        # family network is directed Graph !!
+        fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
+        fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
+        # find appartment to move in together
+        self.move_to_new_home(ag)
 
     def reproduce(self, day_prob=0.001, max_num_children=4):
         """ give birth to a new agent if conditions and likelihoods are met """
@@ -1347,7 +1352,7 @@ class Young(IndepAgent):
         """
             Method to move self agent and other optional agents to a new home
             Args:
-                * marriage: boolean. Specifies if moving is because of marriage or not. If not,
+                * marriage: boolean. Specifies if moving is because of marriage or not. If False,
                     it is assumed moving is because of job reasons
             Output:
                 * 'self' agent is assigned a new home together with his/her family.
@@ -1426,7 +1431,6 @@ class Young(IndepAgent):
             # find free homes in new job cluster
 
             job_clust = job_1.info['clust']
-
             free_homes_new_job_clust = [home for home in self.model.geo.clusters_info[job_clust]['homes']
                                         if not home.info['occupants']]
             # find new home as close as possible to new job

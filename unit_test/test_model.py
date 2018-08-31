@@ -10,8 +10,9 @@ import agent
 import model
 reload(agent)
 reload(model)
-from agent import Child, Adolescent, Adult, Worker, Teacher
+from agent import Adolescent, Adult, Teacher
 from model import LanguageModel
+from city_objects import Job, School
 
 @pytest.fixture(scope="module")
 def model():
@@ -50,7 +51,6 @@ test_data_run_conversation = [([1, 1, 1, 2, 2], True)]
 test_data_remove_after_death = [Teacher, Adult, Adolescent]
 
 test_data_remove_from_locations = [False, True]
-
 
 @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", 
                          test_data_get_conv_params)

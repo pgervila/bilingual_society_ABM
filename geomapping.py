@@ -306,22 +306,22 @@ class GeoMapper:
                     Assigns home and job to lonely agents
         """
 
-        # set agents ids
-        lang_ags_ids = set(range(self.model.num_people))
+        # set available agents' ids
+        av_ags_ids = self.model.set_available_ids
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(self.langs_per_clust[clust_idx])] * self.model.family_size)):
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
                 # lang ics will be set later on
-                ag1 = Adult(self.model, lang_ags_ids.pop(), family_langs[0], family_sexes[0],
+                ag1 = Adult(self.model, av_ags_ids.pop(), family_langs[0], family_sexes[0],
                             married=True, num_children=2)
-                ag2 = Adult(self.model, lang_ags_ids.pop(), family_langs[1], family_sexes[1],
+                ag2 = Adult(self.model, av_ags_ids.pop(), family_langs[1], family_sexes[1],
                             married=True, num_children=2)
                 # instantiate 2 children with neither school nor home assigned
                 # lang ics will be set later on
-                ag3 = Child(self.model, lang_ags_ids.pop(), family_langs[2], family_sexes[2])
-                ag4 = Child(self.model, lang_ags_ids.pop(), family_langs[3], family_sexes[3])
+                ag3 = Child(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2])
+                ag4 = Child(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3])
                 # set ages of family members
                 (ag1.info['age'],
                  ag2.info['age']) = self.model.steps_per_year * np.random.randint(parents_age_range[0],
@@ -335,7 +335,7 @@ class GeoMapper:
                 family_agents = [ag1, ag2, ag3, ag4]
                 home = clust_info['homes'][idx]
                 home.assign_to_agent(family_agents)
-                # add agents to clust_info, schedule and grid
+                # add agents to clust_info, schedule and grid, but not yet to networks
                 clust_info['agents'].extend(family_agents)
                 self.add_agents_to_grid_and_schedule(family_agents)
 
@@ -360,7 +360,7 @@ class GeoMapper:
             if num_left_agents:
                 for idx2, lang in enumerate(self.langs_per_clust[clust_idx][-num_left_agents:]):
                     sex = 'M' if random.random() < 0.5 else 'F'
-                    ag = Adult(self.model, lang_ags_ids.pop(), lang, sex)
+                    ag = Adult(self.model, av_ags_ids.pop(), lang, sex)
                     ag.info['age'] = self.model.steps_per_year * np.random.randint(parents_age_range[0],
                                                                                    parents_age_range[1])
                     clust_info['agents'].append(ag)

@@ -23,13 +23,8 @@ class NetworkBuilder:
         self.known_people_network = nx.DiGraph()
         # INITIALIZE FRIENDSHIP NETWORK
         self.friendship_network = nx.Graph()
-        # sort by friendship intensity
-        #       sorted(self.friendship_network[n_1].items(),
-        #              key=lambda edge: edge[1]['link_strength'],
-        #              reverse = True)
         # INITIALIZE FAMILY NETWORK
         self.family_network = nx.DiGraph()
-
         # INITIALIZE JOBS NETWORK
         self.jobs_network = nx.Graph()
 
