@@ -8,8 +8,6 @@ import numpy as np
 import networkx as nx
 import random
 
-import copy
-
 
 class StagedActivationModif(StagedActivation):
     # TODO : add/separate agents by type ??? Is it a good idea ??
@@ -18,6 +16,9 @@ class StagedActivationModif(StagedActivation):
         """ Executes all the stages for all agents """
 
         for ag in self.agents[:]:
+
+            ag.call_cnts = ag.call_cnts_init = 0
+
             # new step -> older age
             ag.info['age'] += 1
             # set exclusion counter to zero
@@ -66,6 +67,7 @@ class StagedActivationModif(StagedActivation):
         for ag in self.agents[:]:
             for lang in ['L1', 'L12', 'L21', 'L2']:
                 ag.wc_final[lang] = ag.lang_stats[lang]['wc'].copy()
+                ag.call_cnts_final = ag.call_cnts
 
         # check reproduction, death : make shallow copy of agents list,
         # since we are potentially removing agents as we iterate

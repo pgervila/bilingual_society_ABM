@@ -1,8 +1,8 @@
 # IMPORT RELEVANT LIBRARIES
 import os, sys
 from importlib import reload
-import random
 import bisect
+import random
 import numpy as np
 import networkx as nx
 # import matplotlib
@@ -29,14 +29,29 @@ from geomapping import GeoMapper
 from networks import NetworkBuilder
 from dataprocess import DataProcessor, DataViz
 
+# setting random seed
+rand_seed = random.randint(0, 10000)
+#rand_seed = 3021
+random.seed(rand_seed)
+# setting numpy seed
+np_seed = np.random.randint(10000)
+#np_seed = 3746
+np.random.seed(np_seed)
+
+print('rand_seed is {}'.format(rand_seed))
+print('np_seed is {}'.format(np_seed))
+print('python hash seed is', os.environ['PYTHONHASHSEED'])
+
 
 class LanguageModel(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
-    school_lang_policy = [0]
+    # TODO : lang policies should be model params, not class attrs
+    school_lang_policy = [0, 1]
     jobs_lang_policy = None
     media_lang_policy = None
+
     steps_per_year = 36
     max_lifetime = 4000
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
@@ -44,7 +59,8 @@ class LanguageModel(Model):
 
     def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
-                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3):
+                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3,
+                 rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
         if spoken_only:
@@ -59,7 +75,9 @@ class LanguageModel(Model):
         self.max_run_steps = max_run_steps
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
-        self.random_seeds = np.random.randint(1, 10000, size=2)
+        self.seeds = [rand_seed, np_seed]
+        # set init mode while building the model
+        self.init_mode = True
 
         self.conv_length_age_factor = None
         self.death_prob_curve = None
@@ -70,7 +88,7 @@ class LanguageModel(Model):
         self.edit_distances['mixed'] = np.random.binomial(10, 0.1, size=self.vocab_red)
 
         # define container for available ids
-        self.set_available_ids = set(range(num_people, max_people_factor * num_people))
+        self.set_available_ids = set(range(0, max_people_factor * num_people))
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
         self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'init_conds', 'lang_spoken_ics_vs_step.h5'))
@@ -99,16 +117,24 @@ class LanguageModel(Model):
         self.set_conv_length_age_factor()
         self.set_death_prob_curve()
 
-    def set_conv_length_age_factor(self, age_1=14, age_2=65, scale_f=40,
-                                   real_spoken_tokens_per_day=18000):
+        # switch to run mode once model initialization is completed
+        self.init_mode = False
+
+    def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,
+                                   exp_mult=400):
         """
-            Method to compute the correction factor
-            for conversation lengths as a function of age
-            It assumes a compression scale of 40 in SIMULATED vocabulary and
-            18000 tokens per adult per day as REAL number of spoken words on average
+            Method to compute the correction factor for conversation lengths as a function of age
+            The correction factor is a curve with three different sections, defined by the values
+            of age_1 and age_2. The middle section defines the plateau value that is equal to one.
+            The first section grows from a very small value up to one, according to an S curve whose
+            shape is defined by rate_1 and exp_mult. The third section decays from the max value
+            according to the exponential rate defined by rate_3.
             Args:
                 * age_1: integer. Defines lower key age for slope change in num_words vs age curve
                 * age_2: integer. Defines higher key age for slope change in num_words vs age curve
+                * rate_1: float. Value to set exponential growth rate for factor in section 1
+                * rate_3: float. Value to set exponential decay rate in section 3
+                * exp_mult: integer. Value that multiplies exponential function in section 1
                 * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
                 * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day
             Output:
@@ -117,24 +143,21 @@ class LanguageModel(Model):
         """
         age = np.arange(self.max_lifetime)
         factor = np.zeros(self.max_lifetime)
-
-        real_vocab_size = scale_f * self.vocab_red
-        # define factor total_words / avg_words_per_day
-        f = real_vocab_size / real_spoken_tokens_per_day
-        # pivot ages
-        age_1, age_2 = [self.steps_per_year * age for age in (age_1, age_2 )]
+        # define maximum value for factor
+        f = 1.
+        # convert pivot ages into steps values
+        age_1, age_2 = [self.steps_per_year * age for age in (age_1, age_2)]
 
         # define sector 1
-        delta = 0.0001
-        decay = -np.log(delta / 100) / age_1
-        factor[:age_1] = f + 400 * np.exp(- decay * age[:age_1])
+        decay = -np.log(rate_1 / 100) / age_1
+        factor[:age_1] = f + exp_mult * np.exp(- decay * age[:age_1])
         # define sector 2
         factor[age_1:age_2] = f
         # define sector 3
-        factor[age_2:] = f - 1 + np.exp(0.0005 * (age[age_2:] - age_2))
+        factor[age_2:] = f - 1 + np.exp(rate_3 * (age[age_2:] - age_2))
 
         # set factor value
-        self.conv_length_age_factor = factor
+        self.conv_length_age_factor = 1 / factor
 
     def set_death_prob_curve(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
         """
@@ -184,7 +207,8 @@ class LanguageModel(Model):
 
         return newborn_lang, lang_with_father, lang_with_mother
 
-    def run_conversation(self, ag_init, others, bystander=None, num_days=10):
+    def run_conversation(self, ag_init, others, bystander=None,
+                         def_conv_length='M', num_days=10):
         """
             Method that models conversation between ag_init (initiator) and others
             Calls 'get_conv_params' model method to determine conversation parameters
@@ -195,6 +219,9 @@ class LanguageModel(Model):
                     It can be a single agent object that will be automatically converted into a list
                 * bystander: extra agent that may listen to conversation words without actually being involved.
                     Agent vocabulary gets correspondingly updated if bystander agent is specified
+                * def_conv_length: string. Default conversation length. Value may be modified
+                    depending on agents linguistic knowledge. Values are from keys of 'num_words_conv'
+                    model class attribute ('VS', 'S', 'M', 'L')
                 * num_days: integer [1, 10]. Number of days in one 10day-step this kind of speech is done
             Output:
                 * Method updates lang arrays for all active agents involved. It also updates acquaintances
@@ -203,8 +230,14 @@ class LanguageModel(Model):
         # define list of all agents involved
         ags = [ag_init]
         ags.extend(others) if (type(others) is list) else ags.append(others)
+
+        if self.schedule.steps >=1:
+            for ag in ags:
+                ag.call_cnts += 1
+
+
         # get all parameters of conversation
-        conv_params = self.get_conv_params(ags)
+        conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
@@ -212,7 +245,7 @@ class LanguageModel(Model):
                 # call listeners' lang arrays updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
-                    listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.75)
+                    listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1)
             else:
                 # update exclusion counter for excluded agent
                 ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] += 1
@@ -228,7 +261,7 @@ class LanguageModel(Model):
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])
                 others.update_acquaintances(ag_init, conv_params['lang_group'][1])
 
-    def get_conv_params(self, ags): # TODO: add higher thresholds for job conversation
+    def get_conv_params(self, ags, def_conv_length='M'): # TODO: add higher thresholds for job conversation
         """
         Method to find out parameters of conversation between 2 or more agents:
             conversation lang or lang spoken by each involved speaker,
@@ -238,6 +271,9 @@ class LanguageModel(Model):
         It implements MAXIMIN language rule from Van Parijs
         Args:
             * ags : list of all agent class instances that take part in conversation
+            * def_conv_length: string. Default conversation length. Value may be modified
+                depending on agents linguistic knowledge. Values are from keys of 'num_words_conv'
+                model class attribute ('VS', 'S', 'M', 'L')
         Returns:
             * 'conv_params' dict with following keys and values:
                 - lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1]
@@ -254,7 +290,7 @@ class LanguageModel(Model):
         others = ags[1:]
 
         # set output default parameters
-        conv_params = dict(multilingual=False, mute_type=None, conv_length='M')
+        conv_params = dict(multilingual=False, mute_type=None, conv_length=def_conv_length)
 
         # get lists of favorite language per agent and set of language types involved
         ags_lang_types = set([ag.info['language'] for ag in ags])
@@ -413,14 +449,13 @@ class LanguageModel(Model):
                     member.set_lang_ics()
 
     def get_lang_fam_members(self, family):
-        """ Find out lang of interaction btw family members in a 4-members family
+        """ Method to find out lang of interaction btw family members in a 4-members family
             Args:
                 * family: list of family agents
             Output:
-                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: list of integers
+                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: tuple of integers
         """
         # language between consorts
-
         consorts_lang_params = self.get_conv_params([family[0], family[1]])
         lang_consorts = consorts_lang_params['lang_group'][0]
 
@@ -442,32 +477,42 @@ class LanguageModel(Model):
 
     def add_new_agent_to_model(self, agent):
         """
-            Method to add a new agent instance to all relevant model entities
+            Method to add a new agent instance to all relevant model entities,
+            i.e. grid, schedule, network and clusters info
             Args:
                 * agent: agent class instance
             Output:
-                * Mehtod adds specified agent to grid, schedule, networks and clusters info
+                * Method adds specified agent to grid, schedule, networks and clusters info
         """
 
         # Add agent to grid, schedule, network and clusters info
         self.geo.add_agents_to_grid_and_schedule(agent)
         self.nws.add_ags_to_networks(agent)
-        home = agent.loc_info['home']
-        self.geo.clusters_info[home.clust]['agents'].append(agent)
+        self.geo.clusters_info[agent['clust']]['agents'].append(agent)
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """
-            Method to remove agent instance from locations in agent loc_info dict attribute
+            Method to remove agent instance from locations in agent 'loc_info' dict attribute
             Replacement by grown_agent will depend on self type
+            Args:
+                * agent: agent instance to be removed
+                * replace: boolean. True if agent has to replaced. Default False
+                * grown_agent: agent instance. It must be specified in case 'replace'
+                    is set to True
+                * upd_course: boolean. True if removal action is because of periodic updating
+                every academic year. Only applies to removal from school or university. Default False.
+            Output:
+                * agent removed from all instances it belonged to. If replace is set to True,
+                    agent is replaced in all locations by specified 'grown_agent'
         """
         # TODO : should it be a geomapping method ?
 
         # remove old instance from cluster (and replace with new one if requested)
         if replace:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust,
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].info['clust'],
                                              update_type='replace', grown_agent=grown_agent)
         else:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust)
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].info['clust'])
 
         # remove agent from all locations where it belongs to
         for key in agent.loc_info:
@@ -501,14 +546,15 @@ class LanguageModel(Model):
                         if isinstance(grown_agent, Pensioner):
                             school.remove_employee(agent)
                         else:
-                            school.remove_employee(agent, replace=replace,
-                                                   new_teacher=grown_agent)
+                            school.remove_employee(agent, replace=replace, new_teacher=grown_agent)
                     except TypeError:
                         pass
                 elif isinstance(agent, Adult):
+                    # if Adult, remove from job without replacement
                     job = agent.loc_info['job']
                     if job: job.remove_employee(agent)
                 elif isinstance(agent, Young):
+                    # if Young, remove from job with replacement
                     job = agent.loc_info['job']
                     if job: job.remove_employee(agent, replace=replace, new_agent=grown_agent)
             elif key == 'university':
