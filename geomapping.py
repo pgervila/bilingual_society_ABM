@@ -378,12 +378,9 @@ class GeoMapper:
             that hires teachers for all courses after grouping students
             by age
         """
-        # Loop over schools to assign teachers
+        # Loop over all model schools to assign teachers
         for clust_idx, clust_info in self.clusters_info.items():
             for school in clust_info['schools']:
-                # print('*****')
-                # print('{} is hiring'.format(school))
-                # print('*****')
                 school.set_up_courses()
 
         # check for model inconsistencies in school assignment

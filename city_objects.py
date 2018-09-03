@@ -110,8 +110,6 @@ class EducationCenter:
         else:
             # define empty set to update school groups
             updated_groups = {}
-            # define variable to store students from last year course( if there is such course )
-            exit_students = None
 
             for (c_id, course) in self.grouped_studs.items():
                 # If course_id is smaller than maximum allowed age in school, rearrange
@@ -227,7 +225,8 @@ class EducationCenter:
         return hired_teachers
 
     def check_teacher_old_job(self, teacher):
-        """ Method to check if an agent already had a job before
+        """
+            Method to check if an agent already had a job before
             being hired as a teacher. After identifying the job type,
             method removes agent from former job
             Args:
@@ -243,7 +242,6 @@ class EducationCenter:
                 else:
                     old_job = old_job[0][old_job[2]]
             if old_job and old_job is not self:
-                # print('remove {} from former job {}'.format(teacher, old_job))
                 old_job.remove_employee(teacher)
         except KeyError:
             pass
@@ -392,8 +390,9 @@ class EducationCenter:
                     or job market
         """
         course_key = student.loc_info[educ_center][1]
-        # after updating courses, leaving student is no longer amongst students in course
-        # thus remove from course only if not leaving school
+        # after updating courses every year, leaving students (for Univ or JobMarket) are no longer
+        # amongst students in course set and thus cannot be removed from it.
+        # Remove from course only if student has not left school
         if not upd_course:
             self[course_key]['students'].remove(student)
         student.loc_info[educ_center][1] = None
@@ -401,7 +400,7 @@ class EducationCenter:
             self[course_key]['students'].add(grown_agent)
             grown_agent.loc_info[educ_center][1] = course_key
 
-        # check if there are students left in course
+        # check if there are students left in course once student has left
         if not upd_course and not self[course_key]['students']:
             self.remove_course(course_key)
 
@@ -775,21 +774,26 @@ class Job:
 
     def look_for_employee(self, excluded_ag=None):
         """
-            Look for employee that meets requirements: lang policy and currently unemployed
+            Look for employee that meets requirements: lang policy, currently unemployed and with partner
+            able to move
             Args:
                 * excluded_ag: agent excluded from search
         """
 
         # look for suitable agents in any cluster
         for ag in set(self.model.schedule.agents).difference(set([excluded_ag])):
+            # avoid hiring of teachers
             if isinstance(ag, Young) and not isinstance(ag, (Teacher, Pensioner)):
-                # check agent knows right languages, is currently unemployed and not married to Teacher
+                # check agent knows right languages, is currently unemployed
                 if ag.info['language'] in self.info['lang_policy'] and not ag.loc_info['job']:
+                    # check candidate is not married to a teacher
                     if not isinstance(ag.get_family_relative('consort'), Teacher):
                         self.hire_employee(ag)
                         break
 
     def hire_employee(self, agent, move_home=True):
+        """ """
+        # first check if agent has to be removed from old job
         try:
             old_job = agent.loc_info['job']
             if old_job and old_job is not self:
@@ -802,7 +806,7 @@ class Job:
             self.info['employees'].add(agent)
             # move agent to new home closer to job if necessary (and requested)
             if move_home:
-                agent_clust = agent.loc_info['home'].info['clust']
+                agent_clust = agent['clust']
                 job_clust = self.info['clust']
                 if agent_clust != job_clust:
                     agent.move_to_new_home(marriage=False)

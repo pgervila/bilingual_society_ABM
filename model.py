@@ -60,7 +60,7 @@ class LanguageModel(Model):
     def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3,
-                 rand_seed=rand_seed, np_seed=np_seed):
+                 check_setup=False, rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
         if spoken_only:
@@ -76,8 +76,6 @@ class LanguageModel(Model):
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.seeds = [rand_seed, np_seed]
-        # set init mode while building the model
-        self.init_mode = True
 
         self.conv_length_age_factor = None
         self.death_prob_curve = None
@@ -93,6 +91,9 @@ class LanguageModel(Model):
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
         self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'init_conds', 'lang_spoken_ics_vs_step.h5'))
         self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'cdfs', 'lang_cdfs_vs_step.h5'))
+
+        # set init mode while building the model
+        self.init_mode = True
 
         # define model grid and schedule
         self.grid = MultiGrid(height, width, False)
@@ -119,6 +120,27 @@ class LanguageModel(Model):
 
         # switch to run mode once model initialization is completed
         self.init_mode = False
+        # check model setup if requested
+        if check_setup:
+            self.check_model_set_up()
+
+
+
+    def check_model_set_up(self):
+        # check some key configs in model are correct
+        for ag in self.schedule.agents:
+            if ag.info['age'] > 36:
+                if isinstance(ag, Young):
+                    if ag.loc_info['job']:
+                        if isinstance(ag, Teacher):
+                            assert ag['clust'] == ag.loc_info['job'][0].info['clust']
+                        else:
+                            assert ag['clust'] == ag.loc_info['job'].info['clust']
+                else:
+                    if ag.loc_info['school']:
+                        assert ag['clust'] == ag.loc_info['school'][0].info['clust']
+        print('Model is correctly set')
+
 
     def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,
                                    exp_mult=400):

@@ -228,13 +228,15 @@ class BaseAgent:
 
     def evolve(self, new_class, ret_output=False, upd_course=False):
         """ It replaces current agent with a new agent subclass instance.
-            It removes current instance from all networks, lists, sets in model and adds new instance
-            to them instead.
+            It removes current instance from all networks, lists, sets in model and
+            replaces it with the new_class instance.
             Args:
                 * new_class: class. Agent subclass that will replace the current one
                 * ret_ouput: boolean. True if grown_agent needs to be returned as output
-                * upd_course: boolean
+                * upd_course: boolean. True if evolution involves agent quitting school or univ.
+                    Default False
         """
+        # create new_agent instance
         grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
 
         # copy all current instance attributes to the new agent instance
@@ -256,7 +258,6 @@ class BaseAgent:
         self.model.grid.place_agent(grown_agent, self.pos)
         # replace agent in schedule
         self.model.schedule.replace_agent(self, grown_agent)
-
         # remove and replace agent from ALL locations where it belongs to
         self.model.remove_from_locations(self, replace=True,
                                          grown_agent=grown_agent, upd_course=upd_course)
@@ -1246,11 +1247,11 @@ class Young(IndepAgent):
             must have a sufficiently high knowledge of common language
 
              Args:
-                 * avg_years: integer. Years on average to get a partner ( expressed in years)
+                 * avg_years: integer. Years on average to get a partner (expressed in years)
                  * max_age_diff: integer. Max difference in years between partners to get married
                  * thresh_comm_lang: float. Minimum required knowledge of common lang by each agent
         """
-        # first check luck ( once every 10 years on average )
+        # first check luck
         if random.random() < 1 / (avg_years * self.model.steps_per_year):
             # find suitable partner amongst known people
             for ag in self.model.nws.known_people_network[self]:
@@ -1332,7 +1333,7 @@ class Young(IndepAgent):
             Args:
                 * keep_cluster: boolean. If True, job search will be limited to agent's current cluster
                     Otherwise, all clusters might be searched. It defaults to False
-                * move_home: boolean.
+                * move_home: boolean. True if moving to a new home is allowed
             Output:
                 * If job lang constraints allow it, it assigns a new job to agent
         """
@@ -1342,7 +1343,7 @@ class Young(IndepAgent):
             job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
             if job.num_places:
                 job.hire_employee(self, move_home=move_home)
-                # if hiring was unsuccesful, we know it was because of lang reasons
+                # if hiring is unsuccessful, we know it is because of lang reasons
                 if not self.loc_info['job']:
                     lang = 'L2' if self.info['language'] == 0 else 'L1'
                     self.react_to_lang_exclusion(lang)
