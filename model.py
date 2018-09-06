@@ -31,11 +31,11 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 3021
+#rand_seed = 1362
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 3746
+#np_seed = 2084
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -603,11 +603,11 @@ class LanguageModel(Model):
                 network.remove_node(agent)
             except nx.NetworkXError:
                 continue
-        # remove agent from all locations where it belonged to
-        self.remove_from_locations(agent)
         # remove agent from grid and schedule
         self.grid._remove_agent(agent.pos, agent)
         self.schedule.remove(agent)
+        # remove agent from all locations where it belonged to
+        self.remove_from_locations(agent)
         # make id from deceased agent available
         self.set_available_ids.add(agent.unique_id)
 

@@ -16,7 +16,7 @@ print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 # set random seed
 np_seed = np.random.randint(10000)
-#np_seed = 8380
+#np_seed = 9652
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
@@ -227,6 +227,7 @@ def test_teacher_death(model):
     ck = list(school.grouped_studs.keys())[0]
     teacher = school[ck]['teacher']
     assert len([t for t in school.info['employees'] if t.loc_info['job'][1] == ck]) == 1
+
     model.remove_after_death(teacher)
 
     assert sys.getrefcount(teacher) == 2

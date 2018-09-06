@@ -13,7 +13,7 @@ from agent import Baby, Child, Adolescent, Young, YoungUniv, Adult, Teacher, Tea
 from model import LanguageModel
 
 np_seed = np.random.randint(10000)
-#np_seed = 3553
+#np_seed = 1454
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
@@ -112,8 +112,9 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         school.assign_teacher(old_ag, ckey)
     else:
         ag_id = model.set_available_ids.pop()
+
         old_ag = origin_class(model, ag_id, 0, 'M', age=100, home=city_places['home'],
-                              **{labels[0]:city_places[labels[0]]})
+                              **{labels[0]: city_places[labels[0]]})
         add_ag_to_world(model, city_places, old_ag)
     
     city_places['home'].agents_in.add(old_ag)
@@ -158,13 +159,13 @@ def test_move_to_new_home(model, job1, job2, j2_teach):
     new_ags_age = 1200
 
     consort1 = Young(model, new_ags_ids[0],
-                     0, 'M', age=new_ags_age, home=h1, job=j1)
+                     1, 'M', age=new_ags_age, home=h1, job=j1)
     if j2_teach:
         # TODO: TO BE FIXED
         sc1 = model.geo.clusters_info[0]['schools'][0]
-        consort2 = Teacher(model, new_ags_ids[1], 0, 'F', age=new_ags_age, home=h2, job=j2)
+        consort2 = Teacher(model, new_ags_ids[1], 1, 'F', age=new_ags_age, home=h2, job=j2)
     else:
-        consort2 = Young(model, new_ags_ids[1], 0, 'F', age=new_ags_age, home=h2, job=j2)
+        consort2 = Young(model, new_ags_ids[1], 1, 'F', age=new_ags_age, home=h2, job=j2)
     
     ags = [consort1, consort2]
     # add agents to model entities

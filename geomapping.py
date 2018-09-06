@@ -339,7 +339,7 @@ class GeoMapper:
                 clust_info['agents'].extend(family_agents)
                 self.add_agents_to_grid_and_schedule(family_agents)
 
-                # assign job to parents
+                # assign job in current cluster to parents, without moving to a new home
                 for parent in family_agents[:2]:
                     parent.get_job(keep_cluster=True, move_home=False)
 

@@ -1210,10 +1210,9 @@ class Young(IndepAgent):
         super().__init__(*args, **kwargs)
         self.info['married'] = married
         self.info['num_children'] = num_children
+        self.loc_info['job'] = None
         if job:
             job.hire_employee(self)
-        else:
-            self.loc_info['job'] = job
 
     def check_partner(self, cand_agent, max_age_diff=10, thresh_comm_lang=0.3):
         """ Check conditions that must be satisfied in order to get married """
@@ -1329,7 +1328,8 @@ class Young(IndepAgent):
 
     def get_job(self, keep_cluster=False, move_home=True):
         """
-            Assign agent to a random job unless job market linguistic constraints do not make it possible
+            Assign agent to a random job unless either personal or linguistic constraints
+            do not make it possible
             Args:
                 * keep_cluster: boolean. If True, job search will be limited to agent's current cluster
                     Otherwise, all clusters might be searched. It defaults to False
@@ -1337,16 +1337,14 @@ class Young(IndepAgent):
             Output:
                 * If job lang constraints allow it, it assigns a new job to agent
         """
+        # TODO: break while loop to avoid infinite looping
+
         job_clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # pick a job from chosen cluster
         while True:
             job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
-            if job.num_places:
+            if job.num_places and job.check_cand_conds(self, keep_cluster=keep_cluster):
                 job.hire_employee(self, move_home=move_home)
-                # if hiring is unsuccessful, we know it is because of lang reasons
-                if not self.loc_info['job']:
-                    lang = 'L2' if self.info['language'] == 0 else 'L1'
-                    self.react_to_lang_exclusion(lang)
                 break
 
     def move_to_new_home(self, marriage=True):
@@ -1492,6 +1490,7 @@ class Young(IndepAgent):
         if not self.loc_info['job']:
             self.get_job()
         else:
+            self.info['job_steps'] += 1
             self.go_to_job()
             job = self.loc_info['job']
             self.speak_to_customer(num_days=3)
