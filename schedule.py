@@ -1,12 +1,17 @@
 # import os, sys
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from mesa.time import StagedActivation
-from agent import IndepAgent, Young
-
+import random
 import numpy as np
 import networkx as nx
-import random
+
+from sklearn.preprocessing import normalize
+import warnings
+from sklearn.utils import DataConversionWarning
+warnings.filterwarnings("ignore", category=DataConversionWarning)
+
+from mesa.time import StagedActivation
+from agent import IndepAgent, Young
 
 
 class StagedActivationModif(StagedActivation):
@@ -47,12 +52,14 @@ class StagedActivationModif(StagedActivation):
         # basic IDEA: network adj matrices will be fixed through all stages of one step
         # compute adjacent matrices for family and friends
         Fam_Graph = nx.adjacency_matrix(self.model.nws.family_network,
-                                        nodelist=self.agents).toarray()
-        self.model.nws.adj_mat_fam_nw = np.nan_to_num(Fam_Graph / Fam_Graph.sum(axis=1, keepdims=True))
+                                        nodelist=self.agents)#.toarray()
+        # self.model.nws.adj_mat_fam_nw = np.nan_to_num(Fam_Graph / Fam_Graph.sum(axis=1, keepdims=True))
+        self.model.nws.adj_mat_fam_nw = normalize(Fam_Graph, norm='l1', axis=1)
 
         Friend_Graph = nx.adjacency_matrix(self.model.nws.friendship_network,
-                                           nodelist=self.agents).toarray()
-        self.model.nws.adj_mat_friend_nw = np.nan_to_num(Friend_Graph / Friend_Graph.sum(axis=1, keepdims=True))
+                                           nodelist=self.agents)#.toarray()
+        #self.model.nws.adj_mat_friend_nw = np.nan_to_num(Friend_Graph / Friend_Graph.sum(axis=1, keepdims=True))
+        self.model.nws.adj_mat_friend_nw = normalize(Friend_Graph, norm='l1', axis=1)
 
         for stage in self.stage_list:
             for ix_ag, ag in enumerate(self.agents):

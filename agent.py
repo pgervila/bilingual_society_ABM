@@ -898,11 +898,17 @@ class IndepAgent(SpeakerAgent):
         # get current agent neighboring nodes ids
         adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
         # get agents ids and probs
-        ags_ids = np.nonzero(adj_mat)[0]
-        probs = adj_mat[ags_ids]
-        if ags_ids.size:
-            picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
+        if adj_mat.data.size:
+            ix = np.random.choice(adj_mat.indices, p=adj_mat.data)
+            picked_agent = self.model.schedule.agents[ix]
             return picked_agent
+
+        #
+        # ags_ids = np.nonzero(adj_mat)[0]
+        # probs = adj_mat[ags_ids]
+        # if ags_ids.size:
+        #     picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
+        #     return picked_agent
 
     def speak_to_random_friend(self, ix_agent, num_days):
         """ Method to speak to a randomly chosen friend
@@ -1335,17 +1341,15 @@ class Young(IndepAgent):
                     Otherwise, all clusters might be searched. It defaults to False
                 * move_home: boolean. True if moving to a new home is allowed
             Output:
-                * If job lang constraints allow it, it assigns a new job to agent
+                * If constraints allow it, method assigns a new job to agent
         """
         # TODO: break while loop to avoid infinite looping
 
         job_clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # pick a job from chosen cluster
-        while True:
-            job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
-            if job.num_places and job.check_cand_conds(self, keep_cluster=keep_cluster):
-                job.hire_employee(self, move_home=move_home)
-                break
+        job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
+        if job.num_places and job.check_cand_conds(self, keep_cluster=keep_cluster):
+            job.hire_employee(self, move_home=move_home)
 
     def move_to_new_home(self, marriage=True):
         """
