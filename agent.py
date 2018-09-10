@@ -334,15 +334,17 @@ class ListenerAgent(BaseAgent):
                     A step equals 10 days.
         """
         if not to_agent:
-            # get all agents currently placed on chosen cell
             # TODO: agents should know each other
-            others = self.model.grid.get_cell_list_contents(self.pos)
+            # get all non-Baby agents currently placed on chosen cell
+            x, y = self.pos
+            others = {ag for ag in self.model.grid[x][y] if type(ag) != Baby}
             others.remove(self)
             # if two or more agents in cell, conversation is possible
             if len(others) >= 2:
-                ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+                conv_ags = np.random.choice(list(others), size=2, replace=False)
                 # call run conversation with bystander
-                self.model.run_conversation(ag_1, ag_2, bystander=self, def_conv_length='VS')
+                self.model.run_conversation(conv_ags[0], conv_ags[1],
+                                            bystander=self, def_conv_length='VS')
         else:
             # make other agent speak and 'self' agent get the listened vocab
             if self in self.model.nws.known_people_network[to_agent]:

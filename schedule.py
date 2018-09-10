@@ -103,13 +103,6 @@ class StagedActivationModif(StagedActivation):
 
         self.steps += 1
 
-    # @staticmethod
-    # def check_ags_lang_change(l_init, l_post):
-    #     init_lang_labels = set([(ag.unique_id, ag.info['language']) for ag in l_init])
-    #     post_lang_labels = set([(ag.unique_id, ag.info['language']) for ag in l_post])
-    #
-    #     return post_lang_labels.difference(init_lang_labels)
-
     def replace_agent(self, old_agent, new_agent):
         ix_in_schedule = self.model.schedule.agents.index(old_agent)
         self.model.schedule.remove(old_agent)

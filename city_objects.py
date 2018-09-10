@@ -799,10 +799,14 @@ class Job:
                     if consort:
                         consort_is_teacher = isinstance(consort, Teacher)
                         if not consort_is_teacher:
-                            consort_employm_conds = (not consort.loc_info['job'] or
-                                                     consort.info['job_steps'] > min_num_job_steps)
-                            if consort_employm_conds:
+                            try:
+                                consort_employm_conds = (not consort.loc_info['job'] or
+                                                         consort.info['job_steps'] > min_num_job_steps)
+                                if consort_employm_conds:
+                                    return True
+                            except KeyError:
                                 return True
+
                     else:
                         return True
 
