@@ -1055,7 +1055,7 @@ class Baby(ListenerAgent):
             if parents and school_parent:
                 num_peop = random.randint(1, min(len(parents), 4))
                 self.model.run_conversation(school_parent, random.sample(parents, num_peop))
-            school.agents_in.remove(self)
+            school.remove_agent_in(self)
 
         # TODO : pick random friends from parents. Set up meeting with them
 
@@ -1117,7 +1117,7 @@ class Child(SchoolAgent):
         if parents and school_parent:
             num_peop = random.randint(1, min(len(parents), 4))
             self.model.run_conversation(school_parent, random.sample(parents, num_peop))
-        school.agents_in.remove(self)
+        school.remove_agent_in(self)
 
     def stage_4(self, num_days=10):
         self.go_back_home()
@@ -1184,7 +1184,7 @@ class Adolescent(IndepAgent, SchoolAgent):
     def stage_3(self, ix_agent, num_days=7):
         school, course_key = self.get_school_and_course()
         self.speak_at_school(school, course_key, num_days=num_days)
-        school.agents_in.remove(self)
+        school.remove_agent_in(self)
         if school.info['lang_policy'] == [0, 1]:
             self.study_vocab('L1', num_words=50)
             self.study_vocab('L2', num_words=25)
@@ -1264,7 +1264,7 @@ class Young(IndepAgent):
             for ag in self.model.nws.known_people_network[self]:
                 if self.check_partner(ag, max_age_diff=max_age_diff,
                                       thresh_comm_lang=thresh_comm_lang):
-                    self.get_married()
+                    self.get_married(ag)
                     break
 
     def get_married(self, ag):

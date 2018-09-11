@@ -849,8 +849,9 @@ class Job:
         # hire agent
         if agent.info['language'] in self.info['lang_policy']:
             self.num_places -= 1
-            agent.loc_info['job'] = self
             self.info['employees'].add(agent)
+            # assign job to agent
+            agent.loc_info['job'] = self
             # reset job seniority steps counter
             agent.info['job_steps'] = 0
 

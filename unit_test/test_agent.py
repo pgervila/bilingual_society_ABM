@@ -265,6 +265,12 @@ def test_update_words_memory(model, dummy_agent, sample_words, mode_type):
         assert np.all(agent.lang_stats[lang_label]['S'][act] > S_init)
         assert np.all(agent.lang_stats[lang_label]['t'][act] <= t_init)
 
+
+def test_look_for_partner(model):
+    pass
+
+
+
 # @pytest.mark.parametrize("long", test_data_vocab_choice_model)
 # def test_vocab_choice_model(model, long):
 #     agent = model.schedule.agents[0]
