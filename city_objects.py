@@ -317,7 +317,7 @@ class EducationCenter:
                             if ag.info['married'] and type(ag.get_family_relative('consort')) != Teacher]
             # filter out agents that are currently being hired in a given school by using ag 'blocked' attribute
             # it is possible that because of cascading in school jobs when families move after a consort is hired,->
-            # a school hires an agent that is in the process of being hired by another school ( in the set queue)
+            # a school hires an agent that is in the process of being hired by another school (in the set queue)
 
             new_teachers[:] = [ag for ag in new_teachers if not hasattr(ag, 'blocked')]
 
@@ -824,7 +824,7 @@ class Job:
         # TODO: limit number of iterations per step and shuffle agents !!!!
         for ag in set(self.model.schedule.agents).difference(set([excluded_ag])):
             keep_cluster = True if ag['clust'] == self.info['clust'] else False
-            if self.check_cand_conds(ag, keep_cluster=keep_cluster):
+            if self.check_cand_conds(ag, keep_cluster=keep_cluster) and not hasattr(ag, 'blocked'):
                 self.hire_employee(ag)
                 break
 
@@ -832,13 +832,17 @@ class Job:
         """
             Method to remove agent from former employment (if any) and hire it
             into a new one. Method checks that job's language policy is compatible
-            with agent language knowledge. If hiring is unsuccesful, agent reacts
+            with agent language knowledge. If hiring is unsuccessful, agent reacts
             to the linguistic exclusion
             Args:
                 * agent: agent instance. Defines agent that will be hired
                 * move_home: boolean. True if agent is allowed to move home
         """
-        # first check if agent has to be removed from old job
+        # First prevent agent from being hired by other companies
+        # during hiring cascade after removal from current company
+        agent.blocked = True
+
+        # Check if agent has to be removed from old job
         try:
             old_job = agent.loc_info['job']
             if old_job and old_job is not self:
@@ -866,6 +870,10 @@ class Job:
         if not agent.loc_info['job']:
             lang = 'L2' if agent.info['language'] == 0 else 'L1'
             agent.react_to_lang_exclusion(lang)
+
+        # free agent from temporary hiring block
+        del agent.blocked
+
 
     def remove_employee(self, agent, replace=None, new_agent=None):
         self.num_places += 1

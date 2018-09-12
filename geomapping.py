@@ -169,11 +169,12 @@ class GeoMapper:
         return x_coords, y_coords
 
     def map_jobs(self, min_places=2, max_places=200):
-        """ Generates job centers coordinates and num places per center
+        """
+            Generates job centers coordinates and num places per center
             Instantiates job objects
-        Args:
-            * min_places: integer. Minimum number of places for each job center
-            * max_places: integer. Maximum number of places for each job center
+            Args:
+                * min_places: integer. Minimum number of places for each job center
+                * max_places: integer. Maximum number of places for each job center
         """
         # iterate to generate job center coordinates
 

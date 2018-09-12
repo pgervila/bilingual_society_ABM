@@ -1472,7 +1472,14 @@ class Young(IndepAgent):
                     child.register_to_school()
 
     def go_to_job(self):
-        self.model.grid.move_agent(self, self.loc_info['job'].pos)
+        """
+            Method to move agent to job cell coordinates and add agent to
+            agents currently in office
+        """
+        job = self.loc_info['job']
+        if self not in job.agents_in:
+            self.model.grid.move_agent(self, self.loc_info['job'].pos)
+            job.agents_in.add(self)
 
     def meet_family(self):
         """
