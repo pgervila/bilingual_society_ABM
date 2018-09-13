@@ -28,7 +28,7 @@ class DataProcessor(DataCollector):
                                           "age": lambda a: a.info['age'],
                                           "language": lambda a: a.info['language'],
                                           "excl_c": lambda a: a.lang_stats['L1']['excl_c'][a.info['age']] if a.info['language'] == 2 else a.lang_stats['L2']['excl_c'][a.info['age']],
-                                          "clust_id": lambda a: a.loc_info['home'].clust,
+                                          "clust_id": lambda a: a.loc_info['home'].info['clust'],
                                           "agent_type": lambda a: type(a).__name__,
                                           "num_conv_step": lambda a: a.call_cnts_final - a.call_cnts_init
                                           }

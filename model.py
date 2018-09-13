@@ -31,11 +31,11 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 3021
+#rand_seed = 971
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 3746
+#np_seed = 5027
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -123,8 +123,6 @@ class LanguageModel(Model):
         # check model setup if requested
         if check_setup:
             self.check_model_set_up()
-
-
 
     def check_model_set_up(self):
         # check some key configs in model are correct
@@ -256,7 +254,6 @@ class LanguageModel(Model):
         if self.schedule.steps >=1:
             for ag in ags:
                 ag.call_cnts += 1
-
 
         # get all parameters of conversation
         conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
@@ -518,7 +515,7 @@ class LanguageModel(Model):
             Replacement by grown_agent will depend on self type
             Args:
                 * agent: agent instance to be removed
-                * replace: boolean. True if agent has to replaced. Default False
+                * replace: boolean. True if agent has to be replaced. Default False
                 * grown_agent: agent instance. It must be specified in case 'replace'
                     is set to True
                 * upd_course: boolean. True if removal action is because of periodic updating
@@ -603,11 +600,11 @@ class LanguageModel(Model):
                 network.remove_node(agent)
             except nx.NetworkXError:
                 continue
-        # remove agent from all locations where it belonged to
-        self.remove_from_locations(agent)
         # remove agent from grid and schedule
         self.grid._remove_agent(agent.pos, agent)
         self.schedule.remove(agent)
+        # remove agent from all locations where it belonged to
+        self.remove_from_locations(agent)
         # make id from deceased agent available
         self.set_available_ids.add(agent.unique_id)
 

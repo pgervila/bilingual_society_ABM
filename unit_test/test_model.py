@@ -10,19 +10,22 @@ import agent
 import model
 reload(agent)
 reload(model)
-from agent import Adolescent, Adult, Teacher
+from agent import Adolescent, Young, Adult, Teacher
 from model import LanguageModel
 from city_objects import Job, School
+
 
 @pytest.fixture(scope="module")
 def model():
     return LanguageModel(100, num_clusters=1)
 
-@pytest.fixture(scope="module", params=[(50, 3), (50, 2), (197, 5), (1000, 15)])
+
+@pytest.fixture(scope="module", params=[(457, 3), (521, 2), (897, 5), (1501, 6)])
 def model_param(request):
     return LanguageModel(request.param[0], num_clusters=request.param[1])
 
 # define cases to test => Inputs and optionally expected results
+
 
 test_data_comp_cl_centers = [(10, 0.2), (20, 0.1), (26, 0.2)]
 
@@ -52,6 +55,23 @@ test_data_remove_after_death = [Teacher, Adult, Adolescent]
 
 test_data_remove_from_locations = [False, True]
 
+
+def test_model_consistency(model_param):
+    """ Check that all agents live in the same
+        cluster as that of their occupation """
+    for ag in model_param.schedule.agents:
+        if ag.info['age'] > 36:
+            if isinstance(ag, Young):
+                if ag.loc_info['job']:
+                    if isinstance(ag, Teacher):
+                        assert ag['clust'] == ag.loc_info['job'][0].info['clust']
+                    else:
+                        assert ag['clust'] == ag.loc_info['job'].info['clust']
+            else:
+                if ag.loc_info['school']:
+                    assert ag['clust'] == ag.loc_info['school'][0].info['clust']
+
+
 @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", 
                          test_data_get_conv_params)
 def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected): 
@@ -63,13 +83,7 @@ def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected):
     if delete_edges:
         model.nws.known_people_network.remove_edges_from(model.nws.known_people_network.edges())
 
-    # # ####
-    # if langs == [0, 1, 2] and pcts_2 == [0.04, 0.5, 0.5]:
-    #     import pdb; pdb.set_trace()
-    # # #####
-
     params = model.get_conv_params(agents)
-    
     assert np.all(expected == (params['lang_group'], params['mute_type']))
 
 
@@ -89,8 +103,3 @@ def test_remove_from_locations(model, replace):
     # for ag in model.schedule.agents:
     #     if isinstance(ag, corr_dict[agent_type]):
     #         pass # TODO
-            
-            
-        
-    
-    

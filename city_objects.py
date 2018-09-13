@@ -317,7 +317,7 @@ class EducationCenter:
                             if ag.info['married'] and type(ag.get_family_relative('consort')) != Teacher]
             # filter out agents that are currently being hired in a given school by using ag 'blocked' attribute
             # it is possible that because of cascading in school jobs when families move after a consort is hired,->
-            # a school hires an agent that is in the process of being hired by another school ( in the set queue)
+            # a school hires an agent that is in the process of being hired by another school (in the set queue)
 
             new_teachers[:] = [ag for ag in new_teachers if not hasattr(ag, 'blocked')]
 
@@ -731,6 +731,7 @@ class University:
 class Job:
     """ class that defines a Job object.
         Args:
+            * model: object instance. Instance of LanguageModel class the Job instance refers to
             * clust: integer. Index of cluster where job object is found
             * pos: 2-D integer tuple. Job location on grid
             * num_places: integer. Num of available job offers.
@@ -772,48 +773,121 @@ class Job:
         else:
             self.info['lang_policy'] = lang_policy
 
-    def look_for_employee(self, excluded_ag=None):
+    def check_cand_conds(self, agent, keep_cluster=False, job_steps_years=3):
+        """
+            Method to check that family constraints and current job seniority
+            are compatible with job hiring
+            Args:
+                * agent: instance.
+                * job_steps_years: integer. Number of years of seniority in current job before being allowed to
+                    move to a new job in another cluster
+            Output:
+                * True if checking is satisfactory, None otherwise
+        """
+        # define minimum number of job steps to be allowed to move
+        min_num_job_steps = (self.model.steps_per_year * job_steps_years
+                             if not keep_cluster else self.model.steps_per_year)
+        # avoid hiring of teachers
+        if isinstance(agent, Young) and not isinstance(agent, (Teacher, Pensioner)):
+            # check agent is either currently unemployed or employed for enough time
+            employm_conds = not agent.loc_info['job'] or agent.info['job_steps'] > min_num_job_steps
+            if employm_conds:
+                if keep_cluster:
+                    return True
+                else:
+                    consort = agent.get_family_relative('consort')
+                    if consort:
+                        consort_is_teacher = isinstance(consort, Teacher)
+                        if not consort_is_teacher:
+                            try:
+                                consort_employm_conds = (not consort.loc_info['job'] or
+                                                         consort.info['job_steps'] > min_num_job_steps)
+                                if consort_employm_conds:
+                                    return True
+                            except KeyError:
+                                return True
+
+                    else:
+                        return True
+
+    def look_for_employee(self, excluded_ag=None, all_clusters=False):
         """
             Look for employee that meets requirements: lang policy, currently unemployed and with partner
             able to move
             Args:
                 * excluded_ag: agent excluded from search
+                * all_clusters: boolean. If False, limit search to current cluster. If True,
+                    extend search to all clusters. Default False.
+            Output:
+                * If an appropriate candidate is found, a new employee is assigned to the job instance.
+                    Otherwise no modification occurs
         """
+        if not all_clusters:
+            agents_pool = self.model.geo.clusters_info[self.info['clust']]['agents']
+        else:
+            agents_pool = self.model.schedule.agents
+        search_set = {ag for ag in agents_pool if isinstance(ag, Young) and not isinstance(ag, Pensioner)}
+        search_set = search_set.difference(set([excluded_ag]))
 
         # look for suitable agents in any cluster
-        for ag in set(self.model.schedule.agents).difference(set([excluded_ag])):
-            # avoid hiring of teachers
-            if isinstance(ag, Young) and not isinstance(ag, (Teacher, Pensioner)):
-                # check agent knows right languages, is currently unemployed
-                if ag.info['language'] in self.info['lang_policy'] and not ag.loc_info['job']:
-                    # check candidate is not married to a teacher
-                    if not isinstance(ag.get_family_relative('consort'), Teacher):
-                        self.hire_employee(ag)
-                        break
+        # TODO: limit number of iterations per step and shuffle agents !!!!
+
+        for ag in search_set:
+            keep_cluster = True if ag['clust'] == self.info['clust'] else False
+            if self.check_cand_conds(ag, keep_cluster=keep_cluster) and not hasattr(ag, 'blocked'):
+                self.hire_employee(ag)
+                break
 
     def hire_employee(self, agent, move_home=True):
-        """ """
-        # first check if agent has to be removed from old job
+        """
+            Method to remove agent from former employment (if any) and hire it
+            into a new one. Method checks that job's language policy is compatible
+            with agent language knowledge. If hiring is unsuccessful, agent reacts
+            to the linguistic exclusion
+            Args:
+                * agent: agent instance. Defines agent that will be hired
+                * move_home: boolean. True if agent is allowed to move home
+        """
+        # First prevent agent from being hired by other companies
+        # during hiring cascade after removal from current company
+        agent.blocked = True
+
+        # Check if agent has to be removed from old job
         try:
             old_job = agent.loc_info['job']
             if old_job and old_job is not self:
                 old_job.remove_employee(agent)
         except KeyError:
             pass
+
+        # hire agent
         if agent.info['language'] in self.info['lang_policy']:
             self.num_places -= 1
-            agent.loc_info['job'] = self
             self.info['employees'].add(agent)
+            # assign job to agent
+            agent.loc_info['job'] = self
+            # reset job seniority steps counter
+            agent.info['job_steps'] = 0
+
             # move agent to new home closer to job if necessary (and requested)
             if move_home:
                 agent_clust = agent['clust']
                 job_clust = self.info['clust']
                 if agent_clust != job_clust:
                     agent.move_to_new_home(marriage=False)
-    # TODO : update workers by department and send them to retirement when age reached
+
+        # if hiring is unsuccessful, we know it is because of lang reasons
+        if not agent.loc_info['job']:
+            lang = 'L2' if agent.info['language'] == 0 else 'L1'
+            agent.react_to_lang_exclusion(lang)
+
+        # free agent from temporary hiring block
+        del agent.blocked
+
 
     def remove_employee(self, agent, replace=None, new_agent=None):
         self.num_places += 1
+        # remove all agent's links to job
         self.info['employees'].remove(agent)
         agent.loc_info['job'] = None
         if agent in self.agents_in:
@@ -823,6 +897,7 @@ class Job:
             self.info['employees'].add(new_agent)
             new_agent.loc_info['job'] = self
         else:
+            del agent.info['job_steps']
             if not self.model.init_mode:
                 self.look_for_employee(excluded_ag=agent)
 

@@ -169,11 +169,12 @@ class GeoMapper:
         return x_coords, y_coords
 
     def map_jobs(self, min_places=2, max_places=200):
-        """ Generates job centers coordinates and num places per center
+        """
+            Generates job centers coordinates and num places per center
             Instantiates job objects
-        Args:
-            * min_places: integer. Minimum number of places for each job center
-            * max_places: integer. Maximum number of places for each job center
+            Args:
+                * min_places: integer. Minimum number of places for each job center
+                * max_places: integer. Maximum number of places for each job center
         """
         # iterate to generate job center coordinates
 
@@ -339,7 +340,7 @@ class GeoMapper:
                 clust_info['agents'].extend(family_agents)
                 self.add_agents_to_grid_and_schedule(family_agents)
 
-                # assign job to parents
+                # assign job in current cluster to parents, without moving to a new home
                 for parent in family_agents[:2]:
                     parent.get_job(keep_cluster=True, move_home=False)
 

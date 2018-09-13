@@ -334,15 +334,17 @@ class ListenerAgent(BaseAgent):
                     A step equals 10 days.
         """
         if not to_agent:
-            # get all agents currently placed on chosen cell
             # TODO: agents should know each other
-            others = self.model.grid.get_cell_list_contents(self.pos)
+            # get all non-Baby agents currently placed on chosen cell
+            x, y = self.pos
+            others = {ag for ag in self.model.grid[x][y] if type(ag) != Baby}
             others.remove(self)
             # if two or more agents in cell, conversation is possible
             if len(others) >= 2:
-                ag_1, ag_2 = np.random.choice(others, size=2, replace=False)
+                conv_ags = np.random.choice(list(others), size=2, replace=False)
                 # call run conversation with bystander
-                self.model.run_conversation(ag_1, ag_2, bystander=self, def_conv_length='VS')
+                self.model.run_conversation(conv_ags[0], conv_ags[1],
+                                            bystander=self, def_conv_length='VS')
         else:
             # make other agent speak and 'self' agent get the listened vocab
             if self in self.model.nws.known_people_network[to_agent]:
@@ -898,11 +900,17 @@ class IndepAgent(SpeakerAgent):
         # get current agent neighboring nodes ids
         adj_mat = self.model.nws.adj_mat_friend_nw[ix_agent]
         # get agents ids and probs
-        ags_ids = np.nonzero(adj_mat)[0]
-        probs = adj_mat[ags_ids]
-        if ags_ids.size:
-            picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
+        if adj_mat.data.size:
+            ix = np.random.choice(adj_mat.indices, p=adj_mat.data)
+            picked_agent = self.model.schedule.agents[ix]
             return picked_agent
+
+        #
+        # ags_ids = np.nonzero(adj_mat)[0]
+        # probs = adj_mat[ags_ids]
+        # if ags_ids.size:
+        #     picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
+        #     return picked_agent
 
     def speak_to_random_friend(self, ix_agent, num_days):
         """ Method to speak to a randomly chosen friend
@@ -1047,7 +1055,7 @@ class Baby(ListenerAgent):
             if parents and school_parent:
                 num_peop = random.randint(1, min(len(parents), 4))
                 self.model.run_conversation(school_parent, random.sample(parents, num_peop))
-            school.agents_in.remove(self)
+            school.remove_agent_in(self)
 
         # TODO : pick random friends from parents. Set up meeting with them
 
@@ -1109,7 +1117,7 @@ class Child(SchoolAgent):
         if parents and school_parent:
             num_peop = random.randint(1, min(len(parents), 4))
             self.model.run_conversation(school_parent, random.sample(parents, num_peop))
-        school.agents_in.remove(self)
+        school.remove_agent_in(self)
 
     def stage_4(self, num_days=10):
         self.go_back_home()
@@ -1176,7 +1184,7 @@ class Adolescent(IndepAgent, SchoolAgent):
     def stage_3(self, ix_agent, num_days=7):
         school, course_key = self.get_school_and_course()
         self.speak_at_school(school, course_key, num_days=num_days)
-        school.agents_in.remove(self)
+        school.remove_agent_in(self)
         if school.info['lang_policy'] == [0, 1]:
             self.study_vocab('L1', num_words=50)
             self.study_vocab('L2', num_words=25)
@@ -1210,10 +1218,9 @@ class Young(IndepAgent):
         super().__init__(*args, **kwargs)
         self.info['married'] = married
         self.info['num_children'] = num_children
+        self.loc_info['job'] = None
         if job:
             job.hire_employee(self)
-        else:
-            self.loc_info['job'] = job
 
     def check_partner(self, cand_agent, max_age_diff=10, thresh_comm_lang=0.3):
         """ Check conditions that must be satisfied in order to get married """
@@ -1257,7 +1264,7 @@ class Young(IndepAgent):
             for ag in self.model.nws.known_people_network[self]:
                 if self.check_partner(ag, max_age_diff=max_age_diff,
                                       thresh_comm_lang=thresh_comm_lang):
-                    self.get_married()
+                    self.get_married(ag)
                     break
 
     def get_married(self, ag):
@@ -1329,25 +1336,22 @@ class Young(IndepAgent):
 
     def get_job(self, keep_cluster=False, move_home=True):
         """
-            Assign agent to a random job unless job market linguistic constraints do not make it possible
+            Assign agent to a random job unless either personal or linguistic constraints
+            do not make it possible
             Args:
                 * keep_cluster: boolean. If True, job search will be limited to agent's current cluster
                     Otherwise, all clusters might be searched. It defaults to False
                 * move_home: boolean. True if moving to a new home is allowed
             Output:
-                * If job lang constraints allow it, it assigns a new job to agent
+                * If constraints allow it, method assigns a new job to agent
         """
+        # TODO: break while loop to avoid infinite looping
+
         job_clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # pick a job from chosen cluster
-        while True:
-            job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
-            if job.num_places:
-                job.hire_employee(self, move_home=move_home)
-                # if hiring is unsuccessful, we know it is because of lang reasons
-                if not self.loc_info['job']:
-                    lang = 'L2' if self.info['language'] == 0 else 'L1'
-                    self.react_to_lang_exclusion(lang)
-                break
+        job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
+        if job.num_places and job.check_cand_conds(self, keep_cluster=keep_cluster):
+            job.hire_employee(self, move_home=move_home)
 
     def move_to_new_home(self, marriage=True):
         """
@@ -1468,7 +1472,14 @@ class Young(IndepAgent):
                     child.register_to_school()
 
     def go_to_job(self):
-        self.model.grid.move_agent(self, self.loc_info['job'].pos)
+        """
+            Method to move agent to job cell coordinates and add agent to
+            agents currently in office
+        """
+        job = self.loc_info['job']
+        if self not in job.agents_in:
+            self.model.grid.move_agent(self, self.loc_info['job'].pos)
+            job.agents_in.add(self)
 
     def meet_family(self):
         """
@@ -1492,6 +1503,7 @@ class Young(IndepAgent):
         if not self.loc_info['job']:
             self.get_job()
         else:
+            self.info['job_steps'] += 1
             self.go_to_job()
             job = self.loc_info['job']
             self.speak_to_customer(num_days=3)
