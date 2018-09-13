@@ -810,19 +810,29 @@ class Job:
                     else:
                         return True
 
-    def look_for_employee(self, excluded_ag=None):
+    def look_for_employee(self, excluded_ag=None, all_clusters=False):
         """
             Look for employee that meets requirements: lang policy, currently unemployed and with partner
             able to move
             Args:
                 * excluded_ag: agent excluded from search
-                * job_steps_years: integer. Minimum number of years in a job before agent can be hired
-                    again
+                * all_clusters: boolean. If False, limit search to current cluster. If True,
+                    extend search to all clusters. Default False.
+            Output:
+                * If an appropriate candidate is found, a new employee is assigned to the job instance.
+                    Otherwise no modification occurs
         """
+        if not all_clusters:
+            agents_pool = self.model.geo.clusters_info[self.info['clust']]['agents']
+        else:
+            agents_pool = self.model.schedule.agents
+        search_set = {ag for ag in agents_pool if isinstance(ag, Young) and not isinstance(ag, Pensioner)}
+        search_set = search_set.difference(set([excluded_ag]))
 
         # look for suitable agents in any cluster
         # TODO: limit number of iterations per step and shuffle agents !!!!
-        for ag in set(self.model.schedule.agents).difference(set([excluded_ag])):
+
+        for ag in search_set:
             keep_cluster = True if ag['clust'] == self.info['clust'] else False
             if self.check_cand_conds(ag, keep_cluster=keep_cluster) and not hasattr(ag, 'blocked'):
                 self.hire_employee(ag)
