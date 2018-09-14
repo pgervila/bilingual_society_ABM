@@ -1218,6 +1218,9 @@ class Young(IndepAgent):
         super().__init__(*args, **kwargs)
         self.info['married'] = married
         self.info['num_children'] = num_children
+        self._set_up_init_job(job)
+
+    def _set_up_init_job(self, job):
         self.loc_info['job'] = None
         if job:
             job.hire_employee(self)
@@ -1277,7 +1280,7 @@ class Young(IndepAgent):
         fam_nw.add_edge(self, ag, lang=lang, fam_link='consort')
         fam_nw.add_edge(ag, self, lang=lang, fam_link='consort')
         # find appartment to move in together
-        self.move_to_new_home(ag)
+        self.move_to_new_home()
 
     def reproduce(self, day_prob=0.001, max_num_children=4):
         """ give birth to a new agent if conditions and likelihoods are met """
@@ -1353,47 +1356,40 @@ class Young(IndepAgent):
         if job.num_places and job.check_cand_conds(self, keep_cluster=keep_cluster):
             job.hire_employee(self, move_home=move_home)
 
+    def get_current_job(self):
+        """ Method that returns agent's current job """
+        try:
+            job = self.loc_info['job']
+        except KeyError:
+            job = None
+        return job
+
     def move_to_new_home(self, marriage=True):
         """
             Method to move self agent and other optional agents to a new home
             Args:
                 * marriage: boolean. Specifies if moving is because of marriage or not. If False,
-                    it is assumed moving is because of job reasons
+                    it is assumed moving is because of job reasons ( 'self' agent has a new job)
             Output:
                 * 'self' agent is assigned a new home together with his/her family.
                     If 'self' agent is married, partner will also try to find a new job.
                     Children, if any,  will be assigned a new school in cluster of parent's new job
         """
-        # self already has a job since it is a pre-condition to move to a new home
 
-        def check_job(agent):
-            """ Inner function to get agent's current job """
-            try:
-                job = agent.loc_info['job']
-                job = job if not isinstance(job, list) else job[0] if len(job) == 2 else job[0][job[2]]
-            except KeyError:
-                job = None
-            return job
-
-        # get 'self' agent cluster and job
-        clust_1 = self['clust']
-        job_1 = check_job(self)
-        # get free homes in self agent cluster
-        free_homes_clust_1 = [home for home in self.model.geo.clusters_info[clust_1]['homes']
-                              if not home.info['occupants']]
         if marriage:
+            # self already has a job since it is a pre-condition to move to a new home
+            # get 'self' agent job and cluster
+            job_1 = self.get_current_job()
+            clust_1 = self['clust']
+            # get consort job and cluster
             consort = self.get_family_relative('consort')
             clust_2 = consort['clust']
-            job_2 = check_job(consort)
+            job_2 = consort.get_current_job()
             # check if consort has a job
             if job_2:
-                # defined sum of distances from jobs to each home to sort by it
-                job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
                 if clust_1 == clust_2:
                     # both consorts keep jobs
-                    job_change = None
-                    sorted_homes = sorted(free_homes_clust_1, key=job_dist_fun )
-                    new_home = sorted_homes[0]
+                    self.find_home(criteria='half_way')
                 else:
                     # married agents live and work in different clusters
                     # move to the town with more job offers
@@ -1402,27 +1398,18 @@ class Young(IndepAgent):
                     if num_jobs_1 >= num_jobs_2:
                         # consort gives up job_2
                         job_change = 'consort'
-                        sorted_homes = sorted(free_homes_clust_1,
-                                              key=lambda home: pdist([job_1.pos, home.pos]))
+                        new_home = self.find_home()
                         job_2.remove_employee(consort)
-                        new_home = sorted_homes[0]
                     else:
                         # self gives up job_1
                         job_change = 'self'
-                        free_homes_clust2 = [home for home
-                                             in self.model.geo.clusters_info[clust_2]['homes']
-                                             if not home.info['occupants']]
-                        sorted_homes = sorted(free_homes_clust2,
-                                              key=lambda home: pdist([job_2.pos, home.pos]))
+                        new_home = consort.find_home()
                         job_1.remove_employee(self)
-                        new_home = sorted_homes[0]
             else:
                 # consort has no job
                 job_change = 'consort'
-                sorted_homes = sorted(free_homes_clust_1,
-                                      key=lambda home: pdist([job_1.pos, home.pos])[0])
-                home_ix = random.randint(1, int(len(sorted_homes) / 2))
-                new_home = sorted_homes[home_ix]
+                new_home = self.find_home()
+
             # assign new home
             new_home.assign_to_agent([self, consort])
             # update job status for agent that must switch
@@ -1433,17 +1420,8 @@ class Young(IndepAgent):
         else:
             # moving for job reasons -> family, if any, will follow
             # new job already assigned to self
-            # find free homes in new job cluster
-
-            job_clust = job_1.info['clust']
-            free_homes_new_job_clust = [home for home in self.model.geo.clusters_info[job_clust]['homes']
-                                        if not home.info['occupants']]
-            # find new home as close as possible to new job
-            sorted_homes = sorted(free_homes_new_job_clust ,
-                                  key=lambda home: pdist([job_1.pos, home.pos])[0])
-            home_ix = random.randint(1, int(len(sorted_homes) / 2))
-            new_home = sorted_homes[home_ix]
-
+            # find close home in new job cluster
+            new_home = self.find_home()
             if not self.info['married']:
                 moving_agents = [self]
                 new_home.assign_to_agent(moving_agents)
@@ -1451,15 +1429,12 @@ class Young(IndepAgent):
                 # partner has to find job in new cluster
                 consort = self.get_family_relative('consort')
                 moving_agents = [self, consort]
-                job_2 = check_job(consort)
+                new_home.assign_to_agent(moving_agents)
+                job_2 = consort.get_current_job()
                 if job_2:
                     job_2.remove_employee(consort)
-                    new_home.assign_to_agent(moving_agents)
                     # consort looks for job in current cluster while keeping new home
                     consort.get_job(keep_cluster=True, move_home=False)
-                else:
-                    new_home.assign_to_agent(moving_agents)
-
             # find out if there are children that will have to move too
             children = self.get_family_relative('child')
             children = [child for child in children
@@ -1468,8 +1443,44 @@ class Young(IndepAgent):
             # remove children from old school, enroll them in a new one
             for child in children:
                 if child.info['age'] > self.model.steps_per_year:
-                    # print(child, 'registers to school', 'in cluster {}'.format(child['clust']))
                     child.register_to_school()
+
+    def find_home(self, criteria='close_to_job'):
+        """
+            Method to find an empty home in same cluster as that of agent's job
+            Args:
+                * criteria: string. Defines criteria to find home. Options are:
+                    1) 'close_to_job' : finds random house relatively close
+                    to self agent job, regardless of consort's job location
+                    2) 'half_way'. Finds random house in job cluster half way
+                    between self agent's job and consort's job, if they both live
+                    in same cluster
+            Output:
+                * Method returns a Home class instance that meets demanded criteria
+        """
+
+        # get cluster of agent's job
+        job_1 = self.get_current_job()
+        job_1_clust = job_1.info['clust']
+        # get all free homes from job cluster
+        free_homes_job_1_clust = [home for home in self.model.geo.clusters_info[job_1_clust]['homes']
+                                  if not home.info['occupants']]
+        if criteria == 'close_to_job':
+            # Sort all available homes by provided criteria
+            sorted_homes = sorted(free_homes_job_1_clust,
+                                  key=lambda home: pdist([job_1.pos, home.pos])[0])
+            # pick random home from the closest half to new job
+            home_ix = random.randint(1, int(len(sorted_homes) / 2))
+            new_home = sorted_homes[home_ix]
+        elif criteria == 'half_way':
+            consort = self.get_family_relative('consort')
+            job_2 = consort.get_current_job()
+            # define sum of distances from jobs to each home to sort by it
+            job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
+            sorted_homes = sorted(free_homes_job_1_clust, key=job_dist_fun)
+            new_home = sorted_homes[0]
+
+        return new_home
 
     def go_to_job(self):
         """
@@ -1615,15 +1626,14 @@ class Adult(Young): # from 30 to 65
 
     age_low, age_high = 30, 65
 
-    def __init__(self, *args, job=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        if job:
-            job.hire_employee(self)
-        else:
-            self.loc_info['job'] = None
+    # def __init__(self, *args, job=None, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     if job:
+    #         job.hire_employee(self)
+    #     else:
+    #         self.loc_info['job'] = None
 
     def evolve(self, new_class, ret_output=False):
-        # print('from Adult to Teacher ', self)
         grown_agent = super().evolve(new_class, ret_output=True)
         # new agent will not have a job if Pensioner
         if not isinstance(grown_agent, Teacher):
@@ -1669,6 +1679,11 @@ class Worker(Adult):
 
 class Teacher(Adult):
 
+    def _set_up_init_job(self, job):
+        self.loc_info['job'] = None
+        if job and self.info['language'] in job.info['lang_policy']:
+            job.assign_teacher(self)
+
     def get_school_and_course(self):
         """
             Method to get school center and corresponding course for teacher agent
@@ -1680,6 +1695,14 @@ class Teacher(Adult):
         grown_agent = super().evolve(new_class, ret_output=True)
         if ret_output:
             return grown_agent
+
+    def get_current_job(self):
+        """ Method that returns agent's current job """
+        try:
+            job = self.loc_info['job'][0]
+        except KeyError:
+            job = None
+        return job
 
     def get_job(self, keep_cluster=False, move_home=True):
         # get cluster where job will be found
@@ -1748,6 +1771,14 @@ class TeacherUniv(Teacher):
         educ_center, course_key, fac_key = self.loc_info['job']
         educ_center = educ_center.faculties[fac_key]
         return educ_center, course_key
+
+    def get_current_job(self):
+        try:
+            job = self.loc_info['job']
+            job = job[0][job[2]]
+        except KeyError:
+            job = None
+        return job
 
     def get_job(self, keep_cluster=False, move_home=True):
         if keep_cluster:

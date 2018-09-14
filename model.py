@@ -31,11 +31,11 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 971
+rand_seed = 971
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 5027
+np_seed = 5027
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -496,7 +496,7 @@ class LanguageModel(Model):
 
     def add_new_agent_to_model(self, agent):
         """
-            Method to add a new agent instance to all relevant model entities,
+            Method to add a given agent instance to all relevant model entities,
             i.e. grid, schedule, network and clusters info
             Args:
                 * agent: agent class instance

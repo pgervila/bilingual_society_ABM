@@ -16,7 +16,7 @@ print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 # set random seed
 np_seed = np.random.randint(10000)
-#np_seed = 4908
+#np_seed = 6848
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
@@ -122,6 +122,7 @@ def test_school_set_up_and_update(model, univ):
             assert ags['teacher']
             assert type(ags['teacher']) == Teacher
             assert ags['teacher'].loc_info['job'][1] == k
+
 
 def test_univ_set_up_and_update(model, univ):
     # get agents from schools to send them to univ
