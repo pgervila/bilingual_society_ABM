@@ -49,19 +49,12 @@ class StagedActivationModif(StagedActivation):
             ag.update_lang_switch()
         if self.shuffle:
             random.shuffle(self.agents)
-        # basic IDEA: network adj matrices will be fixed through all stages of one step
-        # compute adjacent matrices for family and friends
-        Fam_Graph = nx.adjacency_matrix(self.model.nws.family_network,
-                                        nodelist=self.agents)#.toarray()
-        self.model.nws.adj_mat_fam_nw = normalize(Fam_Graph, norm='l1', axis=1)
 
-        Friend_Graph = nx.adjacency_matrix(self.model.nws.friendship_network,
-                                           nodelist=self.agents)#.toarray()
-        self.model.nws.adj_mat_friend_nw = normalize(Friend_Graph, norm='l1', axis=1)
+        # Network adj matrices will be fixed through all stages of one step
+        self.model.nws.compute_adj_matrices()
 
         for stage in self.stage_list:
-            # make copy before iteration to deal with Teacher creation
-            for ix_ag, ag in enumerate(list(self.agents)):
+            for ix_ag, ag in enumerate(self.agents):
                 if isinstance(ag, IndepAgent):
                     getattr(ag, stage)(ix_ag)
                 else:

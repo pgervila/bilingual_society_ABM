@@ -234,6 +234,9 @@ class EducationCenter:
                 self.model.add_new_agent_to_model(new_teacher)
                 hired_teachers.append(new_teacher)
 
+            # update family and friendship adjacent matrices
+            self.model.nws.compute_adj_matrices()
+
             return set(hired_teachers)
 
     def check_teacher_old_job(self, teacher):
