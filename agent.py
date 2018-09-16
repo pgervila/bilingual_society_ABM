@@ -7,7 +7,7 @@ import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
 
-#import private library to model lang zipf CDF
+# Import private library to model lang zipf CDF
 from zipf_generator import randZipf
 
 
@@ -114,15 +114,13 @@ class BaseAgent:
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
-
         # memory effort per compressed word
         self.set_memory_effort_per_word(lang)
-
         # conversation failure counter
         self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
 
     def set_lang_ics(self, s_0=0.01, t_0=1000, biling_key=None):
-        """ set agent's linguistic Initial Conditions by calling set up methods
+        """ Set agent's linguistic Initial Conditions by calling set up methods
         Args:
             * s_0: float <= 1. Initial memory intensity
             * t_0: elapsed days from last word-activation
@@ -934,7 +932,6 @@ class IndepAgent(SpeakerAgent):
             Args:
                 * mem_window_length: integer. Number of steps to compute EMA (length of exclusion memory)
         """
-
         lang = 'L2' if self.info['language'] == 0 else 'L1'
         age = self.info['age']
         # implementing exponential moving average
@@ -1389,7 +1386,8 @@ class Young(IndepAgent):
             if job_2:
                 if clust_1 == clust_2:
                     # both consorts keep jobs
-                    self.find_home(criteria='half_way')
+                    job_change = None
+                    new_home = self.find_home(criteria='half_way')
                 else:
                     # married agents live and work in different clusters
                     # move to the town with more job offers

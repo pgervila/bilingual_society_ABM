@@ -211,7 +211,7 @@ class EducationCenter:
             hired_teachers.extend(free_staff)
             if len(hired_teachers) >= num_needed_teachers:
                 print('FOUND THEM ALL !!!!!')
-                return set(hired_teachers)
+                return set(hired_teachers[:num_needed_teachers])
         else:
             print('CREATING MISSING TEACHERS !!! ')
             # create missing teachers
@@ -230,46 +230,11 @@ class EducationCenter:
                 home = av_homes[0]
                 # create new agent
                 new_teacher = teacher_type(self.model, unique_id, language, sex,
-                                           age=age, home=home, import_ic=False)
+                                           age=age, home=home, import_ic=True)
                 self.model.add_new_agent_to_model(new_teacher)
                 hired_teachers.append(new_teacher)
-            return set(hired_teachers)
 
-        # # first check among teachers employed at educ_center but without course_key assigned
-        # free_staff_from_cluster = self.get_free_staff_from_cluster()
-        # hired_teachers.extend(free_staff_from_cluster)
-        # if len(hired_teachers) >= num_needed_teachers:
-        #     hired_teachers = set(hired_teachers[:num_needed_teachers])
-        #     return hired_teachers
-        #
-        # # loop over clusters from closest to farthest from educ_center to hire other teachers without course
-        # num_missing_teachers = num_needed_teachers - len(hired_teachers)
-        # free_staff_from_other_clust = self.get_free_staff_from_other_clusters(num_missing_teachers)
-        # hired_teachers.extend(free_staff_from_other_clust)
-        # if len(set(hired_teachers)) >= num_needed_teachers:
-        #     hired_teachers = set(hired_teachers[:num_needed_teachers])
-        #     return hired_teachers
-        #
-        # # loop over clusters from closest to farthest from school, to hire NON teachers
-        # num_missing_teachers = num_needed_teachers - len(hired_teachers)
-        # new_teachers = self.get_employees_from_companies(num_missing_teachers)
-        # hired_teachers.extend(new_teachers)
-        # if len(set(hired_teachers)) >= num_needed_teachers:
-        #     hired_teachers = set(hired_teachers[:num_needed_teachers])
-        #     return hired_teachers
-        # else:
-        #     # create missing teachers
-        #     num_missing_teachers = num_needed_teachers - len(hired_teachers)
-        #     teacher_type = Teacher if type(self) == School else TeacherUniv
-        #     for _ in range(num_missing_teachers):
-        #
-        #         unique_id = self.model.set_available_ids.pop()
-        #         language = 0 if 0 in self.info['lang_policy'] else 2 # monolingual
-        #         sex = 'M' if random.random() < 0.5 else 'F'
-        #         age = self.model.steps_per_year * self.min_age_teacher
-        #         new_teacher = teacher_type(self.model, unique_id, language, sex,
-        #                                    age=age, home=None, import_ic=False)
-        #         self.model.add_new_agent_to_model(new_teacher)
+            return set(hired_teachers)
 
     def check_teacher_old_job(self, teacher):
         """
@@ -321,12 +286,10 @@ class EducationCenter:
             if not isinstance(teacher, teacher_type):
                 teacher = teacher.evolve(teacher_type, ret_output=True)
             self.assign_teacher(teacher, ck, move_home=move_home)
-
-        # check if all needed teachers were found
-
-        # delete blocked attribute
-        for teacher in new_teachers:
+            # delete blocked attribute
             del teacher.blocked
+
+
 
     def get_free_staff_from_cluster(self):
         """ This method will be implemented in subclasses """
@@ -701,7 +664,6 @@ class Faculty(EducationCenter):
             Args:
                 * num_teachers: integer. Number of teachers requested
         """
-
         fac_clust = self.info['clust']
         other_clusters_free_staff = []
         for clust in self.model.geo.clusters_info[fac_clust]['closest_clusters'][1:]:
