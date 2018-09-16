@@ -1489,6 +1489,7 @@ class Young(IndepAgent):
         if self not in job.agents_in:
             self.model.grid.move_agent(self, self.loc_info['job'].pos)
             job.agents_in.add(self)
+            self.info['job_steps'] += 1
 
     def meet_family(self):
         """
@@ -1512,7 +1513,6 @@ class Young(IndepAgent):
         if not self.loc_info['job']:
             self.get_job()
         else:
-            self.info['job_steps'] += 1
             self.go_to_job()
             job = self.loc_info['job']
             self.speak_to_customer(num_days=3)
@@ -1657,7 +1657,7 @@ class Adult(Young): # from 30 to 65
         super().stage_2(ix_agent)
 
     def stage_3(self, ix_agent):
-        super().stage_2(ix_agent)
+        super().stage_3(ix_agent)
 
     def stage_4(self, ix_agent, num_days=7):
         self.go_back_home()
