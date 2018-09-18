@@ -49,17 +49,9 @@ class StagedActivationModif(StagedActivation):
             ag.update_lang_switch()
         if self.shuffle:
             random.shuffle(self.agents)
-        # basic IDEA: network adj matrices will be fixed through all stages of one step
-        # compute adjacent matrices for family and friends
-        Fam_Graph = nx.adjacency_matrix(self.model.nws.family_network,
-                                        nodelist=self.agents)#.toarray()
-        # self.model.nws.adj_mat_fam_nw = np.nan_to_num(Fam_Graph / Fam_Graph.sum(axis=1, keepdims=True))
-        self.model.nws.adj_mat_fam_nw = normalize(Fam_Graph, norm='l1', axis=1)
 
-        Friend_Graph = nx.adjacency_matrix(self.model.nws.friendship_network,
-                                           nodelist=self.agents)#.toarray()
-        #self.model.nws.adj_mat_friend_nw = np.nan_to_num(Friend_Graph / Friend_Graph.sum(axis=1, keepdims=True))
-        self.model.nws.adj_mat_friend_nw = normalize(Friend_Graph, norm='l1', axis=1)
+        # Network adj matrices will be fixed through all stages of one step
+        self.model.nws.compute_adj_matrices()
 
         for stage in self.stage_list:
             for ix_ag, ag in enumerate(self.agents):
@@ -83,6 +75,7 @@ class StagedActivationModif(StagedActivation):
                 ag.reproduce()
             ag.random_death()
         # loop and update courses in schools and universities year after year
+        # update jobs lang policy
         if not self.steps % self.model.steps_per_year and self.steps:
             for clust_idx, clust_info in self.model.geo.clusters_info.items():
                 if 'university' in clust_info:
@@ -91,6 +84,8 @@ class StagedActivationModif(StagedActivation):
                             fac.update_courses_phase_1()
                 for school in clust_info['schools']:
                     school.update_courses_phase_1()
+                for job in clust_info['jobs']:
+                    job.set_lang_policy()
             for clust_idx, clust_info in self.model.geo.clusters_info.items():
                 if 'university' in clust_info:
                     for fac in clust_info['university'].faculties.values():

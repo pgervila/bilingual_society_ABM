@@ -71,6 +71,10 @@ def test_model_consistency(model_param):
                 if ag.loc_info['school']:
                     assert ag['clust'] == ag.loc_info['school'][0].info['clust']
 
+            # assert blocked property is non existent
+            assert not hasattr(ag, 'blocked')
+
+
 
 @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", 
                          test_data_get_conv_params)

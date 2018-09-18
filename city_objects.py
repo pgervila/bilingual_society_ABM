@@ -175,17 +175,18 @@ class EducationCenter:
         """
 
         retirement_age = Teacher.age_high * self.model.steps_per_year
-
+        # make copy of grouped_studs: new teachers may register their children
+        # in non existing courses that must be created : dict size may change
         for c_id, c_info in list(self.grouped_studs.items()):
             if not c_info['teacher']:
                 self.hire_teachers([c_id])
+            elif c_info['teacher'].info['age'] >= retirement_age:
+                c_info['teacher'].evolve(Pensioner)
 
         # check if teacher has to retire and replace it if needed
-        for (c_id, course) in self.grouped_studs.items():
-            if course['teacher'].info['age'] >= retirement_age:
-                course['teacher'].evolve(Pensioner)
-
-        #print('UPDATED ', self)
+        # for (c_id, course) in list(self.grouped_studs.items()):
+        #     if course['teacher'].info['age'] >= retirement_age:
+        #         course['teacher'].evolve(Pensioner)
 
     def find_teachers(self, courses_keys):
         """
@@ -197,32 +198,48 @@ class EducationCenter:
                 * courses_keys: list of integer(s). Identifies courses for which teachers are missing
                     through age of its students
                 * ret_output: boolean. True when output needs to be returned
+            Output:
+                *
         """
-
         num_needed_teachers = len(set([c_id for c_id in courses_keys if c_id]))
         hired_teachers = []
 
-        # first check among teachers employed at educ_center but without course_key assigned
-        free_staff_from_cluster = self.get_free_staff_from_cluster()
-        hired_teachers.extend(free_staff_from_cluster)
-        if len(hired_teachers) >= num_needed_teachers:
-            hired_teachers = set(hired_teachers[:num_needed_teachers])
-            return hired_teachers
+        finder_functions = [self.get_free_staff_from_cluster,
+                            self.get_free_staff_from_other_clusters,
+                            self.get_employees_from_companies]
 
-        # loop over clusters from closest to farthest from educ_center to hire other teachers without course
-        num_missing_teachers = num_needed_teachers - len(hired_teachers)
-        free_staff_from_other_clust = self.get_free_staff_from_other_clusters(num_missing_teachers)
-        hired_teachers.extend(free_staff_from_other_clust)
-        if len(set(hired_teachers)) >= num_needed_teachers:
-            hired_teachers = set(hired_teachers[:num_needed_teachers])
-            return hired_teachers
+        for finder_fun in finder_functions:
+            num_missing_teachers = num_needed_teachers - len(hired_teachers)
+            free_staff = finder_fun(num_missing_teachers)
+            hired_teachers.extend(free_staff)
+            if len(hired_teachers) >= num_needed_teachers:
+                return set(hired_teachers[:num_needed_teachers])
+        else:
+            print('CREATING MISSING TEACHERS !!! ')
+            # create missing teachers
+            num_missing_teachers = num_needed_teachers - len(hired_teachers)
+            teacher_type = Teacher if type(self) == School else TeacherUniv
+            for _ in range(num_missing_teachers):
+                unique_id = self.model.set_available_ids.pop()
+                language = 0 if 0 in self.info['lang_policy'] else 2 # monolingual
+                sex = 'M' if random.random() < 0.5 else 'F'
+                age = self.model.steps_per_year * self.info['min_age_teacher']
+                # find home for new agent
+                job_clust = self.info['clust']
+                av_homes = [home for home in self.model.geo.clusters_info[job_clust]['homes']
+                            if not home.info['occupants']]
+                random.shuffle(av_homes)
+                home = av_homes[0]
+                # create new agent
+                new_teacher = teacher_type(self.model, unique_id, language, sex,
+                                           age=age, home=home, import_ic=True)
+                self.model.add_new_agent_to_model(new_teacher)
+                hired_teachers.append(new_teacher)
 
-        # loop over clusters from closest to farthest from school, to hire NON teachers
-        num_missing_teachers = num_needed_teachers - len(hired_teachers)
-        new_teachers = self.get_employees_from_companies(num_missing_teachers)
-        hired_teachers.extend(new_teachers)
-        hired_teachers = set(hired_teachers[:num_needed_teachers])
-        return hired_teachers
+            # update family and friendship adjacent matrices
+            self.model.nws.compute_adj_matrices()
+
+            return set(hired_teachers)
 
     def check_teacher_old_job(self, teacher):
         """
@@ -274,9 +291,10 @@ class EducationCenter:
             if not isinstance(teacher, teacher_type):
                 teacher = teacher.evolve(teacher_type, ret_output=True)
             self.assign_teacher(teacher, ck, move_home=move_home)
-        # delete blocked attribute
-        for teacher in new_teachers:
+            # delete blocked attribute
             del teacher.blocked
+
+
 
     def get_free_staff_from_cluster(self):
         """ This method will be implemented in subclasses """
@@ -488,7 +506,7 @@ class School(EducationCenter):
             if teacher_clust != school_clust:
                 teacher.move_to_new_home(marriage=False)
 
-    def get_free_staff_from_cluster(self):
+    def get_free_staff_from_cluster(self, num_missing_teachers):
         """ Method to get all free teachers from schools
             in school's cluster """
 
@@ -500,7 +518,7 @@ class School(EducationCenter):
 
         cluster_candidates[:] = [t for t in cluster_candidates if not hasattr(t, 'blocked')]
 
-        return cluster_candidates
+        return cluster_candidates[:num_missing_teachers]
 
     def get_free_staff_from_other_clusters(self, num_teachers):
         """
@@ -634,7 +652,7 @@ class Faculty(EducationCenter):
             if teacher_clust != school_clust:
                 teacher.move_to_new_home(marriage=False)
 
-    def get_free_staff_from_cluster(self):
+    def get_free_staff_from_cluster(self, num_missing_teachers):
         """
             Method to get all courseless teachers from faculties
             in self faculty cluster
@@ -642,7 +660,7 @@ class Faculty(EducationCenter):
         free_staff = [t for t in self.univ.info['employees']
                       if not t.loc_info['job'][1]]
         free_staff[:] = [t for t in free_staff if not hasattr(t, 'blocked')]
-        return free_staff
+        return free_staff[:num_missing_teachers]
 
     def get_free_staff_from_other_clusters(self, num_teachers):
         """
@@ -651,7 +669,6 @@ class Faculty(EducationCenter):
             Args:
                 * num_teachers: integer. Number of teachers requested
         """
-
         fac_clust = self.info['clust']
         other_clusters_free_staff = []
         for clust in self.model.geo.clusters_info[fac_clust]['closest_clusters'][1:]:
@@ -664,6 +681,19 @@ class Faculty(EducationCenter):
                 other_clusters_free_staff.extend(clust_free_staff)
                 if len(other_clusters_free_staff) >= num_teachers:
                     return other_clusters_free_staff
+        else:
+            # could not find all requested univ teachers in clusters
+            # look for school teachers instead
+            for clust in self.model.geo.clusters_info[fac_clust]['closest_clusters']:
+                clust_school_free_staff = [t for sc in self.model.geo.clusters_info[clust]['schools']
+                                           for t in sc.info['employees'] if not t.loc_info['job'][1]
+                                           and t.info['language'] in self.info['lang_policy']]
+                clust_school_free_staff[:] = [t for t in clust_school_free_staff
+                                              if not hasattr(t, 'blocked')]
+                other_clusters_free_staff.extend(clust_school_free_staff)
+                if len(other_clusters_free_staff) >= num_teachers:
+                    return other_clusters_free_staff
+
         return other_clusters_free_staff
 
     def exit_studs(self, studs):
@@ -758,7 +788,7 @@ class Job:
             into account, monolinguals need to make > min_pct % cluster population
             Args:
                 * min_pct: float. minimum percentage for monolinguals to be taken into account.
-                Defaults to 0.1
+                    Defaults to 0.1
             Output:
                 * sets value of self.info['lang_policy]
         """
@@ -862,13 +892,7 @@ class Job:
 
         # hire agent
         if agent.info['language'] in self.info['lang_policy']:
-            self.num_places -= 1
-            self.info['employees'].add(agent)
-            # assign job to agent
-            agent.loc_info['job'] = self
-            # reset job seniority steps counter
-            agent.info['job_steps'] = 0
-
+            self.assign_employee(agent)
             # move agent to new home closer to job if necessary (and requested)
             if move_home:
                 agent_clust = agent['clust']
@@ -883,6 +907,20 @@ class Job:
 
         # free agent from temporary hiring block
         del agent.blocked
+
+    def assign_employee(self, agent):
+        """
+            Method to add agent to job staff and
+            to assign job instance to agent job reference.
+            Args:
+                * agent: class instance.
+        """
+        self.num_places -= 1
+        self.info['employees'].add(agent)
+        # assign job to agent
+        agent.loc_info['job'] = self
+        # reset job seniority steps counter
+        agent.info['job_steps'] = 0
 
 
     def remove_employee(self, agent, replace=None, new_agent=None):

@@ -496,7 +496,7 @@ class LanguageModel(Model):
 
     def add_new_agent_to_model(self, agent):
         """
-            Method to add a new agent instance to all relevant model entities,
+            Method to add a given agent instance to all relevant model entities,
             i.e. grid, schedule, network and clusters info
             Args:
                 * agent: agent class instance

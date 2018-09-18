@@ -314,13 +314,13 @@ class GeoMapper:
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
                 # instantiate 2 adults with neither job nor home assigned
-                # lang ics will be set later on
+                # lang ics will be set later on when defining family network
                 ag1 = Adult(self.model, av_ags_ids.pop(), family_langs[0], family_sexes[0],
                             married=True, num_children=2)
                 ag2 = Adult(self.model, av_ags_ids.pop(), family_langs[1], family_sexes[1],
                             married=True, num_children=2)
                 # instantiate 2 children with neither school nor home assigned
-                # lang ics will be set later on
+                # lang ics will be set later on when defining family network
                 ag3 = Child(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2])
                 ag4 = Child(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3])
                 # set ages of family members
@@ -439,23 +439,27 @@ class GeoMapper:
                 break
         return sorted_clusts[:ix_max_univ]
 
-    def get_lang_distrib_per_clust(self, clust_ix, use_agents_lang_attrs=False):
+    def get_current_clust_size(self, clust_ix):
+        if self.clusters_info[clust_ix]['agents']:
+            curr_clust_size = len(self.clusters_info[clust_ix]['agents'])
+        else:
+            curr_clust_size = self.cluster_sizes[clust_ix]
+        return curr_clust_size
+
+    def get_lang_distrib_per_clust(self, clust_ix):
         """ Method to find language percentages for each language cathegory
             in a given cluster 0-> mono L1, 1-> biling, 2-> mono L2
             Args:
                 * clust_ix: integer. Identifies cluster by its index in model
-                * use_agents_lang_attrs: boolean. If False, geomapper instance
-                 'langs_per_clust' attribute is used to compute lang statistics. Otherwise,
-                  agents' lang attributes are used for the calculation. Default False.
             Output:
                 * numpy array where indices are lang cathegories and values are percentages
         """
-        if use_agents_lang_attrs:
-            clust_lang_cts = Counter([ag.info['language']
-                                     for ag in self.clusters_info[clust_ix]['agents']])
+        if self.clusters_info[clust_ix]['agents']:
+            clust_lang_cts = Counter([ag.info['language'] for ag
+                                      in self.clusters_info[clust_ix]['agents']])
         else:
             clust_lang_cts = Counter(self.langs_per_clust[clust_ix])
-        clust_size = self.cluster_sizes[clust_ix]
+        clust_size = self.get_current_clust_size(clust_ix)
         return np.array([clust_lang_cts[lang] / clust_size for lang in range(3)])
 
     def get_dominant_lang_per_clust(self, clust_ix):

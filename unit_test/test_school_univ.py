@@ -16,7 +16,7 @@ print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 # set random seed
 np_seed = np.random.randint(10000)
-#np_seed = 4908
+#np_seed = 6848
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
@@ -57,8 +57,6 @@ def test_school_set_up_and_update(model, univ):
         assert ags['students']
         assert ags['teacher']
         assert type(ags['teacher']) == Teacher
-
-    #import ipdb; ipdb.set_trace()
 
     # check students older than 18 are out of school
     while 18 not in school.grouped_studs:
@@ -119,9 +117,13 @@ def test_school_set_up_and_update(model, univ):
         school.update_courses_phase_2()
         for (k, ags) in school.grouped_studs.items():
             assert ags['students']
+            print('course is {}, students ages are {}'.format(k,
+                                                              [st.info['age'] / 36 for st in ags['students']]))
+
             assert ags['teacher']
             assert type(ags['teacher']) == Teacher
             assert ags['teacher'].loc_info['job'][1] == k
+
 
 def test_univ_set_up_and_update(model, univ):
     # get agents from schools to send them to univ
@@ -149,6 +151,8 @@ def test_univ_set_up_and_update(model, univ):
         for (k, ags) in fac.grouped_studs.items():
             # print(fac, k, ags)
             assert ags['students']
+            assert all(st.info['age']/36 <= k for st in ags['students'])
+            print('course is {}, students ages are {}'.format(k, [st.info['age']/36 for st in ags['students']]))
             assert ags['teacher']
     for fac in univ.faculties.values():
         for st in list(fac.info['students'])[:]:
@@ -159,6 +163,9 @@ def test_univ_set_up_and_update(model, univ):
         fac.update_courses_phase_2()
         for (k, ags) in fac.grouped_studs.items():
             assert ags['students']
+            assert all(st.info['age'] / 36 <= k for st in ags['students'])
+            print('course is {}, students ages are {}'.format(k,
+                                                              [st.info['age'] / 36 for st in ags['students']]))
             assert ags['teacher']
     # pick one faculty with students to check exit method
     fac = [fac for fac in univ.faculties.values() 
