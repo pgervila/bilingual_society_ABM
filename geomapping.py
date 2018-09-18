@@ -439,23 +439,27 @@ class GeoMapper:
                 break
         return sorted_clusts[:ix_max_univ]
 
-    def get_lang_distrib_per_clust(self, clust_ix, use_agents_lang_attrs=False):
+    def get_current_clust_size(self, clust_ix):
+        if self.clusters_info[clust_ix]['agents']:
+            curr_clust_size = len(self.clusters_info[clust_ix]['agents'])
+        else:
+            curr_clust_size = self.cluster_sizes[clust_ix]
+        return curr_clust_size
+
+    def get_lang_distrib_per_clust(self, clust_ix):
         """ Method to find language percentages for each language cathegory
             in a given cluster 0-> mono L1, 1-> biling, 2-> mono L2
             Args:
                 * clust_ix: integer. Identifies cluster by its index in model
-                * use_agents_lang_attrs: boolean. If False, geomapper instance
-                 'langs_per_clust' attribute is used to compute lang statistics. Otherwise,
-                  agents' lang attributes are used for the calculation. Default False.
             Output:
                 * numpy array where indices are lang cathegories and values are percentages
         """
-        if use_agents_lang_attrs:
-            clust_lang_cts = Counter([ag.info['language']
-                                     for ag in self.clusters_info[clust_ix]['agents']])
+        if self.clusters_info[clust_ix]['agents']:
+            clust_lang_cts = Counter([ag.info['language'] for ag
+                                      in self.clusters_info[clust_ix]['agents']])
         else:
             clust_lang_cts = Counter(self.langs_per_clust[clust_ix])
-        clust_size = self.cluster_sizes[clust_ix]
+        clust_size = self.get_current_clust_size(clust_ix)
         return np.array([clust_lang_cts[lang] / clust_size for lang in range(3)])
 
     def get_dominant_lang_per_clust(self, clust_ix):

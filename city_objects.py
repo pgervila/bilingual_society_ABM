@@ -175,15 +175,18 @@ class EducationCenter:
         """
 
         retirement_age = Teacher.age_high * self.model.steps_per_year
-
+        # make copy of grouped_studs: new teachers may register their children
+        # in non existing courses that must be created : dict size may change
         for c_id, c_info in list(self.grouped_studs.items()):
             if not c_info['teacher']:
                 self.hire_teachers([c_id])
+            elif c_info['teacher'].info['age'] >= retirement_age:
+                c_info['teacher'].evolve(Pensioner)
 
         # check if teacher has to retire and replace it if needed
-        for (c_id, course) in self.grouped_studs.items():
-            if course['teacher'].info['age'] >= retirement_age:
-                course['teacher'].evolve(Pensioner)
+        # for (c_id, course) in list(self.grouped_studs.items()):
+        #     if course['teacher'].info['age'] >= retirement_age:
+        #         course['teacher'].evolve(Pensioner)
 
     def find_teachers(self, courses_keys):
         """
@@ -210,7 +213,6 @@ class EducationCenter:
             free_staff = finder_fun(num_missing_teachers)
             hired_teachers.extend(free_staff)
             if len(hired_teachers) >= num_needed_teachers:
-                print('FOUND THEM ALL !!!!!')
                 return set(hired_teachers[:num_needed_teachers])
         else:
             print('CREATING MISSING TEACHERS !!! ')
@@ -786,7 +788,7 @@ class Job:
             into account, monolinguals need to make > min_pct % cluster population
             Args:
                 * min_pct: float. minimum percentage for monolinguals to be taken into account.
-                Defaults to 0.1
+                    Defaults to 0.1
             Output:
                 * sets value of self.info['lang_policy]
         """

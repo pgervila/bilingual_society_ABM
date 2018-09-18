@@ -118,6 +118,8 @@ class BaseAgent:
         self.set_memory_effort_per_word(lang)
         # conversation failure counter
         self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
+        # set memory weights to evaluate lang exclusion
+        self.set_excl_weights()
 
     def set_lang_ics(self, s_0=0.01, t_0=1000, biling_key=None):
         """ Set agent's linguistic Initial Conditions by calling set up methods
@@ -1579,8 +1581,8 @@ class YoungUniv(Adolescent):
         clust_univ = univ.info['clust']
         # make list of either empty homes or homes occupied only by YoungUniv in univ cluster
         univ_homes = [home for home in self.model.geo.clusters_info[clust_univ]['homes']
-                                 if not home.info['occupants'] or
-                                 all([isinstance(x, YoungUniv) for x in home.info['occupants']])]
+                      if not home.info['occupants'] or
+                      all([isinstance(x, YoungUniv) for x in home.info['occupants']])]
         # define function to measure distance home-univ
         univ_dist_fun = lambda home: pdist([univ.pos, home.pos])[0]
         # sort homes by distance to univ, pick first that has less than max_num_occup occupants
@@ -1624,12 +1626,6 @@ class Adult(Young): # from 30 to 65
 
     age_low, age_high = 30, 65
 
-    # def __init__(self, *args, job=None, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     if job:
-    #         job.hire_employee(self)
-    #     else:
-    #         self.loc_info['job'] = None
 
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)

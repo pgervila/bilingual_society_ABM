@@ -75,6 +75,7 @@ class StagedActivationModif(StagedActivation):
                 ag.reproduce()
             ag.random_death()
         # loop and update courses in schools and universities year after year
+        # update jobs lang policy
         if not self.steps % self.model.steps_per_year and self.steps:
             for clust_idx, clust_info in self.model.geo.clusters_info.items():
                 if 'university' in clust_info:
@@ -83,6 +84,8 @@ class StagedActivationModif(StagedActivation):
                             fac.update_courses_phase_1()
                 for school in clust_info['schools']:
                     school.update_courses_phase_1()
+                for job in clust_info['jobs']:
+                    job.set_lang_policy()
             for clust_idx, clust_info in self.model.geo.clusters_info.items():
                 if 'university' in clust_info:
                     for fac in clust_info['university'].faculties.values():
