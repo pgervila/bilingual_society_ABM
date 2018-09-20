@@ -182,11 +182,23 @@ class BaseAgent:
         weights /= weights.sum()
         self.info['excl_weights'] = weights
 
-    def get_langs_pcts(self):
-        """ Method that returns pct knowledge in L1 and L2 """
-        pct_lang1 = self.lang_stats['L1']['pct'][self.info['age']]
-        pct_lang2 = self.lang_stats['L2']['pct'][self.info['age']]
-        return pct_lang1, pct_lang2
+    def get_langs_pcts(self, lang=None):
+        """
+            Method that returns pct knowledge in L1 and L2
+            Args:
+                * lang: integer. Value from [0, 1]
+            Output:
+                * Percentage knowledge in specified lang or
+                  percentage knowledges in both langs if lang arg is
+                  not specified
+        """
+        if lang is None:
+            pct_lang1 = self.lang_stats['L1']['pct'][self.info['age']]
+            pct_lang2 = self.lang_stats['L2']['pct'][self.info['age']]
+            return pct_lang1, pct_lang2
+        else:
+            lang = 'L1' if lang == 0 else 'L2'
+            return self.lang_stats[lang]['pct'][self.info['age']]
 
     def get_dominant_lang(self, ret_pcts=False):
         """
@@ -215,15 +227,15 @@ class BaseAgent:
         """
 
         if self.info['language'] == 0:
-            if self.lang_stats['L2']['pct'][self.info['age']] >= switch_threshold:
+            if self.get_langs_pcts(1) >= switch_threshold:
                 self.info['language'] = 1
         elif self.info['language'] == 2:
-            if self.lang_stats['L1']['pct'][self.info['age']] >= switch_threshold:
+            if self.get_langs_pcts(0) >= switch_threshold:
                 self.info['language'] = 1
         elif self.info['language'] == 1:
-            if self.lang_stats['L1']['pct'][self.info['age']] < switch_threshold:
+            if self.get_langs_pcts(0) < switch_threshold:
                 self.info['language'] = 2
-            elif self.lang_stats['L2']['pct'][self.info['age']] < switch_threshold:
+            elif self.get_langs_pcts(1) < switch_threshold:
                 self.info['language'] = 0
 
     def evolve(self, new_class, ret_output=False, upd_course=False):
@@ -866,9 +878,9 @@ class IndepAgent(SpeakerAgent):
         """
             Make self agent speak to a group of listening people
             Args:
-                * group:
-                * lang:
-                * conv_length: boolean. Conversation length
+                * group: list of agent instances
+                * lang: integer
+                * conv_length: string. Conversation length
             Output:
                 *  Updated lang arrays for both self agent and listening group
         """
@@ -876,7 +888,7 @@ class IndepAgent(SpeakerAgent):
         min_age_interlocs = min([ag.info['age'] for ag in group])
         # TODO : use 'get_conv_params' to get the parameters ???
 
-        if not lang:
+        if lang is None:
             lang = self.model.get_conv_params([self] + group)['lang_group'][0]
 
         spoken_words = self.pick_vocab(lang, conv_length=conv_length, min_age_interlocs=min_age_interlocs,
