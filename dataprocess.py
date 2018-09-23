@@ -49,6 +49,9 @@ class DataProcessor(DataCollector):
                     agent_records.append((agent.unique_id, reporter(agent)))
                 self.agent_vars[var].append(agent_records)
 
+    def get_agent_by_id(self, ag_id):
+        return [ag for ag in self.model.schedule.agents if ag.unique_id == ag_id][0]
+
     def get_lang_stats(self, lang_type):
         """Method to get counts of each type of lang agent
 

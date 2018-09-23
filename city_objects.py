@@ -539,7 +539,9 @@ class School(EducationCenter):
         return other_clusters_free_staff
 
     def assign_student(self, student, course_key=None, hire_t=True):
-
+        """
+            Method to assign student to school, and school to agent
+        """
         course_key = super().assign_student(student, course_key=course_key, hire_t=hire_t)
         student.loc_info['school'] = [self, course_key]
 
@@ -622,7 +624,6 @@ class Faculty(EducationCenter):
                      'age_range': univ.info['age_range'],
                      'min_age_teacher': univ.info['min_age_teacher'], 'type': fac_type,
                      'clust': univ.info['clust']}
-        #self.grouped_studs = {k: defaultdict(set) for k in range(*self.info['age_range'])}
         self.grouped_studs = dict()
 
     def group_students_per_year(self):
