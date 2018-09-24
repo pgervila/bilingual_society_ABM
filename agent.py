@@ -46,8 +46,14 @@ class BaseAgent:
             home.assign_to_agent(self)
 
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
+
+
         # define container for languages' tracking and statistics
-        self.lang_stats = defaultdict(lambda: defaultdict(dict))
+        #self.lang_stats = defaultdict(lambda: defaultdict(dict))
+
+        self.lang_stats = defaultdict(dict)
+
+
         # define list of all lang labels in model
         all_langs = ['L1', 'L12', 'L21', 'L2']
         # define mask for each step

@@ -31,11 +31,11 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 971
+rand_seed = 7972
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 5027
+np_seed = 1211
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -109,6 +109,7 @@ class LanguageModel(Model):
         # instantiate and setup networks
         self.nws = NetworkBuilder(self)
         self.nws.build_networks()
+
         # define datacollector and dataprocessor
         self.data_process = DataProcessor(self)
         # define dataviz
@@ -138,7 +139,6 @@ class LanguageModel(Model):
                     if ag.loc_info['school']:
                         assert ag['clust'] == ag.loc_info['school'][0].info['clust']
         print('Model is correctly set')
-
 
     def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,
                                    exp_mult=400):
@@ -716,4 +716,13 @@ class LanguageModel(Model):
                                       frames=steps, interval=100, blit=True, repeat=False)
         #plt.tight_layout()
         plt.show()
+
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     del state['data_process']
+    #     del state['data_viz']
+    #     return state
+    #
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
 
