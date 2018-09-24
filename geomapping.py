@@ -26,6 +26,18 @@ class GeoMapper:
         # generate lang distribution for each cluster
         self.generate_langs_per_clust()
 
+    def import_geo_ics(self):
+        """ Idea: import coordinates and assign them to model current object definition """
+        # import jobs
+        # import schools
+        # import univs
+        # import homes
+        # import agents
+        pass
+
+    def import_model_ics(self):
+        """ Import data from save model computation and map it to current model """
+
     def map_model_objects(self):
         """ Instantiate and locate all model objects on 2-D grid """
         self.map_jobs()
