@@ -49,7 +49,7 @@ class BaseAgent:
 
 
         # define container for languages' tracking and statistics
-        #self.lang_stats = defaultdict(lambda: defaultdict(dict))
+        # self.lang_stats = defaultdict(lambda: defaultdict(dict))
 
         self.lang_stats = defaultdict(dict)
 
@@ -80,6 +80,7 @@ class BaseAgent:
                 * pct_key: string. It must be of the form '%_pct' with % an integer
                   from following list [10,25,50,75,90,100]. ICs are not available for every single level
         """
+
         # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
         self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.info['age']])
         # S: numpy array(shape=vocab_size) that measures memory stability for each word
@@ -381,7 +382,7 @@ class ListenerAgent(BaseAgent):
         # TODO : implement 'listen to media' option
 
     def update_lang_arrays(self, sample_words, mode_type='speak', delta_s_factor=0.1, pct_threshold=0.9,
-                           pct_threshold_und=0.1, max_edit_dist=2, min_prob_und=0.1, num_days=1):
+                           pct_threshold_und=0.1, max_edit_dist=2, min_prob_und=0.1, num_days=1, learning=False):
         """
             Method to compute and update main arrays that define agent linguistic knowledge
             Args:
@@ -407,6 +408,7 @@ class ListenerAgent(BaseAgent):
                     max_edit_dist, unknown words cannot be recognised.
                 * min_prob_und: 0 < float < 1 . Minimum probability to understand a fraction of conversation
                 * num_days: integer. Number of times per step conversation takes place
+                * learning: boolean. True if agent is studying / learning words. Default False.
         """
 
         for lang, (act, act_c) in deepcopy(sample_words).items():
@@ -417,9 +419,9 @@ class ListenerAgent(BaseAgent):
             # ds_factor value will depend on action type
 
             if mode_type in ['listen', 'media', 'read']:
-                # get known words in global reference system
+                # get all already-known words by agent in global reference system
                 known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
-                # Of all active words, how many are known ??
+                # Of all active words, how many are already known by agent ?? =>
                 # boolean mask of known-active words projected on active words reference system
                 kn_act_bool = np.in1d(act, known_words, assume_unique=True)
                 # get indices of known words on active words reference system
@@ -428,11 +430,14 @@ class ListenerAgent(BaseAgent):
                 self.lang_stats[lang]['wc'][act[kn_words_idxs]] += act_c[kn_words_idxs]
                 # check if all active words in conversation are known
                 if not np.all(kn_act_bool):
-                    # find indices of new words whose memory will be updated
-                    new_words_idxs = self.process_unknown_words(lang, act, act_c, kn_act_bool,
-                                                                max_edit_dist=max_edit_dist,
-                                                                min_prob_und=min_prob_und,
-                                                                num_days=num_days)
+                    # find indices, if any, of new words whose memory will be updated
+                    if not learning:
+                        new_words_idxs = self.process_unknown_words(lang, act, act_c, kn_act_bool,
+                                                                    max_edit_dist=max_edit_dist,
+                                                                    min_prob_und=min_prob_und,
+                                                                    num_days=num_days)
+                    else:
+                        new_words_idxs = self.learn_unknown_words(lang, act, act_c, kn_act_bool)
                     if new_words_idxs is not None:
                         upd_idxs = np.concatenate((kn_words_idxs, new_words_idxs))
                         # words whose memory will be updated and corresponding counts
@@ -455,23 +460,23 @@ class ListenerAgent(BaseAgent):
         """
             Method to track recognised words among unknown ones,
             or to randomly single out a new word out of unknown ones.
-            Ability to recognise new words depends on interlanguage similarity array.
+            Ability to recognise new words depends on language similarity array.
             Probability to single out a new word depends on degree of language knowledge.
             Method updates counting of recognised or identified new words, and
             returns indices of new words whose memory will be updated
             Args:
                 * lang: string. Label that identifies language ('L1', 'L2', 'L12', 'L21')
                 * act, act_c: numpy arrays. Indices and number of occurrences of active words in conversation
-                * kn_act_bool: numpy array of booleans. Values are True if word is known.
+                * kn_act_bool: numpy array of booleans. Values are True if word is known, False otherwise.
                     Expressed on active words base
-                * max_edit_distance: int. For values of edit distance higher or equal to it,
-                    words cannot be recognised
-                * pct_threshold_und: float. Minimum retention value to consider a word as known
+                * max_edit_dist: int. For values of edit distance higher or equal to this value,
+                    words cannot be recognised without previous knowledge
+                * pct_threshold_und: float. Minimum retention value to consider a word as already known
                 * min_prob_und: 0 < float < 1 . Minimum probability to understand a fraction of conversation
                     regardless of language knowledge. Must be different than zero to allow learners to catch new words
                 * num_days: integer. Number of times per step conversation takes place
             Output:
-                * new_words_idxs: numpy arrays. Indices of unknown words whose memory can be updated,
+                * new_words_idxs: numpy array. Indices of unknown words whose memory can be updated,
                     EXPRESSED on active words coordinates (to be processed by 'update_lang_arrays_method')
         """
 
@@ -481,7 +486,6 @@ class ListenerAgent(BaseAgent):
         idx_ukn_act = np.where(~kn_act_bool)[0] # indices of unknown words on active coordinates
         val_ukn_act = act[idx_ukn_act] # unknown words values ( indices on global coordinates == the words themselves)
 
-        # TODO : make following check for word recognition only if agent is bilingual !!!!!
         # TODO : word recognition and integration of new words should not be excluding actions
         # find recognised words: words SIMILAR ENOUGH (cond1) to those ALREADY KNOWN (cond2) in other language
         other_lang = self.model.similarity_corr[lang]
@@ -497,7 +501,6 @@ class ListenerAgent(BaseAgent):
         # check if there are recognised words
         if val_ukn_act_rec.size:
             # update counting of recognised words
-            #self.lang_stats[lang]['wc'][val_ukn_act_rec] += act_c[idx_ukn_act_rec]
             self.lang_stats[lang]['wc'][val_ukn_act_rec] += np.ones(len(idx_ukn_act_rec), dtype=np.uint8)
             # find words whose memory can be updated among recognised ones
             upd_cond = self.lang_stats[lang]['wc'][val_ukn_act_rec] >= self.lang_stats[lang]['mem_eff'][val_ukn_act_rec]
@@ -538,6 +541,28 @@ class ListenerAgent(BaseAgent):
                 new_words_idxs = idx_ukn_act_upd
 
         return new_words_idxs
+
+    def learn_unknown_words(self, lang, act, act_c, kn_act_bool):
+        """
+            Method to add unknown words to word counter and
+            to check if corresponding word memory can be updated
+            Output:
+                * Numpy array with indices of words whose memory can be updated
+        """
+        # indices of unknown words on active coordinates
+        idx_ukn_act = np.where(~kn_act_bool)[0]
+        # unknown words values ( indices on global coordinates == the words themselves )
+        val_ukn_act = act[idx_ukn_act]
+
+        # update counting of recognised words
+        self.lang_stats[lang]['wc'][val_ukn_act] += act_c[idx_ukn_act]
+
+        # check if memory can be updated
+        upd_cond = self.lang_stats[lang]['wc'][val_ukn_act] >= self.lang_stats[lang]['mem_eff'][val_ukn_act]
+        idx_ukn_act_upd = idx_ukn_act[upd_cond]
+        if idx_ukn_act_upd.size:
+            new_words_idxs = idx_ukn_act_upd
+            return new_words_idxs
 
     def update_words_memory(self, lang, act, act_c, ds_factor=0.25, pct_threshold=0.9,
                             a=7.6, b=0.023, c=-0.031, d=-0.2):
@@ -601,15 +626,13 @@ class ListenerAgent(BaseAgent):
         """
         # compute language knowledge in percentage
         if lang in ['L1', 'L12']:
-            real_lang_knowledge = np.maximum(self.lang_stats['L1']['R'], self.lang_stats['L12']['R'])
-            pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                         len(self.model.cdf_data['s'][self.info['age']]))
-            self.lang_stats['L1']['pct'][self.info['age']] = pct_value
+            lang1, lang2 = ['L1', 'L12']
         else:
-            real_lang_knowledge = np.maximum(self.lang_stats['L2']['R'], self.lang_stats['L21']['R'])
-            pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
-                         len(self.model.cdf_data['s'][self.info['age']]))
-            self.lang_stats['L2']['pct'][self.info['age']] = pct_value
+            lang1, lang2 = ['L2', 'L21']
+        real_lang_knowledge = np.maximum(self.lang_stats[lang1]['R'], self.lang_stats[lang2]['R'])
+        pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+                     len(self.model.cdf_data['s'][self.info['age']]))
+        self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
     def listen_to_media(self):
         """ Method to listen languages in mass media: internet, radio, TV, movies """
@@ -626,6 +649,8 @@ class SpeakerAgent(ListenerAgent):
             Args:
                 * conv_length: string. Describes conversation length using keys from
                     model attribute dict 'num_words_conv' ('VS', 'S', 'M', 'L')
+            Output:
+                * Integer (Number of tokens)
         """
         factor = self.model.conv_length_age_factor[self.info['age']]
         return max(int(self.model.num_words_conv[conv_length] * factor), 1)
@@ -680,7 +705,7 @@ class SpeakerAgent(ListenerAgent):
         # sample must come from AVAILABLE words in R (retrievability) !!!! This can be modeled in following STEPS
 
         # 1. First sample from lang CDF (that encapsulates all to-be-known concepts at a given age-step)
-        # These are the thoughts or concepts a  speaker tries to convey
+        # These are the thoughts or concepts a speaker tries to convey
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
 
         if not num_words:
@@ -715,18 +740,19 @@ class SpeakerAgent(ListenerAgent):
 
         # 2. Given a lang, pick the variant that is most familiar to agent
         lang = 'L1' if lang == 0 else 'L2'
+        # TODO : fix bug !! ['L12']['pct'] never gets updated in 'update_lang_knowledge', always zero
         if lang == 'L1':
-            pct1, pct2 = self.lang_stats['L1']['pct'][self.info['age']], self.lang_stats['L12']['pct'][self.info['age']]
+            pct1, pct2 = self.get_langs_pcts(0), self.lang_stats['L12']['pct'][self.info['age']]
             lang = 'L1' if pct1 >= pct2 else 'L12'
         elif lang == 'L2':
-            pct1, pct2 = self.lang_stats['L2']['pct'][self.info['age']], self.lang_stats['L21']['pct'][self.info['age']]
+            pct1, pct2 = self.get_langs_pcts(1), self.lang_stats['L21']['pct'][self.info['age']]
             lang = 'L2' if pct1 >= pct2 else 'L21'
 
         # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
         # get mask for words successfully retrieved from memory
         num_act = len(act)
-        mask_r = np.random.rand(num_act) <= self.lang_stats[lang]['R'][act]
-        spoken_words = {lang: [act[mask_r], act_c[mask_r]]}
+        mask_R = np.random.rand(num_act) <= self.lang_stats[lang]['R'][act]
+        spoken_words = {lang: [act[mask_R], act_c[mask_R]]}
         # if there are missing words-concepts, they might be found in the other known language(s)
         # TODO : model depending on interlocutor (whether he is bilingual or not)
         # TODO : should pure language always get priority in computing random access ????
@@ -734,24 +760,24 @@ class SpeakerAgent(ListenerAgent):
 
         # TODO : if word is similar, go for it ( need to quantify similarity !!)
 
-        if np.count_nonzero(mask_r) < num_act:
+        if np.count_nonzero(mask_R) < num_act:
             if lang in ['L1', 'L12']:
                 lang2 = 'L12' if lang == 'L1' else 'L1'
             elif lang in ['L2', 'L21']:
                 lang2 = 'L21' if lang == 'L2' else 'L2'
-            mask_R2 = np.random.rand(len(act[~mask_r])) <= self.lang_stats[lang2]['R'][act[~mask_r]]
-            if act[~mask_r][mask_R2].size:
-                spoken_words.update({lang2: [act[~mask_r][mask_R2], act_c[~mask_r][mask_R2]]})
+            mask_R2 = np.random.rand(len(act[~mask_R])) <= self.lang_stats[lang2]['R'][act[~mask_R]]
+            if act[~mask_R][mask_R2].size:
+                spoken_words.update({lang2: [act[~mask_R][mask_R2], act_c[~mask_R][mask_R2]]})
             # if still missing words, look for them in last lang available
-            if (act[mask_r].size + act[~mask_r][mask_R2].size) < len(act):
+            if (act[mask_R].size + act[~mask_R][mask_R2].size) < len(act):
                 lang3 = 'L2' if lang2 in ['L12', 'L1'] else 'L1'
-                rem_words = act[~mask_r][~mask_R2]
+                rem_words = act[~mask_R][~mask_R2]
                 mask_R3 = np.random.rand(len(rem_words)) <= self.lang_stats[lang3]['R'][rem_words]
                 if rem_words[mask_R3].size:
                     # VERY IMP: add to transition language instead of 'pure' one.
                     # This is the process of creation/adaption/translation
                     tr_lang = max([lang, lang2], key=len)
-                    spoken_words.update({tr_lang: [rem_words[mask_R3], act_c[~mask_r][~mask_R2][mask_R3]]})
+                    spoken_words.update({tr_lang: [rem_words[mask_R3], act_c[~mask_R][~mask_R2][mask_R3]]})
         # update speaker's lang arrays
         self.update_lang_arrays(spoken_words, delta_s_factor=1, num_days=num_days)
 
@@ -793,6 +819,49 @@ class SpeakerAgent(ListenerAgent):
             # talk to a single random mate
             random_mate = np.random.choice(speak_group)
             self.model.run_conversation(self, random_mate, num_days=num_days)
+
+    def evaluate_lang_exclusion(self, mem_window_length=5):
+        """
+            Method evaluates degree of linguistic exclusion during recent steps by
+            computing exponential moving average of the exclusion history
+            by using weights available in agent info. If EMA is higher than one,
+            'react_to_lang_exclusion' method to study/learn needed language is called
+            Method to be checked at the end of each step if agent is not bilingual
+            Args:
+                * mem_window_length: integer. Number of steps to compute EMA (length of exclusion memory)
+        """
+        lang = 'L2' if self.info['language'] == 0 else 'L1'
+        age = self.info['age']
+        # implementing exponential moving average
+        excl_history = self.lang_stats[lang]['excl_c'][age - mem_window_length:age]
+        excl_intensity = np.dot(self.info['excl_weights'], excl_history)
+        if excl_intensity >= 1:
+            self.react_to_lang_exclusion(lang)
+
+    def react_to_lang_exclusion(self, lang):
+        """
+            Meanings of unknown basic words are explained to agent
+            Args:
+                * lang: integer in [0, 1]
+        """
+        # TODO: compare current vocabulary to theoretical vocab at agent age
+
+        # If exclusion language is taught at school, teacher will communicate words meaning
+        school, course_key = self.get_school_and_course()
+        if lang in school.info['lang_policy']:
+            # TODO : should be a new method 'teach'
+            teacher = school[course_key]['teacher']
+            taught_words = teacher.pick_vocab(lang, num_words=1,
+                                              min_age_interlocs=self.info['age'])
+            self.update_lang_arrays(taught_words, mode_type='listen', learning=True)
+        else:
+            # check if mates at school can teach some words 50% of steps
+            pass
+
+
+
+
+
 
     def stage_1(self, num_days=10):
         ags_at_home = self.loc_info['home'].agents_in.difference({self})
@@ -941,24 +1010,6 @@ class IndepAgent(SpeakerAgent):
             conv_length = random.choice(['M', 'L'])
             self.model.run_conversation(self, random_friend,
                                         def_conv_length=conv_length, num_days=num_days)
-
-    def evaluate_lang_exclusion(self, mem_window_length=5):
-        """
-            Method evaluates degree of linguistic exclusion during recent steps by
-            computing exponential moving average of the exclusion history
-            by using weights available in agent info. If EMA is higher than one,
-            'react_to_lang_exclusion' method to study/learn needed language is called
-            Method to be checked at the end of each step if agent is not bilingual
-            Args:
-                * mem_window_length: integer. Number of steps to compute EMA (length of exclusion memory)
-        """
-        lang = 'L2' if self.info['language'] == 0 else 'L1'
-        age = self.info['age']
-        # implementing exponential moving average
-        excl_history = self.lang_stats[lang]['excl_c'][age - mem_window_length:age]
-        excl_intensity = np.dot(self.info['excl_weights'], excl_history)
-        if excl_intensity >= 1:
-            self.react_to_lang_exclusion(lang)
 
     def react_to_lang_exclusion(self, lang, mem_window_length=5):
         """
@@ -1299,16 +1350,17 @@ class Young(IndepAgent):
         # find appartment to move in together
         self.move_to_new_home()
 
-    def reproduce(self, day_prob=0.001, max_num_children=4):
-        """ give birth to a new agent if conditions and likelihoods are met """
+    def reproduce(self, day_prob=0.0015, max_num_children=4):
+        """ Method to give birth to a new agent if conditions and likelihoods are met """
 
         # TODO : check appropriate day_prob . Shouldn'it be 0.0015 ? to have > 1 child/per parent
 
         # TODO: check method integration with creation of 'Baby' class
-        if (self.info['num_children'] < max_num_children and self.info['married'] and
-            random.random() < day_prob):
+        if (random.random() < day_prob and
+            self.info['num_children'] < max_num_children and
+            self.info['married']):
             id_baby = self.model.set_available_ids.pop()
-            # find consort
+            # get consort
             consort = self.get_family_relative('consort')
             # find out baby language attribute and langs with parents
             newborn_lang, lang_with_father, lang_with_mother = self.model.get_newborn_lang(self, consort)
@@ -1317,8 +1369,7 @@ class Young(IndepAgent):
             father, mother = (self, consort) if self.info['sex'] == 'M' else (consort, self)
             # Create baby instance
             baby = Baby(father, mother, lang_with_father, lang_with_mother,
-                        self.model, id_baby, newborn_lang, sex,
-                        home=self.loc_info['home'])
+                        self.model, id_baby, newborn_lang, sex, home=self.loc_info['home'])
             # Add agent to grid, schedule, network and clusters info
             self.model.add_new_agent_to_model(baby)
             # Update num of children for both self and consort
@@ -1741,7 +1792,6 @@ class Teacher(Adult):
         pass
 
     def stage_1(self, ix_agent, num_days=7):
-        self.evaluate_lang_exclusion()
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
@@ -1848,7 +1898,6 @@ class Pensioner(Adult): # from 65 to death
         BaseAgent.random_death(self)
 
     def stage_1(self, ix_agent, num_days=10):
-        self.evaluate_lang_exclusion()
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):

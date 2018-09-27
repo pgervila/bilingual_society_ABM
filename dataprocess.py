@@ -1,11 +1,11 @@
 from mesa.datacollection import DataCollector
 
-import os
 import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
 from collections import Counter
 import deepdish as dd
+import dill
 
 
 class DataProcessor(DataCollector):
@@ -67,10 +67,10 @@ class DataProcessor(DataCollector):
         return lang_counts[lang_type] / len(ag_lang_list)
 
     def get_global_bilang_inner_evol(self):
-        """Method to compute internal linguistic structure of all bilinguals,
+        """ Method to compute internal linguistic structure of all bilinguals,
         expressed as average amount of Catalan heard or spoken as % of total
 
-         Returns:
+         Output:
              * float representing the AVERAGE percentage of Catalan in bilinguals
 
         """
@@ -88,7 +88,13 @@ class DataProcessor(DataCollector):
         pass
 
     def get_agents_attrs_value(self, ag_attr, plot=False):
-        """ Get value of specific attribute for all lang agents in model """
+        """ Get value of specific attribute for all lang agents in model
+            Args:
+                * ag_attr: string. Specifies numerical agent attribute
+                * plot: boolean. True to plot processed info, False otherwise
+            Output:
+                * Assigns processed value to 'df_attrs_avg'
+        """
         ag_and_coords = [(ag.info[ag_attr], ag.pos[0], ag.pos[1])
                          for ag in self.model.schedule.agents]
         ag_and_coords = np.array(ag_and_coords)
@@ -106,6 +112,21 @@ class DataProcessor(DataCollector):
                             cmap='viridis')
             plt.colorbar(s)
             plt.show()
+
+    def get_attrs_avg_map(self):
+        """
+            Method to store averaged attribute values per cell
+            into a numpy array
+        """
+        attr_map = np.full((self.model.grid_width, self.model.grid_height), np.nan)
+        for idx, val in self.df_attrs_avg.iterrows():
+            attr_map[idx[::-1]] = val['values']
+        plt.imshow(attr_map, vmin=0, vmax=2, cmap='viridis', interpolation="nearest")
+        plt.colorbar()
+
+    def pickle_model(self):
+        with open('saved_model', 'wb') as f:
+            dill.dump(self.model, f, byref=True)
 
     def save_model_data(self):
         self.model_data = {'initial_conditions': {'num_clusters': self.model.geo.num_clusters,

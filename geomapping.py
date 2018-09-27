@@ -26,12 +26,10 @@ class GeoMapper:
         # generate lang distribution for each cluster
         self.generate_langs_per_clust()
 
-    def import_geo_ics(self):
+    def import_geo(self):
         """ Idea: import coordinates and assign them to model current object definition """
-        # import jobs
-        # import schools
-        # import univs
-        # import homes
+        # import clusters' centers and sizes
+        # import jobs, schools, univs locations
         # import agents
         pass
 
