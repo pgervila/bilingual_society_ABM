@@ -1,6 +1,7 @@
 # IMPORT LIBS
 import random
 import string
+import itertools
 from collections import defaultdict
 from copy import deepcopy
 import numpy as np
@@ -44,16 +45,10 @@ class BaseAgent:
         self.loc_info = {'home': None}
         if home:
             home.assign_to_agent(self)
-
         self.lang_thresholds = {'speak': lang_act_thresh, 'understand': lang_passive_thresh}
 
-
         # define container for languages' tracking and statistics
-        # self.lang_stats = defaultdict(lambda: defaultdict(dict))
-
         self.lang_stats = defaultdict(dict)
-
-
         # define list of all lang labels in model
         all_langs = ['L1', 'L12', 'L21', 'L2']
         # define mask for each step
@@ -1073,9 +1068,7 @@ class Baby(ListenerAgent):
     def __init__(self, father, mother, lang_with_father, lang_with_mother, *args, school=None, **kwargs):
 
         super().__init__(*args, **kwargs)
-
         self.model.nws.set_family_links(self, father, mother, lang_with_father, lang_with_mother)
-
         if school:
             school.assign_student(self)
         else:
@@ -1589,11 +1582,14 @@ class Young(IndepAgent):
             job.agents_in.add(self)
             self.info['job_steps'] += 1
 
-    def meet_family(self):
+    def gather_family(self):
         """
             Meet brothers or sisters with children
             one time per step with 50% chance
         """
+        pass
+
+    def gather_friends(self):
         pass
 
     def speak_to_customer(self, num_days=5):
@@ -1722,7 +1718,6 @@ class Adult(Young): # from 30 to 65
 
     age_low, age_high = 30, 65
 
-
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)
         # new agent will not have a job if Pensioner
@@ -1742,6 +1737,9 @@ class Adult(Young): # from 30 to 65
         super().look_for_partner(avg_years=avg_years)
 
     def gather_family(self):
+        pass
+
+    def gather_siblings(self):
         pass
 
     def stage_1(self, ix_agent, num_days=7):
@@ -1920,16 +1918,63 @@ class TeacherUniv(Teacher):
             self.speak_to_random_friend(ix_agent, num_days=3)
 
 
-class Pensioner(Adult): # from 65 to death
+class Pensioner(Adult):
+    """ Agent from 65 to death """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, married=False, num_children=0, **kwargs):
+        BaseAgent.__init__(self, *args, **kwargs)
+        self.info['married'] = married
+        self.info['num_children'] = num_children
 
     def random_death(self):
         BaseAgent.random_death(self)
 
-    def gather_family(self):
-        pass
+    def gather_family(self, num_days=1, freq=0.1):
+        if random.random() < freq:
+            consort = self.get_family_relative('consort')
+            # check which children are in same cluster
+            children = self.get_family_relative('child')
+            children = [child for child in children if child['clust'] == self['clust']]
+            ch_consorts = [child.get_family_relative('child') for child in children]
+            grandchildren = list(itertools.chain.from_iterable([ch.get_family_relative('child')
+                                                                for ch in children]))
+            all_family = children + ch_consorts + grandchildren + consort
+            adults = children + ch_consorts + consort
+
+            # make grandchildren talk to each other
+            if len(grandchildren) > 3:
+                random.shuffle(grandchildren)
+                self.model.run_conversation(grandchildren[0], grandchildren[1:], num_days=1)
+            # speak to children
+            self.model.run_conversation(self, children, num_days=1)
+            # speak to children and consorts
+            self.speak_in_random_subgroups(adults, num_days=1,
+                                           max_group_size=len(adults))
+            # speak to grandchildren
+            self.speak_in_random_subgroups(grandchildren, num_days=1,
+                                           max_group_size=len(grandchildren))
+            # speak to all family
+            self.model.run_conversation(self, all_family, num_days=1)
+
+    def speak_to_children(self):
+        children = self.get_family_relative('child')
+        for child in children:
+            self.model.run_conversation(self, child, num_days=1)
+
+    def update_mem_decay(self, thresh=0.01, step_decay=0.1):
+        """
+            Method to model memory loss because of old age
+            Args:
+                * thresh: float. Minimum value memory stability S can have
+                * step_decay: float. Value of S decay per each step
+            Output:
+                * Updated memory stability array for each language agent speaks
+        """
+        for lang in self.lang_stats:
+            mem_stab = self.lang_stats[lang]['S']
+            self.lang_stats[lang]['S'] = np.where(mem_stab > thresh,
+                                                  np.maximum(mem_stab - step_decay, thresh),
+                                                  thresh)
 
     def stage_1(self, ix_agent, num_days=10):
         super().stage_1(ix_agent, num_days=num_days)
@@ -1939,23 +1984,16 @@ class Pensioner(Adult): # from 65 to death
             self.speak_to_random_friend(ix_agent, num_days=7)
 
     def stage_3(self, ix_agent):
-        # TODO : meet with family if any
-        # TODO : pensioners, if alive, will lead family gathering
+        # Pensioners, if alive, will lead family gathering
         if self.model.nws.family_network[self]:
-            pass
-            # speak to children and partners
-            # speak to grandchildren
-            # speak to siblings and partners
-        if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days=7)
+            self.gather_family()
+        self.stage_2(ix_agent)
 
     def stage_4(self, ix_agent, num_days=10):
         self.go_back_home()
-        self.stage_1(ix_agent, num_days=7)
-        self.stage_2(ix_agent, num_days=7)
-        # memory loss because of old age
-        for lang in self.lang_stats.keys():
-            self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] > 0.01,
-                                                  np.maximum(self.lang_stats[lang]['S'] - 0.1, 0.01),
-                                                  0.01)
+        self.stage_1(ix_agent, num_days=num_days)
+        self.stage_2(ix_agent)
+        # speak to children ( action led by parents )
+        self.speak_to_children()
+
 

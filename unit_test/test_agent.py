@@ -255,7 +255,6 @@ def test_process_unknown_words(model, sample_words, mode_type):
     pass
 
 
-
 @pytest.mark.parametrize("sample_words, mode_type", test_data_update_lang_arrays)
 def test_update_words_memory(model, dummy_agent, sample_words, mode_type):
 
@@ -275,6 +274,21 @@ def test_update_words_memory(model, dummy_agent, sample_words, mode_type):
 
 def test_look_for_partner(model):
     pass
+
+
+def test_pensioner_methods(model):
+    new_pensioner = Pensioner(model, model.set_available_ids.pop(), 1, 'M',
+                              age=36*66, home=None)
+    pass
+
+
+def test_young_methods(model):
+    pass
+
+
+def test_teacher_methods(model):
+    pass
+
 
 
 

@@ -334,6 +334,7 @@ class GeoMapper:
                 ag3 = Child(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2])
                 ag4 = Child(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3])
                 # set ages of family members
+                # TODO: ages should be set at agent instantiation, not later !!!!
                 (ag1.info['age'],
                  ag2.info['age']) = self.model.steps_per_year * np.random.randint(*parents_age_range, 2)
                 (ag3.info['age'],

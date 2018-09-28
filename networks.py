@@ -131,7 +131,7 @@ class NetworkBuilder:
 
     def set_family_links(self, agent, father, mother, lang_with_father, lang_with_mother):
         """
-            Method to define family links and interaction language of a new agent.
+            Method to define family links and interaction language of a newborn agent.
             Corresponding edges are created in family and known people networks
             Args:
                 * agent: agent instance. The agent on which links have to be defined

@@ -159,8 +159,6 @@ class LanguageModel(Model):
                 * rate_1: float. Value to set exponential growth rate for factor in section 1
                 * rate_3: float. Value to set exponential decay rate in section 3
                 * exp_mult: integer. Value that multiplies exponential function in section 1
-                * scale_f : integer. Compression factor from real to simulated number of words in vocabulary
-                * real_spoken_tokens_per_day: integer. Average REAL number of tokens used by an adult per day
             Output:
                 * Method sets the factor value as instance attribute. The factor value is a numpy array
                     where values are a function of index (index == age)
@@ -473,7 +471,8 @@ class LanguageModel(Model):
                     member.set_lang_ics()
 
     def get_lang_fam_members(self, family):
-        """ Method to find out lang of interaction btw family members in a 4-members family
+        """
+            Method to find out lang of interaction btw family members in a 4-members family
             Args:
                 * family: list of family agents
             Output:
@@ -482,11 +481,9 @@ class LanguageModel(Model):
         # language between consorts
         consorts_lang_params = self.get_conv_params([family[0], family[1]])
         lang_consorts = consorts_lang_params['lang_group'][0]
-
         # language of children with parents
         lang_with_father = consorts_lang_params['fav_langs'][0]
         lang_with_mother = consorts_lang_params['fav_langs'][1]
-
         # language between siblings
         avg_lang = (lang_with_father + lang_with_mother) / 2
         if avg_lang == 0:
