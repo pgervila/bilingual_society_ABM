@@ -114,22 +114,11 @@ class NetworkBuilder:
                 colleagues = 'students'
             else:
                 continue
-
             for coll in info_occupation[colleagues].difference({ag}):
                 # check colleague lang distance and all friendship conditions
-                if (abs(coll.info['language'] - ag.info['language']) <= 1 and
-                            len(self.friendship_network[coll]) < friends_per_agent[coll.unique_id] and
-                            coll not in self.friendship_network[ag] and
-                            coll not in self.family_network[ag]):
-                    friends = [ag, coll]
-                    # who speaks first may determine communication lang
-                    random.shuffle(friends)
-                    lang = self.model.get_conv_params(friends)['lang_group']
-                    self.friendship_network.add_edge(ag, coll, lang=lang, weight=np.random.randint(1, 10))
-                    # known people network is directed graph !
-                    self.known_people_network.add_edge(ag, coll, friends=True, lang=lang)
-                    self.known_people_network.add_edge(coll, ag, friends=True, lang=lang)
-                if len(self.friendship_network[ag]) > num_friends - 1:
+                if ag.check_friend_conds(coll, num_friends):
+                    ag.make_friend(coll)
+                if len(self.friendship_network[ag]) == num_friends:
                     break
 
     def define_jobs_network(self, p=0.3):

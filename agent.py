@@ -245,13 +245,17 @@ class BaseAgent:
             elif self.get_langs_pcts(1) < switch_threshold:
                 self.info['language'] = 0
 
+    def grow(self):
+        """ Convenience method to update agent age at each step """
+        self.info['age'] += 1
+
     def evolve(self, new_class, ret_output=False, upd_course=False):
         """ It replaces current agent with a new agent subclass instance.
             It removes current instance from all networks, lists, sets in model and
             replaces it with the new_class instance.
             Args:
                 * new_class: class. Agent subclass that will replace the current one
-                * ret_ouput: boolean. True if grown_agent needs to be returned as output
+                * ret_output: boolean. True if grown_agent needs to be returned as output
                 * upd_course: boolean. True if evolution involves agent quitting school or univ.
                     Default False
         """
@@ -261,6 +265,7 @@ class BaseAgent:
         # copy all current instance attributes to the new agent instance
         for key, val in self.__dict__.items():
             setattr(grown_agent, key, val)
+        # TODO: explore __slots__ approach for agent class ( getattr(self, key) in self.__slots__ )
 
         # replace agent node in networks
         relabel_key = {self: grown_agent}
@@ -858,10 +863,32 @@ class SpeakerAgent(ListenerAgent):
             # check if mates at school can teach some words 50% of steps
             pass
 
+    def check_friend_conds(self, other, max_num_friends=10):
+        """
+            Method to check if given agent meets compatibility conditions to become a friend
+            Input:
+                * ag: agent instance. Instance whose friendship conditions must be checked
+            Output:
+                * Boolean. Returns True if friendship is possible, None otherwise
+        """
 
+        if (abs(other.info['language'] - self.info['language']) <= 1 and
+                len(self.model.nws.friendship_network[other]) < max_num_friends and
+                other not in self.model.nws.friendship_network[self] and
+                other not in self.model.nws.family_network[self]):
+            return True
 
-
-
+    def make_friend(self, other):
+        """ Method to implement friendship bounds between self agent and"""
+        friends = [self, other]
+        # who speaks first may determine communication lang
+        random.shuffle(friends)
+        lang = self.model.get_conv_params(friends)['lang_group']
+        self.model.nws.friendship_network.add_edge(self, other, lang=lang,
+                                                   weight=np.random.randint(1, 10))
+        # known people network is directed graph !
+        self.model.nws.known_people_network.add_edge(self, other, friends=True, lang=lang)
+        self.model.nws.known_people_network.add_edge(other, self, friends=True, lang=lang)
 
     def stage_1(self, num_days=10):
         ags_at_home = self.loc_info['home'].agents_in.difference({self})
@@ -1714,6 +1741,9 @@ class Adult(Young): # from 30 to 65
     def look_for_partner(self, avg_years=4, age_diff=10, thresh_comm_lang=0.3):
         super().look_for_partner(avg_years=avg_years)
 
+    def gather_family(self):
+        pass
+
     def stage_1(self, ix_agent, num_days=7):
         self.evaluate_lang_exclusion()
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -1723,6 +1753,7 @@ class Adult(Young): # from 30 to 65
 
     def stage_3(self, ix_agent):
         super().stage_3(ix_agent)
+        # TODO: if agent has no parents, he/she must lead family gathering if possible
 
     def stage_4(self, ix_agent, num_days=7):
         self.go_back_home()
@@ -1897,6 +1928,9 @@ class Pensioner(Adult): # from 65 to death
     def random_death(self):
         BaseAgent.random_death(self)
 
+    def gather_family(self):
+        pass
+
     def stage_1(self, ix_agent, num_days=10):
         super().stage_1(ix_agent, num_days=num_days)
 
@@ -1905,14 +1939,20 @@ class Pensioner(Adult): # from 65 to death
             self.speak_to_random_friend(ix_agent, num_days=7)
 
     def stage_3(self, ix_agent):
+        # TODO : meet with family if any
+        # TODO : pensioners, if alive, will lead family gathering
+        if self.model.nws.family_network[self]:
+            pass
+            # speak to children and partners
+            # speak to grandchildren
+            # speak to siblings and partners
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=7)
 
     def stage_4(self, ix_agent, num_days=10):
         self.go_back_home()
         self.stage_1(ix_agent, num_days=7)
-        if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days=7)
+        self.stage_2(ix_agent, num_days=7)
         # memory loss because of old age
         for lang in self.lang_stats.keys():
             self.lang_stats[lang]['S'] = np.where(self.lang_stats[lang]['S'] > 0.01,

@@ -3,12 +3,6 @@
 
 import random
 import numpy as np
-import networkx as nx
-
-from sklearn.preprocessing import normalize
-import warnings
-from sklearn.utils import DataConversionWarning
-warnings.filterwarnings("ignore", category=DataConversionWarning)
 
 from mesa.time import StagedActivation
 from agent import IndepAgent, Young
@@ -25,13 +19,12 @@ class StagedActivationModif(StagedActivation):
             ag.call_cnts = ag.call_cnts_init = 0
 
             # new step -> older age
-            ag.info['age'] += 1
+            ag.grow()
             # set exclusion counter to zero
             ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
 
             for lang in ['L1', 'L12', 'L21', 'L2']:
-
-                #save wc for each agent
+                # save wc for each agent
                 ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
 
                 # update last-time word use vector

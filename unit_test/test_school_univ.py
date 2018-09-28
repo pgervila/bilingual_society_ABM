@@ -9,7 +9,7 @@ import agent
 import model
 reload(agent)
 reload(model)
-from agent import BaseAgent, Child, Adolescent, YoungUniv, Young, Adult, Teacher
+from agent import Child, Adolescent, YoungUniv, Young, Teacher
 from model import LanguageModel
 
 print('python hash seed is', os.environ['PYTHONHASHSEED'])
@@ -117,9 +117,6 @@ def test_school_set_up_and_update(model, univ):
         school.update_courses_phase_2()
         for (k, ags) in school.grouped_studs.items():
             assert ags['students']
-            print('course is {}, students ages are {}'.format(k,
-                                                              [st.info['age'] / 36 for st in ags['students']]))
-
             assert ags['teacher']
             assert type(ags['teacher']) == Teacher
             assert ags['teacher'].loc_info['job'][1] == k
@@ -149,10 +146,8 @@ def test_univ_set_up_and_update(model, univ):
     for fac in univ.faculties.values():
         fac.update_courses_phase_2()
         for (k, ags) in fac.grouped_studs.items():
-            # print(fac, k, ags)
             assert ags['students']
             assert all(st.info['age']/36 <= k for st in ags['students'])
-            print('course is {}, students ages are {}'.format(k, [st.info['age']/36 for st in ags['students']]))
             assert ags['teacher']
     for fac in univ.faculties.values():
         for st in list(fac.info['students'])[:]:
@@ -164,8 +159,6 @@ def test_univ_set_up_and_update(model, univ):
         for (k, ags) in fac.grouped_studs.items():
             assert ags['students']
             assert all(st.info['age'] / 36 <= k for st in ags['students'])
-            print('course is {}, students ages are {}'.format(k,
-                                                              [st.info['age'] / 36 for st in ags['students']]))
             assert ags['teacher']
     # pick one faculty with students to check exit method
     fac = [fac for fac in univ.faculties.values() 

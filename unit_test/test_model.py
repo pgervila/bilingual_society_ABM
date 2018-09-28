@@ -75,7 +75,6 @@ def test_model_consistency(model_param):
             assert not hasattr(ag, 'blocked')
 
 
-
 @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", 
                          test_data_get_conv_params)
 def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected): 
@@ -93,7 +92,7 @@ def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected):
 
 @pytest.mark.parametrize("agent_type", test_data_remove_after_death)
 def test_remove_after_death(model, agent_type):
-    #corr_dict = {'Adult': 'Young', 'YoungUniv': 'Adolescent', 'Pensioner': 'Adult'}
+    # corr_dict = {'Adult': 'Young', 'YoungUniv': 'Adolescent', 'Pensioner': 'Adult'}
     for ag in model.schedule.agents:
         if isinstance(ag, agent_type):
             break
