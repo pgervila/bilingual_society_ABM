@@ -13,11 +13,15 @@ from agent import Child, Young, Adult, Teacher
 class NetworkBuilder:
     """ Class to deal with everything that has to do with networks in model """
 
+    family_mirror = {'consort': 'consort', 'father': 'child', 'mother': 'child',
+                     'grandfather': 'grandchild', 'grandmother': 'grandchild',
+                     'uncle': 'nephew', 'aunt': 'nephew', 'sibling': 'sibling',
+                     'cousin': 'cousin'}
+
     def __init__(self, model):
 
         self.adj_mat_fam_nw = None
         self.adj_mat_friend_nw = None
-
         self.model = model
         # setup
         self.create_networks()
@@ -143,21 +147,30 @@ class NetworkBuilder:
         fam_nw = self.family_network
         kn_people_nw = self.known_people_network
 
-        # get agent siblings from mother before agent birth
+        # get agent siblings from mother BEFORE agent birth
         siblings = mother.get_family_relative('child')
         # Define family links with parents
+
         for (i, j, fam_link) in [(agent, father, 'father'), (father, agent, 'child')]:
             fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_father)
             kn_people_nw.add_edge(i, j, family=True, lang=lang_with_father)
         for (i, j, fam_link) in [(agent, mother, 'mother'), (mother, agent, 'child')]:
             fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_mother)
             kn_people_nw.add_edge(i, j, family=True, lang=lang_with_mother)
+
+        # self.set_link_with_relatives(agent, (father, mother), ('father', 'mother'),
+        #                              lang_with_relatives=(lang_with_father, lang_with_mother))
+
         # Define links with agent siblings if any
         for sibling in siblings:
             lang_with_sibling = sibling.get_dominant_lang()
             for (i, j, fam_link) in [(agent, sibling, 'sibling'), (sibling, agent, 'sibling')]:
                 fam_nw.add_edge(i, j, fam_link=fam_link, lang=lang_with_sibling)
                 kn_people_nw.add_edge(i, j, family=True, lang=lang_with_sibling)
+
+        # langs_with_siblings = [sibling.get_dominant_lang() for sibling in siblings]
+        # self.set_link_with_relatives(agent, siblings, 'sibling', lang_with_relatives=langs_with_siblings)
+
         # rest of family will if possible speak same language with baby as their link agent to the baby
         for elder, lang in zip([father, mother], [lang_with_father, lang_with_mother]):
             for relat, labels in fam_nw[elder].items():
@@ -167,10 +180,16 @@ class NetworkBuilder:
                 else:
                     com_lang = 1 if lang == 0 else 0
                 if labels["fam_link"] == 'father':
+
+                    #self.set_link_with_relatives(relat, agent, 'grandfather', lang_with_relatives=com_lang)
+
                     for (i, j, fam_link) in [(agent, relat, 'grandfather'), (relat, agent, 'grandchild')]:
                         fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
                         kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
                 elif labels["fam_link"] == 'mother':
+                    self.set_link_with_relatives(relat, agent, 'grandmother', lang_with_relatives=com_lang)
+
+
                     for (i, j, fam_link) in [(agent, relat, 'grandmother'), (relat, agent, 'grandchild')]:
                         fam_nw.add_edge(i, j, fam_link=fam_link, lang=com_lang)
                         kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
@@ -194,7 +213,31 @@ class NetworkBuilder:
                     fam_nw.add_edge(relat, agent, fam_link='cousin', lang=com_lang)
                     for (i, j) in [(agent, relat), (relat, agent)]:
                         kn_people_nw.add_edge(i, j, family=True, lang=com_lang)
-                        
+
+    def set_link_with_relatives(self, agent, relatives, labels, lang_with_relatives=None):
+        """ Method to set network links with relatives
+            Args:
+                * agent: class instance
+                * relatives: tuple of class instances.
+                * labels: string or tuple of strings. Must have same length as 'relatives'
+                * lang_with_relatives: tuple of integers. Optional. Default None
+            Output:
+                *
+        """
+        fam_nw = self.family_network
+        kn_people_nw = self.known_people_network
+        if not isinstance(relatives, (tuple, list)):
+            relatives = [relatives]
+        if isinstance(labels, str):
+            labels = (labels, ) * len(relatives)
+        if not lang_with_relatives:
+            lang_with_relatives = [relative.get_dominant_lang() for relative in relatives]
+        for relative, fam_link, lang in zip(relatives, labels, lang_with_relatives):
+            for (i, j, link) in [(agent, relative, fam_link),
+                                 (relative, agent, self.family_mirror[fam_link])]:
+                fam_nw.add_edge(i, j, fam_link=link, lang=lang)
+                kn_people_nw.add_edge(i, j, family=True, lang=lang)
+
     def compute_adj_matrices(self):
         """
             Method to compute adjacent matrices for family and friends

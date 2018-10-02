@@ -240,9 +240,9 @@ class BaseAgent:
             elif self.get_langs_pcts(1) < switch_threshold:
                 self.info['language'] = 0
 
-    def grow(self):
+    def grow(self, growth_inc=1):
         """ Convenience method to update agent age at each step """
-        self.info['age'] += 1
+        self.info['age'] += growth_inc
 
     def evolve(self, new_class, ret_output=False, upd_course=False):
         """ It replaces current agent with a new agent subclass instance.
@@ -1359,6 +1359,8 @@ class Young(IndepAgent):
                     break
 
     def get_married(self, ag):
+        """ Args:
+                * ag: agent instance. Agent to marry to """
         # set marriage flags and links between partners
         self.info['married'] = True
         ag.info['married'] = True
@@ -1731,7 +1733,7 @@ class Adult(Young): # from 30 to 65
 
     def reproduce(self, day_prob=0.005, limit_age=40):
         if self.info['age'] <= limit_age * self.model.steps_per_year:
-            super().reproduce()
+            super().reproduce(day_prob=day_prob)
 
     def look_for_partner(self, avg_years=4, age_diff=10, thresh_comm_lang=0.3):
         super().look_for_partner(avg_years=avg_years)
