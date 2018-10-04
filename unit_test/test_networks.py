@@ -30,7 +30,8 @@ def test_newborn_family_links(model):
     father = [ag for ag in model.schedule.agents if type(ag) == Child and
               ag.info['sex'] == 'M' and ag.info['language'] in [0, 1]][0]
     mother = [ag for ag in model.schedule.agents if type(ag) == Child
-              and ag.info['sex'] == 'F' and ag.info['language'] in [0, 1]][0]
+              and ag.info['sex'] == 'F' and ag.info['language'] in [0, 1] and
+              ag not in father.get_family_relative('sibling')][0]
     father.grow(growth_inc=36*20 - father.info['language'])
     mother.grow(growth_inc=36*20 - mother.info['language'])
 
@@ -54,11 +55,23 @@ def test_newborn_family_links(model):
     aunts = [x for x in uncles_and_aunts if x.info['sex'] == 'F']
     cousins = [cousin for x in uncles_and_aunts for cousin in x.get_family_relative('child')]
 
+    assert child.get_family_relative('father') == father
+    assert child in father.get_family_relative('child')
+    assert child.get_family_relative('mother') == mother
+    assert child in mother.get_family_relative('child')
     assert all(x in child.get_family_relative('grandfather') for x in grandfathers)
+    assert child in grandfathers[0].get_family_relative('grandchild')
     assert all(x in child.get_family_relative('grandmother') for x in grandmothers)
-    assert all(x in child.get_family_relative('uncle') for x in uncles)
-    assert all(x in child.get_family_relative('aunt') for x in aunts)
-    assert all(x in child.get_family_relative('cousin') for x in cousins)
+    assert child in grandmothers[0].get_family_relative('grandchild')
+    if uncles:
+        assert all(x in child.get_family_relative('uncle') for x in uncles)
+        assert child in uncles[0].get_family_relative('nephew')
+    if aunts:
+        assert all(x in child.get_family_relative('aunt') for x in aunts)
+        assert child in aunts[0].get_family_relative('nephew')
+    if cousins:
+        assert all(x in child.get_family_relative('cousin') for x in cousins)
+        assert child in cousins[0].get_family_relative('cousin')
 
 
 def test_set_link_with_relatives(model):
