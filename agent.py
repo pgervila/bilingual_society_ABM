@@ -1220,7 +1220,7 @@ class Child(SchoolAgent):
 
 class Adolescent(IndepAgent, SchoolAgent):
 
-    age_low, age_high = 13, 18
+    age_low, age_high = 12, 18
 
     def __init__(self, *args, school=None, **kwargs):
         super().__init__(*args, **kwargs)
