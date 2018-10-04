@@ -10,7 +10,7 @@ from math import ceil
 # IMPORT AGENTS AND  ENTITIES
 import city_objects
 reload(sys.modules['city_objects'])
-from agent import Child, Adult
+from agent import Child, Adolescent, Young, Adult
 from city_objects import Job, School, University, Home
 
 
@@ -213,7 +213,7 @@ class GeoMapper:
                 else:
                     self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places))
 
-    def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
+    def map_schools(self, max_school_size=200, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
             Args:
                 * max_school_size: integer. Maximum size of all schools generated
@@ -304,7 +304,8 @@ class GeoMapper:
 
         self.langs_per_clust = langs_per_clust
 
-    def map_lang_agents(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
+    def map_lang_agents(self, parents_age_range=(25, 50), children_age_range=(2, 17),
+                        max_age_diff=35):
         """
             Method to instantiate all agents grouped by families of 4 members and
             according to requested linguistic order.
@@ -312,6 +313,7 @@ class GeoMapper:
             Args:
                 * parents_age_range: tuple. Minimum and maximum parent's age
                 * children_age_range: tuple. Minimum and maximum children's age
+                * max_age_diff: integer. Maximum allowed age difference between parent and child
             Output:
                 * Assigns home and job/school to all agents grouped by families of four members.
                     Assigns home and job to lonely agents
@@ -323,22 +325,39 @@ class GeoMapper:
             for idx, family_langs in enumerate(zip(*[iter(self.langs_per_clust[clust_idx])] * self.model.family_size)):
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
+                # get parents ages
+                age1 = np.random.randint(*parents_age_range)
+                age2 = max(parents_age_range[0],
+                           min(parents_age_range[1], age1 + np.random.randint(-5, 5)))
                 # instantiate 2 adults with neither job nor home assigned
                 # lang ics will be set later on when defining family network
-                ag1 = Adult(self.model, av_ags_ids.pop(), family_langs[0], family_sexes[0],
-                            married=True, num_children=2)
-                ag2 = Adult(self.model, av_ags_ids.pop(), family_langs[1], family_sexes[1],
-                            married=True, num_children=2)
+                ag_type = Adult if age1 >= 30 else Young
+                ag1 = ag_type(self.model, av_ags_ids.pop(), family_langs[0], family_sexes[0],
+                              age=self.model.steps_per_year * age1, married=True, num_children=2)
+                ag_type = Adult if age2 >= 30 else Young
+                ag2 = ag_type(self.model, av_ags_ids.pop(), family_langs[1], family_sexes[1],
+                              age=self.model.steps_per_year * age2, married=True, num_children=2)
+
                 # instantiate 2 children with neither school nor home assigned
                 # lang ics will be set later on when defining family network
-                ag3 = Child(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2])
-                ag4 = Child(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3])
-                # set ages of family members
-                # TODO: ages should be set at agent instantiation, not later !!!!
-                (ag1.info['age'],
-                 ag2.info['age']) = self.model.steps_per_year * np.random.randint(*parents_age_range, 2)
-                (ag3.info['age'],
-                 ag4.info['age']) = self.model.steps_per_year * np.random.randint(*children_age_range, 2)
+                # get children ages
+                age3, age4 = np.random.randint(max(2, age2 - max_age_diff),
+                                               min(children_age_range[1],
+                                                   age2 - parents_age_range[0] + children_age_range[0] + 1),
+                                               size=2)
+                if age3 == age4:
+                    if age4 + 2 <= children_age_range[1]:
+                        age4 += 2
+                    elif age4 - 2 >= children_age_range[0]:
+                        age4 -= 2
+
+                ag_type = Adolescent if age3 >= 12 else Child
+                ag3 = ag_type(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2],
+                              age=self.model.steps_per_year * age3)
+                ag_type = Adolescent if age4 >= 12 else Child
+                ag4 = ag_type(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3],
+                              age=self.model.steps_per_year * age4)
+
                 # assign same home to all family members to locate them at step = 0
                 family_agents = [ag1, ag2, ag3, ag4]
                 home = clust_info['homes'][idx]

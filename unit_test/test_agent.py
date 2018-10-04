@@ -40,7 +40,7 @@ def city_places(model):
     un1 = model.geo.clusters_info[np.argmax([model.geo.cluster_sizes])]['university']
     j1 = model.geo.clusters_info[0]['jobs'][0]
     
-    places = {'home':h1, 'school':sc1, 'university':un1, 'job':j1}
+    places = {'home': h1, 'school': sc1, 'university': un1, 'job': j1}
     
     return places
 
@@ -101,7 +101,7 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         ag_id = model.set_available_ids.pop()
         old_ag = origin_class(father, mother, 0, 0, model, ag_id, 0, 'M', age=40,
                               home=city_places['home'],
-                              **{labels[0]:city_places[labels[0]]})
+                              **{labels[0]: city_places[labels[0]]})
         add_ag_to_world(model, city_places, old_ag)
     elif origin_class == Teacher:
         ag_id = model.set_available_ids.pop()
@@ -287,6 +287,22 @@ def test_young_methods(model):
 
 
 def test_teacher_methods(model):
+    pass
+
+
+def test_Baby_methods(model):
+    pass
+
+
+def test_Child_methods(model):
+    pass
+
+
+def test_Adolescent_methods(model):
+    pass
+
+
+def test_Young_methods(model):
     pass
 
 

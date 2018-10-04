@@ -240,9 +240,9 @@ class BaseAgent:
             elif self.get_langs_pcts(1) < switch_threshold:
                 self.info['language'] = 0
 
-    def grow(self):
+    def grow(self, growth_inc=1):
         """ Convenience method to update agent age at each step """
-        self.info['age'] += 1
+        self.info['age'] += growth_inc
 
     def evolve(self, new_class, ret_output=False, upd_course=False):
         """ It replaces current agent with a new agent subclass instance.
@@ -654,6 +654,10 @@ class SpeakerAgent(ListenerAgent):
         """
         factor = self.model.conv_length_age_factor[self.info['age']]
         return max(int(self.model.num_words_conv[conv_length] * factor), 1)
+
+    def think_vocab(self):
+        """ TODO: method to think in best known language when alone """
+        pass
 
     def study_vocab(self, lang, delta_s_factor=1, num_words=50):
         """
@@ -1216,7 +1220,7 @@ class Child(SchoolAgent):
 
 class Adolescent(IndepAgent, SchoolAgent):
 
-    age_low, age_high = 13, 18
+    age_low, age_high = 12, 18
 
     def __init__(self, *args, school=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1352,13 +1356,18 @@ class Young(IndepAgent):
         # first check luck
         if random.random() < 1 / (avg_years * self.model.steps_per_year):
             # find suitable partner amongst known people
-            for ag in self.model.nws.known_people_network[self]:
-                if self.check_partner(ag, max_age_diff=max_age_diff,
-                                      thresh_comm_lang=thresh_comm_lang):
-                    self.get_married(ag)
-                    break
+            acq_network = self.model.nws.known_people_network
+            for ag in acq_network[self]:
+                if not acq_network[self][ag]['family']:
+                    if self.check_partner(ag, max_age_diff=max_age_diff,
+                                          thresh_comm_lang=thresh_comm_lang):
+                        self.get_married(ag)
+                        break
 
     def get_married(self, ag):
+        """ Args:
+                * ag: agent instance. Agent to marry to
+        """
         # set marriage flags and links between partners
         self.info['married'] = True
         ag.info['married'] = True
@@ -1731,7 +1740,7 @@ class Adult(Young): # from 30 to 65
 
     def reproduce(self, day_prob=0.005, limit_age=40):
         if self.info['age'] <= limit_age * self.model.steps_per_year:
-            super().reproduce()
+            super().reproduce(day_prob=day_prob)
 
     def look_for_partner(self, avg_years=4, age_diff=10, thresh_comm_lang=0.3):
         super().look_for_partner(avg_years=avg_years)
@@ -1935,7 +1944,7 @@ class Pensioner(Adult):
             # check which children are in same cluster
             children = self.get_family_relative('child')
             children = [child for child in children if child['clust'] == self['clust']]
-            ch_consorts = [child.get_family_relative('child') for child in children]
+            ch_consorts = [child.get_family_relative('consort') for child in children]
             grandchildren = list(itertools.chain.from_iterable([ch.get_family_relative('child')
                                                                 for ch in children]))
             all_family = children + ch_consorts + grandchildren + consort
