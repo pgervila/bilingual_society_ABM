@@ -35,11 +35,11 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 7972
+rand_seed = 1882
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 1211
+np_seed = 6180
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -254,7 +254,7 @@ class LanguageModel(Model):
         ags = [ag_init]
         ags.extend(others) if (type(others) is list) else ags.append(others)
 
-        if self.schedule.steps >=1:
+        if self.schedule.steps >= 1:
             for ag in ags:
                 ag.call_cnts += 1
 
@@ -270,14 +270,13 @@ class LanguageModel(Model):
                     listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1)
             else:
                 # update exclusion counter for excluded agent
-                ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] += 1
-
+                ag.update_lang_exclusion()
         # update acquaintances
         if isinstance(others, list):
             for ix, ag in enumerate(others):
                 if ag.info['language'] != conv_params['mute_type']:
                     ag_init.update_acquaintances(ag, conv_params['lang_group'][0])
-                    ag.update_acquaintances(ag_init, conv_params['lang_group'][ix])
+                    ag.update_acquaintances(ag_init, conv_params['lang_group'][ix + 1])
         else:
             if others.info['language'] != conv_params['mute_type']:
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])

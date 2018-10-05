@@ -86,6 +86,54 @@ def add_ag_to_world(m, city_places, ag_to_add):
     m.nws.add_ags_to_networks(ag_to_add)
 
 
+def test_pensioner_methods(model):
+    for h in model.geo.clusters_info[0]['homes']:
+        if not h.info['occupants']:
+            home = h
+    pensioner_m = Pensioner(model, model.set_available_ids.pop(), 0, 'M',
+                            age=36*66, home=h)
+    pensioner_f = Pensioner(model, model.set_available_ids.pop(), 0, 'F',
+                            age=36*66, home=h)
+    model.add_new_agent_to_model(pensioner_m)
+    model.add_new_agent_to_model(pensioner_f)
+
+    model.nws.set_link_with_relatives(pensioner_m, pensioner_f, 'consort')
+    # pensioner_m.update_acquaintances(pensioner_f, 0)
+    # pensioner_m.get_married(pensioner_f)
+
+    child = model.schedule.agents[0]
+    grandchild = model.schedule.agents[2]
+    model.nws.set_link_with_relatives(child, pensioner_m, 'father')
+    model.nws.set_link_with_relatives(grandchild, pensioner_m, 'grandfather')
+    pensioner_m.gather_family(freq=1)
+
+    pass
+
+
+def test_young_methods(model):
+    pass
+
+
+def test_teacher_methods(model):
+    pass
+
+
+def test_Baby_methods(model):
+    pass
+
+
+def test_Child_methods(model):
+    pass
+
+
+def test_Adolescent_methods(model):
+    pass
+
+
+def test_Young_methods(model):
+    pass
+
+
 @pytest.mark.parametrize("origin_class, new_class, labels", test_data_evolve)
 def test_evolve(model, city_places, origin_class, new_class, labels):
 
@@ -137,7 +185,14 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         assert labels[1] in grown_ag.loc_info
         
 def test_look_for_partner(model):
-    pass
+    for ag in model.schedule.agents:
+        if isinstance(ag, Young):
+            ag.info['married'] = False
+            break
+
+    ag.look_for_partner(avg_years=0.001)
+    assert ag.info['married']
+
             
 def test_listen(model):
     pass
@@ -276,34 +331,7 @@ def test_look_for_partner(model):
     pass
 
 
-def test_pensioner_methods(model):
-    new_pensioner = Pensioner(model, model.set_available_ids.pop(), 1, 'M',
-                              age=36*66, home=None)
-    pass
 
-
-def test_young_methods(model):
-    pass
-
-
-def test_teacher_methods(model):
-    pass
-
-
-def test_Baby_methods(model):
-    pass
-
-
-def test_Child_methods(model):
-    pass
-
-
-def test_Adolescent_methods(model):
-    pass
-
-
-def test_Young_methods(model):
-    pass
 
 
 

@@ -17,7 +17,7 @@ from city_objects import Job, School
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(100, num_clusters=1)
+    return LanguageModel(100, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25])
 
 
 @pytest.fixture(scope="module", params=[(457, 3), (521, 2), (897, 5), (1501, 6)])
@@ -75,6 +75,30 @@ def test_model_consistency(model_param):
             assert not hasattr(ag, 'blocked')
 
 
+def test_run_conversation(model):
+    kn_p_nw = model.nws.known_people_network
+    for ag in model.schedule.agents:
+        if ag.info['language'] == 0 and isinstance(ag, Young):
+            ag_init = ag
+            break
+    for ag in model.schedule.agents:
+        if ag.info['language'] == 1 and ag not in kn_p_nw[ag_init]:
+            ag1 = ag
+            break
+    for ag in model.schedule.agents:
+        if ag.info['language'] == 2 and ag not in kn_p_nw[ag_init]:
+            ag2 = ag
+            break
+    others = [ag1, ag2]
+    # import ipdb; ipdb.set_trace()
+    model.run_conversation(ag_init, others)
+    assert kn_p_nw[ag_init][others[0]]
+    assert kn_p_nw[others[0]][ag_init]
+    assert others[1] not in kn_p_nw[ag_init]
+    assert ag_init not in kn_p_nw[others[1]]
+
+
+
 @pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", 
                          test_data_get_conv_params)
 def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected): 
@@ -88,6 +112,8 @@ def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected):
 
     params = model.get_conv_params(agents)
     assert np.all(expected == (params['lang_group'], params['mute_type']))
+
+
 
 
 @pytest.mark.parametrize("agent_type", test_data_remove_after_death)

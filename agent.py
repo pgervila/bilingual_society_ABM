@@ -377,9 +377,12 @@ class ListenerAgent(BaseAgent):
             spoken_words = to_agent.pick_vocab(lang, conv_length='S', min_age_interlocs=min_age_interlocs,
                                                num_days=num_days)
             # update listener's lang arrays
-            self.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
+            self.update_lang_arrays(spoken_words, mode_type='listen', num_days=num_days)
 
+    def listen_to_media(self):
+        """ Method to listen languages in mass media: internet, radio, TV, movies """
         # TODO : implement 'listen to media' option
+        pass
 
     def update_lang_arrays(self, sample_words, mode_type='speak', delta_s_factor=0.1, pct_threshold=0.9,
                            pct_threshold_und=0.1, max_edit_dist=2, min_prob_und=0.1, num_days=1, learning=False):
@@ -634,10 +637,6 @@ class ListenerAgent(BaseAgent):
                      len(self.model.cdf_data['s'][self.info['age']]))
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
-    def listen_to_media(self):
-        """ Method to listen languages in mass media: internet, radio, TV, movies """
-        pass
-
 
 class SpeakerAgent(ListenerAgent):
 
@@ -803,6 +802,7 @@ class SpeakerAgent(ListenerAgent):
             self.model.nws.known_people_network[self][other].update({'num_meet': 1, 'lang': lang})
         elif (other not in self.model.nws.family_network[self] and
               other not in self.model.nws.friendship_network[self]):
+            # keep track for potential friendship definition
             self.model.nws.known_people_network[self][other]['num_meet'] += 1
 
     def speak_in_random_subgroups(self, group, num_days=7, max_group_size=6):
@@ -823,6 +823,12 @@ class SpeakerAgent(ListenerAgent):
             # talk to a single random mate
             random_mate = np.random.choice(speak_group)
             self.model.run_conversation(self, random_mate, num_days=num_days)
+
+    def update_lang_exclusion(self):
+        """ Method to update exclusion counter after failed conversation
+            Method is called after running 'run_conversation' model method """
+        excl_lang = 'L1' if self.info['language'] == 2 else 'L2'
+        self.lang_stats[excl_lang]['excl_c'][self.info['age']] += 1
 
     def evaluate_lang_exclusion(self, mem_window_length=5):
         """
@@ -1116,7 +1122,7 @@ class Baby(ListenerAgent):
         # ONLY 7 out of 10 days are driven by current agent (rest by parents or caretakers)
         if self.info['age'] > self.model.steps_per_year:
             # move self to school and identify teacher
-            school, course_key = self.loc_info['school']
+            school, course_key = self.get_school_and_course()
             self.model.grid.move_agent(self, school.pos)
             school.agents_in.add(self)
             teacher = school.grouped_studs[course_key]['teacher']
@@ -1129,13 +1135,20 @@ class Baby(ListenerAgent):
                                             def_conv_length='S', num_days=int(num_days/2))
             # make self interact with teacher
             # TODO : a part of speech from teacher to all course(driven from teacher stage method)
-            self.listen(to_agent=teacher, min_age_interlocs=self.info['age'], num_days=num_days)
+            for _ in range(2):
+                self.listen(to_agent=teacher, min_age_interlocs=self.info['age'],
+                            num_days=num_days)
         # model week-ends time are modeled in PARENTS stages
 
     def stage_3(self, num_days=7, prob_father=0.2):
         # parent comes to pick up and speaks with other parents. Then baby listens to parent on way back
         if self.info['age'] > self.model.steps_per_year:
-            school, course_key = self.loc_info['school']
+            # continue school day
+            school, course_key = self.get_school_and_course()
+            teacher = school.grouped_studs[course_key]['teacher']
+            for _ in range(2):
+                self.listen(to_agent=teacher, min_age_interlocs=self.info['age'],
+                            num_days=num_days)
             # check if school parent is available
             school_parent = 'mother' if random.random() > prob_father else 'father'
             school_parent = self.get_family_relative(school_parent)
@@ -1143,7 +1156,7 @@ class Baby(ListenerAgent):
                 self.model.grid.move_agent(school_parent, school.pos)
                 self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
             parents = [ag for ag in self.model.grid.get_cell_list_contents(school.pos)
-                       if isinstance(ag, Adult)]
+                       if isinstance(ag, Young)]
             if parents and school_parent:
                 num_peop = random.randint(1, min(len(parents), 4))
                 self.model.run_conversation(school_parent, random.sample(parents, num_peop))
@@ -1199,6 +1212,7 @@ class Child(SchoolAgent):
 
     def stage_3(self, num_days=7):
         school, course_key = self.get_school_and_course()
+        self.speak_at_school(school, course_key, num_days=num_days)
         school_parent = 'mother' if random.uniform(0, 1) > 0.2 else 'father'
         school_parent = self.get_family_relative(school_parent)
         if school_parent:
@@ -1358,7 +1372,7 @@ class Young(IndepAgent):
             # find suitable partner amongst known people
             acq_network = self.model.nws.known_people_network
             for ag in acq_network[self]:
-                if not acq_network[self][ag]['family']:
+                if 'family' not in acq_network[self][ag]:
                     if self.check_partner(ag, max_age_diff=max_age_diff,
                                           thresh_comm_lang=thresh_comm_lang):
                         self.get_married(ag)
@@ -1474,6 +1488,7 @@ class Young(IndepAgent):
         """
 
         if marriage:
+            # TODO: pensioners can marry but have no jobs !!!
             # self already has a job since it is a pre-condition to move to a new home
             # get 'self' agent job and cluster
             job_1 = self.get_current_job()
@@ -1860,6 +1875,9 @@ class Teacher(Adult):
         self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
             self.speak_to_random_friend(ix_agent, num_days=5)
+        if not self.info['married'] and self.loc_info['job']:
+            self.look_for_partner()
+
 
 
 class TeacherUniv(Teacher):
@@ -1935,23 +1953,31 @@ class Pensioner(Adult):
         self.info['married'] = married
         self.info['num_children'] = num_children
 
+    def find_home(self, clust):
+        """ Overrides method since pensioners have no job """
+        # TODO
+        pass
+
     def random_death(self):
         BaseAgent.random_death(self)
 
     def gather_family(self, num_days=1, freq=0.1):
         if random.random() < freq:
             consort = self.get_family_relative('consort')
+            consort = [consort] if consort else []
             # check which children are in same cluster
             children = self.get_family_relative('child')
             children = [child for child in children if child['clust'] == self['clust']]
             ch_consorts = [child.get_family_relative('consort') for child in children]
-            grandchildren = list(itertools.chain.from_iterable([ch.get_family_relative('child')
-                                                                for ch in children]))
+            ch_consorts = [c for c in ch_consorts if c]
+            grandchildren = self.get_family_relative('grandchild')
+            grandchildren = [gc for gc in grandchildren if type(gc) != Baby]
+
             all_family = children + ch_consorts + grandchildren + consort
             adults = children + ch_consorts + consort
 
             # make grandchildren talk to each other
-            if len(grandchildren) > 3:
+            if len(grandchildren) >= 3:
                 random.shuffle(grandchildren)
                 self.model.run_conversation(grandchildren[0], grandchildren[1:], num_days=1)
             # speak to children
