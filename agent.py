@@ -66,7 +66,7 @@ class BaseAgent:
             self.wc_init[lang] = np.zeros(self.model.vocab_red)
             self.wc_final[lang] = np.zeros(self.model.vocab_red)
 
-        self.call_cnts_final = self.call_cnts_init = self.call_cnts = 0
+        self.call_cnts_final = self.call_cnts_init = 0
 
     def _set_lang_attrs(self, lang, pct_key):
         """ Private method that sets agent linguistic statistics for a GIVEN AGE
@@ -173,7 +173,8 @@ class BaseAgent:
         # m = 1 / self.model.vocab_red
         # self.lang_stats[lang]['mem_eff'] = (m * np.arange(self.model.vocab_red)**1 + min_num_t).astype(int)
 
-        self.lang_stats[lang]['mem_eff'] = np.random.randint(min_num_t, max_num_t, size=self.model.vocab_red)
+        self.lang_stats[lang]['mem_eff'] = np.random.randint(min_num_t, max_num_t,
+                                                             size=self.model.vocab_red)
 
     def set_excl_weights(self, mem_window_length=5):
         """ Method to set values for weights to assess degree of exclusion
@@ -317,6 +318,48 @@ class BaseAgent:
     def go_back_home(self):
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
 
+    @classmethod
+    def speak_counter(cls, func):
+        def wrapper(self, *args, **kwargs):
+            step = self.model.schedule.steps
+            f_name = func.__name__
+            if not hasattr(self, '_method_call_counts'):
+                self._method_call_counts = defaultdict(list)
+            if not self._method_call_counts[f_name]:
+                self._method_call_counts[f_name].append(0)
+            elif len(self._method_call_counts[f_name]) <= step:
+                self._method_call_counts[f_name].append(0)
+            self._method_call_counts[f_name][step] += 1
+            return func(self, *args, **kwargs)
+        return wrapper
+
+    @classmethod
+    def words_per_conv_counter(cls, func):
+        def wrapper(self, *args, **kwargs):
+            step = self.model.schedule.steps
+            if not hasattr(self, '_words_per_conv_counts'):
+                self._words_per_conv_counts = defaultdict(lambda: defaultdict(list))
+            for time, stage in zip(['.0', '.25', '.5', '.75'],
+                                   ['stage_1', 'stage_2', 'stage_3', 'stage_4']):
+                if time in str(float(self.model.schedule.time)):
+                    break
+            self._words_per_conv_counts[step][stage].append((kwargs['conv_length'],
+                                                             kwargs['num_days']))
+            return func(self, *args, **kwargs)
+        return wrapper
+
+    @classmethod
+    def conv_counter(cls, func):
+        def wrapper(self, group, *args, **kwargs):
+            ags = [self] + group
+            for ag in ags:
+                try:
+                    ag.call_cnts_final += 1
+                except AttributeError:
+                    ag.call_cnts_final = ag.call_cnts_init = 0
+            return func(self, group, *args, **kwargs)
+        return wrapper
+
     def __getitem__(self, clust):
         return self.loc_info['home'].info[clust]
 
@@ -341,6 +384,7 @@ class BaseAgent:
 class ListenerAgent(BaseAgent):
     """ BaseAgent class augmented with listening-related methods """
 
+    @BaseAgent.speak_counter
     def listen(self, to_agent=None, min_age_interlocs=None, num_days=10):
         """
             Method to listen to conversations, media, etc... and update corresponding vocabulary
@@ -678,6 +722,8 @@ class SpeakerAgent(ListenerAgent):
 
         self.update_lang_arrays(studied_words, mode_type='read', delta_s_factor=delta_s_factor)
 
+    @BaseAgent.words_per_conv_counter
+    @BaseAgent.speak_counter
     def pick_vocab(self, lang, num_words=None, conv_length='M', min_age_interlocs=None,
                    biling_interloc=False, num_days=10):
         """ Method that models word choice by self agent in a conversation and
@@ -805,7 +851,7 @@ class SpeakerAgent(ListenerAgent):
             # keep track for potential friendship definition
             self.model.nws.known_people_network[self][other]['num_meet'] += 1
 
-    def speak_in_random_subgroups(self, group, num_days=7, max_group_size=6):
+    def speak_in_random_subgroups(self, group, num_days=2, max_group_size=6):
         """
             Randomly select a subset of a given group
             and speak to it. Then select a random member of the subgroup
@@ -935,6 +981,12 @@ class SchoolAgent(SpeakerAgent):
                                    if isinstance(ag, SchoolAgent)])
         # talk to random mates in group
         mates = speak_ags_in_course.difference({self})
+        if not mates:
+            # find closest course to course_key
+            def f_sort(k):
+                return abs(k-course_key) if k != course_key else 20
+            mates = educ_center[min(educ_center.grouped_studs.keys(),
+                                    key=f_sort)]['students']
         self.speak_in_random_subgroups(mates, num_days=num_days)
         # talk to friends
         for friend in self.model.nws.friendship_network[self]:
@@ -980,6 +1032,7 @@ class IndepAgent(SpeakerAgent):
         pass
         #self.model.grid.move_agent(self, school.pos)
 
+    @BaseAgent.conv_counter
     def speak_to_group(self, group, lang=None, conv_length='M',
                        biling_interloc=False, num_days=10):
         """
@@ -1003,9 +1056,6 @@ class IndepAgent(SpeakerAgent):
         # update listeners' lang arrays
         for ag in group:
             ag.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1, num_days=num_days)
-
-        for ag in [self] + group:
-            ag.call_cnts += 1
 
     def pick_random_friend(self, ix_agent):
         """
@@ -1132,7 +1182,7 @@ class Baby(ListenerAgent):
             if school_parent:
                 self.listen(to_agent=school_parent, min_age_interlocs=self.info['age'], num_days=num_days)
                 self.model.run_conversation(teacher, school_parent,
-                                            def_conv_length='S', num_days=int(num_days/2))
+                                            def_conv_length='S', num_days=int(num_days/3))
             # make self interact with teacher
             # TODO : a part of speech from teacher to all course(driven from teacher stage method)
             for _ in range(2):
@@ -1304,7 +1354,7 @@ class Adolescent(IndepAgent, SchoolAgent):
             # TODO : add groups, more than one friend
             self.speak_to_random_friend(ix_agent, num_days=5)
 
-        self.listen(num_days=5)
+        self.listen(num_days=1)
 
     def stage_4(self, ix_agent, num_days=7):
         self.go_back_home()
@@ -1643,9 +1693,9 @@ class Young(IndepAgent):
         else:
             job = self.loc_info['job']
             colleagues = job.info['employees']
-            self.speak_in_random_subgroups(colleagues)
+            self.speak_in_random_subgroups(colleagues, num_days=2)
             self.speak_to_customer(num_days=2)
-        self.listen(num_days=3)
+        self.listen(num_days=1)
 
     def stage_4(self, ix_agent):
         self.go_back_home()
@@ -1807,6 +1857,11 @@ class Teacher(Adult):
         educ_center, course_key = self.loc_info['job']
         return educ_center, course_key
 
+    def get_students(self):
+        school, course_key = self.get_school_and_course()
+        if course_key:
+            return school[course_key]['students']
+
     def evolve(self, new_class, ret_output=False):
         grown_agent = super().evolve(new_class, ret_output=True)
         if ret_output:
@@ -1839,7 +1894,7 @@ class Teacher(Adult):
             # teacher speaks to entire course
             studs = list(job.grouped_studs[course_key]['students'])
             if studs:
-                self.speak_to_group(studs, lang=0, num_days=7)
+                self.speak_to_group(studs, lang=0, conv_length='L', num_days=7)
 
     def speak_with_colleagues(self):
         pass
@@ -1867,17 +1922,15 @@ class Teacher(Adult):
             self.speak_to_class()
             colleagues = job.info['employees']
             self.speak_in_random_subgroups(colleagues)
-
             self.speak_to_random_friend(ix_agent, num_days=3)
 
     def stage_4(self, ix_agent, num_days=7):
         self.go_back_home()
         self.stage_1(ix_agent, num_days=7)
         if self.model.nws.friendship_network[self]:
-            self.speak_to_random_friend(ix_agent, num_days=5)
+            self.speak_to_random_friend(ix_agent, num_days=3)
         if not self.info['married'] and self.loc_info['job']:
             self.look_for_partner()
-
 
 
 class TeacherUniv(Teacher):

@@ -1,4 +1,6 @@
 from mesa.datacollection import DataCollector
+from agent import Baby, Child, Adolescent, Young, YoungUniv
+from agent import Adult, Teacher, TeacherUniv, Pensioner
 
 import numpy as np
 import pandas as pd
@@ -11,6 +13,7 @@ import dill
 class DataProcessor(DataCollector):
     def __init__(self, model):
         self.model = model
+        self.model_data = None
         super().__init__(model_reporters={"pct_spa": lambda dp: dp.get_lang_stats(0),
                                           "pct_bil": lambda dp: dp.get_lang_stats(1),
                                           "pct_cat": lambda dp: dp.get_lang_stats(2),
@@ -52,6 +55,30 @@ class DataProcessor(DataCollector):
     def get_agent_by_id(self, ag_id):
         return [ag for ag in self.model.schedule.agents if ag.unique_id == ag_id][0]
 
+    def get_agents_by_type(self, agent_type):
+        return [ag for ag in self.model.schedule.agents if type(ag) == agent_type]
+
+    def get_tokens_per_step(self, ag, step):
+        tot_tokens_per_step = dict()
+        for stage, vals in ag._words_per_conv_counts[step].items():
+            tot_tokens_per_stage = 0
+            for tups in vals:
+                tot_words = self.model.num_words_conv[tups[0]] * tups[1]
+                tot_tokens_per_stage += tot_words
+            tot_tokens_per_step[stage] = tot_tokens_per_stage
+        return tot_tokens_per_step
+
+    @staticmethod
+    def get_conv_type_counter(ag, step, stage):
+        return Counter(ag._words_per_conv_counts[step][stage])
+
+    def get_tokens_stats_per_type(self, ag_type, step):
+        agents = self.get_agents_by_type(ag_type)
+        df_tokens_per_stage = pd.DataFrame.from_dict([self.get_tokens_per_step(ag, step)
+                                                      for ag in agents])
+        return df_tokens_per_stage.describe()
+
+
     def get_lang_stats(self, lang_type):
         """Method to get counts of each type of lang agent
 
@@ -74,7 +101,8 @@ class DataProcessor(DataCollector):
              * float representing the AVERAGE percentage of Catalan in bilinguals
 
         """
-        list_biling = [ag.lang_stats['L2']['pct'][ag.info['age']] for ag in self.model.schedule.agents
+        list_biling = [ag.lang_stats['L2']['pct'][ag.info['age']]
+                       for ag in self.model.schedule.agents
                        if ag.info['language'] == 1]
         if list_biling:
             return np.array(list_biling).mean()
@@ -125,7 +153,7 @@ class DataProcessor(DataCollector):
         plt.colorbar()
 
     def pickle_model(self):
-        with open('saved_model', 'wb') as f:
+        with open('pickled_model', 'wb') as f:
             dill.dump(self.model, f, byref=True)
 
     def save_model_data(self):
@@ -151,11 +179,13 @@ class DataProcessor(DataCollector):
 
 
 class DataViz:
+    """ Class with methods to visualize results"""
     def __init__(self, model):
         self.model = model
 
     def show_results(self, ag_attr='language', step=None,
                      plot_results=True, plot_type='scatter', save_fig=False):
+        """ Method to ..."""
         grid_size = (3, 5)
         self.model.data_process.get_agents_attrs_value(ag_attr)
 
@@ -240,5 +270,7 @@ class PostProcessor:
                 * ag_type: string. Agent class type
         """
         return self.agent_data[self.agent_data['agent_type'] == ag_type].unstack()
+    # self.agent_data[self.agent_data['agent_type'] == 'Child'][filter_tokens].sum(1).unstack()
+    # self.agent_data[self.agent_data['agent_type'] == 'Child'][filter_tokens].sum(1).unstack().mean().mean()
 
 

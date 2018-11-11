@@ -35,11 +35,11 @@ from dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-rand_seed = 1882
+rand_seed = 5893
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-np_seed = 6180
+np_seed = 8082
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -48,6 +48,20 @@ print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 
 class LanguageModel(Model):
+
+    class _Decorators:
+        @classmethod
+        def conv_counter(cls, func):
+            def wrapper(self, ag_init, others, *args, **kwargs):
+                ags = [ag_init]
+                ags.extend(others) if (type(others) is list) else ags.append(others)
+                for ag in ags:
+                    try:
+                        ag.call_cnts_final += 1
+                    except AttributeError:
+                        ag.call_cnts_final = ag.call_cnts_init = 0
+                return func(self, ag_init, others, *args, **kwargs)
+            return wrapper
 
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
@@ -59,7 +73,10 @@ class LanguageModel(Model):
     steps_per_year = 36
     max_lifetime = 4000
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
-    num_words_conv = {'VS': 1, 'S': 3, 'M': 25, 'L': 100}
+    # avg conversation : 3 min, 20 sec
+    # 125 words per minute on average
+    # 400 words per avg conversation -> avg conv has 10 tokens if comp_ratio = 40
+    num_words_conv = {'VS': 1, 'S': 3, 'M': 10, 'L': 100}
 
     def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
                  init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
@@ -230,6 +247,7 @@ class LanguageModel(Model):
 
         return newborn_lang, lang_with_father, lang_with_mother
 
+    @_Decorators.conv_counter
     def run_conversation(self, ag_init, others, bystander=None,
                          def_conv_length='M', num_days=10):
         """
@@ -253,10 +271,6 @@ class LanguageModel(Model):
         # define list of all agents involved
         ags = [ag_init]
         ags.extend(others) if (type(others) is list) else ags.append(others)
-
-        if self.schedule.steps >= 1:
-            for ag in ags:
-                ag.call_cnts += 1
 
         # get all parameters of conversation
         conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
@@ -610,27 +624,30 @@ class LanguageModel(Model):
         self.set_available_ids.add(agent.unique_id)
 
     def step(self):
-        self.data_process.collect()
-        self.schedule.step()
 
-    def run_model(self, steps, recording_steps_period=None, save_dir=''):
+        self.schedule.step()
+        self.data_process.collect()
+
+    def run_model(self, steps, viz_steps_period=None, save_dir=''):
         """ Run model and save frames if required
             Args
                 * steps: integer. Total steps to run
-                * recording_steps_period : integer. Save frames every specified number of steps
+                * viz_steps_period : integer. Save frames every specified number of steps
                 * save_dir : string. It specifies directory where frames will be saved
         """
         pbar = pyprind.ProgBar(steps)
         self.save_dir = save_dir
-        if recording_steps_period:
+        if viz_steps_period:
             script_dir = os.path.dirname(__file__)
             results_dir = os.path.join(script_dir, save_dir)
             if not os.path.isdir(results_dir):
                 os.makedirs(results_dir)
         for _ in range(steps):
             self.step()
-            if recording_steps_period:
-                if not self.schedule.steps % recording_steps_period:
+            if not self.schedule.steps % 5:
+                self.data_process.save_model_data()
+            if viz_steps_period:
+                if not self.schedule.steps % viz_steps_period:
                     self.data_viz.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
             pbar.update()
 
@@ -717,5 +734,7 @@ class LanguageModel(Model):
                                       frames=steps, interval=100, blit=True, repeat=False)
         #plt.tight_layout()
         plt.show()
+
+
 
 

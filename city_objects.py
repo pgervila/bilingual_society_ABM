@@ -48,11 +48,14 @@ class Home:
 
         self.info['occupants'].remove(agent)
         agent.loc_info['home'] = None
+        if agent in self.agents_in:
+            self.agents_in.remove(agent)
         if replace:
             self.info['occupants'].add(grown_agent)
             grown_agent.loc_info['home'] = self
-        if agent in self.agents_in:
-            self.agents_in.remove(agent)
+            self.agents_in.add(grown_agent)
+
+
 
     def __repr__(self):
         return 'Home_{0[clust]!r}_{1.pos!r}'.format(self.info, self)

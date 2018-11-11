@@ -15,8 +15,8 @@ class StagedActivationModif(StagedActivation):
         """ Executes all the stages for all agents """
 
         for ag in self.agents[:]:
-
-            ag.call_cnts = ag.call_cnts_init = 0
+            # set conversation counters to zero when step begins
+            ag.call_cnts_final = ag.call_cnts_init = 0
 
             # new step -> older age
             ag.grow()
@@ -24,7 +24,7 @@ class StagedActivationModif(StagedActivation):
             ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
 
             for lang in ['L1', 'L12', 'L21', 'L2']:
-                # save wc for each agent
+                # save copy of wc for each agent
                 ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
 
                 # update last-time word use vector
@@ -43,7 +43,7 @@ class StagedActivationModif(StagedActivation):
         if self.shuffle:
             random.shuffle(self.agents)
 
-        # Network adj matrices will be fixed through all stages of one step
+        # Network adj matrices will be constant through all stages of one step
         self.model.nws.compute_adj_matrices()
 
         for stage in self.stage_list:
@@ -59,7 +59,6 @@ class StagedActivationModif(StagedActivation):
         for ag in self.agents[:]:
             for lang in ['L1', 'L12', 'L21', 'L2']:
                 ag.wc_final[lang] = ag.lang_stats[lang]['wc'].copy()
-                ag.call_cnts_final = ag.call_cnts
 
         # check reproduction, death : make shallow copy of agents list,
         # since we are potentially removing agents as we iterate

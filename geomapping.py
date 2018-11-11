@@ -213,7 +213,7 @@ class GeoMapper:
                 else:
                     self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places))
 
-    def map_schools(self, max_school_size=200, min_school_size=40, buffer_factor=1.2):
+    def map_schools(self, max_school_size=400, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
             Args:
                 * max_school_size: integer. Maximum size of all schools generated
