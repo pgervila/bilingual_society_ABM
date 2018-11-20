@@ -55,8 +55,6 @@ class Home:
             grown_agent.loc_info['home'] = self
             self.agents_in.add(grown_agent)
 
-
-
     def __repr__(self):
         return 'Home_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
@@ -977,16 +975,13 @@ class Job:
         return 'Job_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
     def __getstate__(self):
-        print('pickling JOB')
         state = self.__dict__.copy()
         state['info']['employees'] = tuple(state['info']['employees'])
         state['agents_in'] = tuple(state['agents_in'])
         return state
 
     def __setstate__(self, state):
-        print('unpickling JOB in')
         self.__dict__.update(state)
-        print('unpickling JOB out')
 
 
 class MeetingPoint:

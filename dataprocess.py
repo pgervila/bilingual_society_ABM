@@ -1,6 +1,4 @@
-from mesa.datacollection import DataCollector
-from agent import Baby, Child, Adolescent, Young, YoungUniv
-from agent import Adult, Teacher, TeacherUniv, Pensioner
+import os
 
 import numpy as np
 import pandas as pd
@@ -8,6 +6,12 @@ import matplotlib.pylab as plt
 from collections import Counter
 import deepdish as dd
 import dill
+
+from mesa.datacollection import DataCollector
+from agent import Baby, Child, Adolescent, Young, YoungUniv
+from agent import Adult, Teacher, TeacherUniv, Pensioner
+
+
 
 
 class DataProcessor(DataCollector):
@@ -33,7 +37,7 @@ class DataProcessor(DataCollector):
                                           "excl_c": lambda a: a.lang_stats['L1']['excl_c'][a.info['age']] if a.info['language'] == 2 else a.lang_stats['L2']['excl_c'][a.info['age']],
                                           "clust_id": lambda a: a.loc_info['home'].info['clust'],
                                           "agent_type": lambda a: type(a).__name__,
-                                          "num_conv_step": lambda a: a.call_cnts_final - a.call_cnts_init
+                                          "num_conv_step": lambda a: a._conv_counts_per_step
                                           }
                          )
 
@@ -169,7 +173,7 @@ class DataProcessor(DataCollector):
                            'model_results': self.get_model_vars_dataframe(),
                            'agent_results': self.get_agent_vars_dataframe()}
         if self.save_dir:
-            dd.io.save(self.save_dir + '/model_data.h5', self.model_data)
+            dd.io.save(os.path.join(self.save_dir, 'model_data.h5'), self.model_data)
         else:
             dd.io.save('model_data.h5', self.model_data)
 
@@ -230,10 +234,12 @@ class DataViz:
         plt.tight_layout()
         if save_fig:
             if self.model.data_process.save_dir:
-                plt.savefig(self.model.data_process.save_dir + '/step' + str(step) + '.png')
+                fig_path = os.path.join(self.model.data_process.save_dir,
+                                        'step{}.png'.format(str(step)))
+                plt.savefig(fig_path)
                 plt.close()
             else:
-                plt.savefig('step' + str(step) + '.png')
+                plt.savefig('step{}.png'.format(str(step)))
                 plt.close()
         if plot_results:
             plt.show()
@@ -253,6 +259,7 @@ class PostProcessor:
         self.data = self.load_model_data(data_filename)
         self.agent_data = self.data['agent_results']
         self.model_data = self.data['model_results']
+        self.init_conditions = pd.Series(self.data['initial_conditions'])
 
     @staticmethod
     def load_model_data(data_filename, key='/'):

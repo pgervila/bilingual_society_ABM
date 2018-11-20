@@ -1,7 +1,6 @@
 # IMPORT LIBS
 import random
 import string
-import itertools
 from collections import defaultdict
 from copy import deepcopy
 import numpy as np
@@ -59,21 +58,22 @@ class BaseAgent:
             # set null knowledge in all possible langs
             for lang in all_langs:
                 self._set_null_lang_attrs(lang)
-
+        # initialize word counter
         self.wc_init = dict()
         self.wc_final = dict()
         for lang in all_langs:
             self.wc_init[lang] = np.zeros(self.model.vocab_red)
             self.wc_final[lang] = np.zeros(self.model.vocab_red)
-
-        self.call_cnts_final = self.call_cnts_init = 0
+        # initialize conversation counter for data collection
+        self._conv_counts_per_step = 0
 
     def _set_lang_attrs(self, lang, pct_key):
         """ Private method that sets agent linguistic statistics for a GIVEN AGE
             Args:
                 * lang: string. It can take two different values: 'L1' or 'L2'
                 * pct_key: string. It must be of the form '%_pct' with % an integer
-                  from following list [10,25,50,75,90,100]. ICs are not available for every single level
+                  from following list of available levels [10, 25, 50, 75, 90, 100].
+                  ICs are not available for every single level
         """
 
         # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
@@ -319,7 +319,9 @@ class BaseAgent:
         self.model.grid.move_agent(self, self.loc_info['home'].pos)
 
     @classmethod
-    def speak_counter(cls, func):
+    def method_calls_counter(cls, func):
+        """ Decorator that counts the number of times
+            an agent method is called per step """
         def wrapper(self, *args, **kwargs):
             step = self.model.schedule.steps
             f_name = func.__name__
@@ -350,13 +352,15 @@ class BaseAgent:
 
     @classmethod
     def conv_counter(cls, func):
+        """ Decorator that tracks the number of conversations
+            each agent has per step """
         def wrapper(self, group, *args, **kwargs):
             ags = [self] + group
             for ag in ags:
                 try:
-                    ag.call_cnts_final += 1
+                    ag._conv_counts_per_step += 1
                 except AttributeError:
-                    ag.call_cnts_final = ag.call_cnts_init = 0
+                    ag._conv_counts_per_step = 0
             return func(self, group, *args, **kwargs)
         return wrapper
 
@@ -384,7 +388,7 @@ class BaseAgent:
 class ListenerAgent(BaseAgent):
     """ BaseAgent class augmented with listening-related methods """
 
-    @BaseAgent.speak_counter
+    #@BaseAgent.method_calls_counter
     def listen(self, to_agent=None, min_age_interlocs=None, num_days=10):
         """
             Method to listen to conversations, media, etc... and update corresponding vocabulary
@@ -722,8 +726,8 @@ class SpeakerAgent(ListenerAgent):
 
         self.update_lang_arrays(studied_words, mode_type='read', delta_s_factor=delta_s_factor)
 
-    @BaseAgent.words_per_conv_counter
-    @BaseAgent.speak_counter
+    #@BaseAgent.words_per_conv_counter
+    #@BaseAgent.method_calls_counter
     def pick_vocab(self, lang, num_words=None, conv_length='M', min_age_interlocs=None,
                    biling_interloc=False, num_days=10):
         """ Method that models word choice by self agent in a conversation and
@@ -986,7 +990,8 @@ class SchoolAgent(SpeakerAgent):
             def f_sort(k):
                 return abs(k-course_key) if k != course_key else 20
             mates = educ_center[min(educ_center.grouped_studs.keys(),
-                                    key=f_sort)]['students']
+                                key=f_sort)]['students']
+            mates = [ag for ag in mates if isinstance(ag, SchoolAgent)]
         self.speak_in_random_subgroups(mates, num_days=num_days)
         # talk to friends
         for friend in self.model.nws.friendship_network[self]:
@@ -1032,7 +1037,7 @@ class IndepAgent(SpeakerAgent):
         pass
         #self.model.grid.move_agent(self, school.pos)
 
-    @BaseAgent.conv_counter
+    #@BaseAgent.conv_counter
     def speak_to_group(self, group, lang=None, conv_length='M',
                        biling_interloc=False, num_days=10):
         """
@@ -1685,7 +1690,7 @@ class Young(IndepAgent):
             job = self.loc_info['job']
             self.speak_to_customer(num_days=3)
             colleagues = job.info['employees']
-            self.speak_in_random_subgroups(colleagues, num_days=2)
+            self.speak_in_random_subgroups(colleagues, num_days=7)
 
     def stage_3(self, ix_agent):
         if not self.loc_info['job']:
@@ -1693,8 +1698,8 @@ class Young(IndepAgent):
         else:
             job = self.loc_info['job']
             colleagues = job.info['employees']
-            self.speak_in_random_subgroups(colleagues, num_days=2)
-            self.speak_to_customer(num_days=2)
+            self.speak_in_random_subgroups(colleagues, num_days=7)
+            self.speak_to_customer(num_days=3)
         self.listen(num_days=1)
 
     def stage_4(self, ix_agent):

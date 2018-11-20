@@ -16,11 +16,12 @@ class StagedActivationModif(StagedActivation):
 
         for ag in self.agents[:]:
             # set conversation counters to zero when step begins
-            ag.call_cnts_final = ag.call_cnts_init = 0
+            ag._conv_counts_per_step = 0
 
             # new step -> older age
             ag.grow()
-            # set exclusion counter to zero
+            # set exclusion counter to zero ( TODO: should be agent method ??)
+            # TODO: it's WRONG. We should compare relative lang knowledge !!!
             ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
 
             for lang in ['L1', 'L12', 'L21', 'L2']:
@@ -68,7 +69,8 @@ class StagedActivationModif(StagedActivation):
             ag.random_death()
         # loop and update courses in schools and universities year after year
         # update jobs lang policy
-        if not self.steps % self.model.steps_per_year and self.steps:
+        # TODO: the following block should be a model method !!
+        if self.steps and not self.steps % self.model.steps_per_year:
             for clust_idx, clust_info in self.model.geo.clusters_info.items():
                 if 'university' in clust_info:
                     for fac in clust_info['university'].faculties.values():

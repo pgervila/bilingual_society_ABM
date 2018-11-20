@@ -52,14 +52,19 @@ class LanguageModel(Model):
     class _Decorators:
         @classmethod
         def conv_counter(cls, func):
+            """
+                Decorator that tracks the number of conversations
+                each agent has per step
+            """
             def wrapper(self, ag_init, others, *args, **kwargs):
                 ags = [ag_init]
                 ags.extend(others) if (type(others) is list) else ags.append(others)
                 for ag in ags:
                     try:
-                        ag.call_cnts_final += 1
+                        ag._conv_counts_per_step += 1
                     except AttributeError:
-                        ag.call_cnts_final = ag.call_cnts_init = 0
+                        # create attribute if it does not exist yet
+                        ag._conv_counts_per_step = 0
                 return func(self, ag_init, others, *args, **kwargs)
             return wrapper
 
@@ -247,7 +252,7 @@ class LanguageModel(Model):
 
         return newborn_lang, lang_with_father, lang_with_mother
 
-    @_Decorators.conv_counter
+    #@_Decorators.conv_counter
     def run_conversation(self, ag_init, others, bystander=None,
                          def_conv_length='M', num_days=10):
         """
