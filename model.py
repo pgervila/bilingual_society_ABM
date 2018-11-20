@@ -633,10 +633,13 @@ class LanguageModel(Model):
         self.schedule.step()
         self.data_process.collect()
 
-    def run_model(self, steps, viz_steps_period=None, save_dir=''):
+    def run_model(self, steps, save_data_freq=5, pickle_model_freq=100,
+                  viz_steps_period=None, save_dir=''):
         """ Run model and save frames if required
             Args
                 * steps: integer. Total steps to run
+                * save_data_freq: int. Frequency of model data saving as measured in steps
+                * pickle_model_freq: int. Frequency of model pickling as measured in steps
                 * viz_steps_period : integer. Save frames every specified number of steps
                 * save_dir : string. It specifies directory where frames will be saved
         """
@@ -649,8 +652,10 @@ class LanguageModel(Model):
                 os.makedirs(results_dir)
         for _ in range(steps):
             self.step()
-            if not self.schedule.steps % 5:
+            if not self.schedule.steps % save_data_freq:
                 self.data_process.save_model_data()
+            if not self.schedule.steps % pickle_model_freq:
+                self.data_process.pickle_model()
             if viz_steps_period:
                 if not self.schedule.steps % viz_steps_period:
                     self.data_viz.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)

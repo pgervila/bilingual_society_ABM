@@ -160,6 +160,44 @@ class DataProcessor(DataCollector):
         with open('pickled_model', 'wb') as f:
             dill.dump(self.model, f, byref=True)
 
+    @staticmethod
+    def unpickle_model(filename):
+        """ Method to unpickle a pickled model
+            Args:
+                * filename: string. Name of pickle file
+        """
+
+        with open(filename, 'rb') as f:
+            unpickled_model = dill.load(f)
+
+        # Convert lists into sets so that model can be computed
+        for k, cl in unpickled_model.geo.clusters_info.items():
+            for h in cl['homes']:
+                h.agents_in = set(h.agents_in)
+                h.info['occupants'] = set(h.info['occupants'])
+            for sc in cl['schools']:
+                sc.agents_in = set(sc.agents_in)
+                sc.info['employees'] = set(sc.info['employees'])
+                sc.info['students'] = set(sc.info['students'])
+                for course in sc.grouped_studs.values():
+                    course['students'] = set(course['students'])
+                sc.agents_in = set(sc.agents_in)
+            for job in cl['jobs']:
+                job.agents_in = set(job.agents_in)
+                job.info['employees'] = set(job.info['employees'])
+            if 'university' in cl:
+                univ = cl['university']
+                univ.info['employees'] = set(univ.info['employees'])
+                univ.info['students'] = set(univ.info['students'])
+                for fac in univ.faculties.values():
+                    fac.agents_in = set(fac.agents_in)
+                    fac.info['employees'] = set(fac.info['employees'])
+                    fac.info['students'] = set(fac.info['students'])
+                    for course in fac.grouped_studs.values():
+                        course['students'] = set(course['students'])
+
+        return unpickled_model
+
     def save_model_data(self):
         self.model_data = {'initial_conditions': {'num_clusters': self.model.geo.num_clusters,
                                                   'cluster_sizes': self.model.geo.cluster_sizes,
