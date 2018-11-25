@@ -6,9 +6,20 @@ from copy import deepcopy
 import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
+from numba import jit, njit
 
 # Import private library to model lang zipf CDF
 from zipf_generator import randZipf
+
+
+@njit()
+def numba_speedup_1(a, b, c, d, e, f, g):
+    return a * (b * (e * c * np.exp(f * 100 * d) + g))
+
+
+@njit()
+def numba_speedup_2(a, b, c):
+    return np.exp(a * b / c)
 
 
 class BaseAgent:
@@ -62,8 +73,8 @@ class BaseAgent:
         self.wc_init = dict()
         self.wc_final = dict()
         for lang in all_langs:
-            self.wc_init[lang] = np.zeros(self.model.vocab_red)
-            self.wc_final[lang] = np.zeros(self.model.vocab_red)
+            self.wc_init[lang] = np.zeros(self.model.vocab_red, dtype=np.int64)
+            self.wc_final[lang] = np.zeros(self.model.vocab_red, dtype=np.int64)
         # initialize conversation counter for data collection
         self._conv_counts_per_step = 0
 
@@ -77,7 +88,7 @@ class BaseAgent:
         """
 
         # numpy array(shape=vocab_size) that counts elapsed steps from last activation of each word
-        self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.info['age']])
+        self.lang_stats[lang]['t'] = np.copy(self.model.lang_ICs[pct_key]['t'][self.info['age']]).astype(np.float64)
         # S: numpy array(shape=vocab_size) that measures memory stability for each word
         self.lang_stats[lang]['S'] = np.copy(self.model.lang_ICs[pct_key]['S'][self.info['age']])
         # compute R from t, S (R defines retrievability of each word)
@@ -112,7 +123,7 @@ class BaseAgent:
                                             self.lang_stats[lang]['t'] /
                                             self.lang_stats[lang]['S']
                                             ).astype(np.float32)
-        self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red)
+        self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int64)
         self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
@@ -655,15 +666,18 @@ class ListenerAgent(BaseAgent):
         # Simplification with good approx : we apply delta_S without iteration !!
         S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
         R_act = self.lang_stats[lang]['R'][act]
-        delta_S = ds_factor * (act_c * (a * S_act_b * np.exp(c * 100 * R_act) + d))
+        delta_S = numba_speedup_1(ds_factor, act_c, S_act_b, R_act, a, c, d)
         # update
         self.lang_stats[lang]['S'][act] += delta_S
         # update daily boolean mask to update elapsed-steps array t
         self.step_mask[lang][act] = True
         # set last activation time counter to zero if word act
-        self.lang_stats[lang]['t'][self.step_mask[lang]] = 0
+        self.lang_stats[lang]['t'][self.step_mask[lang]] = 0.
         # compute new memory retrievability R and current lang_knowledge from t, S values
-        self.lang_stats[lang]['R'] = np.exp(-self.k * self.lang_stats[lang]['t'] / self.lang_stats[lang]['S'])
+        fk = -self.k
+        elapsed_time = self.lang_stats[lang]['t']
+        lang_stability = self.lang_stats[lang]['S']
+        self.lang_stats[lang]['R'] = numba_speedup_2(fk, elapsed_time, lang_stability)
         # update language knowledge
         self.update_lang_knowledge(lang, pct_threshold=pct_threshold)
 

@@ -252,7 +252,7 @@ class LanguageModel(Model):
 
         return newborn_lang, lang_with_father, lang_with_mother
 
-    #@_Decorators.conv_counter
+    # @_Decorators.conv_counter
     def run_conversation(self, ag_init, others, bystander=None,
                          def_conv_length='M', num_days=10):
         """
@@ -633,7 +633,7 @@ class LanguageModel(Model):
         self.schedule.step()
         self.data_process.collect()
 
-    def run_model(self, steps, save_data_freq=5, pickle_model_freq=100,
+    def run_model(self, steps, save_data_freq=25, pickle_model_freq=100,
                   viz_steps_period=None, save_dir=''):
         """ Run model and save frames if required
             Args
@@ -653,7 +653,7 @@ class LanguageModel(Model):
         for _ in range(steps):
             self.step()
             if not self.schedule.steps % save_data_freq:
-                self.data_process.save_model_data()
+                self.data_process.save_model_data(save_data_freq)
             if not self.schedule.steps % pickle_model_freq:
                 self.data_process.pickle_model()
             if viz_steps_period:

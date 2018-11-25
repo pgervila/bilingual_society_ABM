@@ -3,15 +3,13 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
-from collections import Counter
+from collections import Counter, defaultdict
 import deepdish as dd
 import dill
 
 from mesa.datacollection import DataCollector
 from agent import Baby, Child, Adolescent, Young, YoungUniv
 from agent import Adult, Teacher, TeacherUniv, Pensioner
-
-
 
 
 class DataProcessor(DataCollector):
@@ -41,6 +39,16 @@ class DataProcessor(DataCollector):
                                           }
                          )
 
+        self.init_conds = {'num_clusters': self.model.geo.num_clusters,
+                           'cluster_sizes': self.model.geo.cluster_sizes,
+                           'cluster_centers': self.model.geo.clust_centers,
+                           'init_num_people': self.model.num_people,
+                           'grid_width': self.model.grid.width,
+                           'grid_height': self.model.grid.height,
+                           'init_lang_distrib': self.model.init_lang_distrib,
+                           'sort_by_dist': self.model.lang_ags_sorted_by_dist,
+                           'sort_within_clust': self.model.lang_ags_sorted_in_clust}
+
         self.save_dir = ''
 
     def collect(self):
@@ -55,6 +63,38 @@ class DataProcessor(DataCollector):
                 for agent in self.model.schedule.agents:
                     agent_records.append((agent.unique_id, reporter(agent)))
                 self.agent_vars[var].append(agent_records)
+
+    def get_model_vars_dataframe(self):
+        """ Create a pandas DataFrame from the model variables.
+
+        The DataFrame has one column for each model variable, and the index is
+        (implicitly) the model tick.
+
+        """
+        curr_step = self.model.schedule.steps
+        len_stored_data = len(self.model_vars['pct_bil'])
+        return pd.DataFrame(self.model_vars,
+                            index=range(curr_step-len_stored_data, curr_step))
+
+    def get_agent_vars_dataframe(self):
+        """ Create a pandas DataFrame from the agent variables.
+
+        The DataFrame has one column for each variable, with two additional
+        columns for tick and agent_id.
+
+        """
+        data = defaultdict(dict)
+        for var, records in self.agent_vars.items():
+            curr_step = self.model.schedule.steps
+            len_stored_data = len(self.agent_vars['age'])
+            for step, entries in zip(range(curr_step-len_stored_data, curr_step), records):
+                for entry in entries:
+                    agent_id = entry[0]
+                    val = entry[1]
+                    data[(step, agent_id)][var] = val
+        df = pd.DataFrame.from_dict(data, orient="index")
+        df.index.names = ["Step", "AgentID"]
+        return df
 
     def get_agent_by_id(self, ag_id):
         return [ag for ag in self.model.schedule.agents if ag.unique_id == ag_id][0]
@@ -81,7 +121,6 @@ class DataProcessor(DataCollector):
         df_tokens_per_stage = pd.DataFrame.from_dict([self.get_tokens_per_step(ag, step)
                                                       for ag in agents])
         return df_tokens_per_stage.describe()
-
 
     def get_lang_stats(self, lang_type):
         """Method to get counts of each type of lang agent
@@ -198,22 +237,27 @@ class DataProcessor(DataCollector):
 
         return unpickled_model
 
-    def save_model_data(self):
-        self.model_data = {'initial_conditions': {'num_clusters': self.model.geo.num_clusters,
-                                                  'cluster_sizes': self.model.geo.cluster_sizes,
-                                                  'cluster_centers': self.model.geo.clust_centers,
-                                                  'init_num_people': self.model.num_people,
-                                                  'grid_width': self.model.grid.width,
-                                                  'grid_height': self.model.grid.height,
-                                                  'init_lang_distrib': self.model.init_lang_distrib,
-                                                  'sort_by_dist': self.model.lang_ags_sorted_by_dist,
-                                                  'sort_within_clust': self.model.lang_ags_sorted_in_clust},
-                           'model_results': self.get_model_vars_dataframe(),
-                           'agent_results': self.get_agent_vars_dataframe()}
-        if self.save_dir:
-            dd.io.save(os.path.join(self.save_dir, 'model_data.h5'), self.model_data)
+    def save_model_data(self, save_data_freq):
+        # get dataframes from stored data
+        df_model_data = self.get_model_vars_dataframe()
+        df_agent_data = self.get_agent_vars_dataframe()
+        # save dataframes
+        save_path = os.path.join(self.save_dir, 'model_data.h5')
+        # TODO: add reinitialization option
+        if self.model.schedule.steps == save_data_freq:
+            with pd.HDFStore(save_path, mode='w') as hdf_db:
+                hdf_db.append('model_data', df_model_data, format='t', data_columns=True)
+                hdf_db.append('agent_data', df_agent_data, format='t', data_columns=True)
+                ics = pd.DataFrame.from_dict(self.init_conds, orient='index').T
+                ics.to_hdf(save_path, key='init_conds')
         else:
-            dd.io.save('model_data.h5', self.model_data)
+            df_model_data.to_hdf(save_path, key='model_data',
+                                 append=True, mode='r+', format='table', data_columns=True)
+            df_agent_data.to_hdf(save_path, key='agent_data',
+                                 append=True, mode='r+', format='table', data_columns=True)
+        # empty data to avoid keeping already-saved data in RAM
+        self.model_vars = {k: [] for k in self.model_vars}
+        self.agent_vars = {k: [] for k in self.agent_vars}
 
     @staticmethod
     def load_model_data(data_filename, key='/'):
