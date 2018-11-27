@@ -388,13 +388,13 @@ class BaseAgent:
     def __getitem__(self, clust):
         return self.loc_info['home'].info[clust]
 
-    def __hash__(self):
-        return hash(self.unique_id)
-
-    def __eq__(self, other):
-        if not isinstance(other, BaseAgent):
-            return NotImplemented
-        return self.unique_id == other.unique_id and self.__class__ == other.__class__
+    # def __hash__(self):
+    #     return hash(self.unique_id)
+    #
+    # def __eq__(self, other):
+    #     if not isinstance(other, BaseAgent):
+    #         return NotImplemented
+    #     return self.unique_id == other.unique_id and self.__class__ == other.__class__
 
     def __repr__(self):
         home = self.loc_info['home']
@@ -1363,7 +1363,7 @@ class Adolescent(IndepAgent, SchoolAgent):
         if ret_output:
             return grown_agent
 
-    def stage_1(self, ix_agent, num_days=7):
+    def stage_1(self, ix_agent=None, num_days=7):
         SpeakerAgent.stage_1(self, num_days=num_days)
 
     def stage_2(self, ix_agent, num_days=7):
@@ -1708,7 +1708,7 @@ class Young(IndepAgent):
             customer = random.choice(list(rand_cust_job.info['employees']))
             self.model.run_conversation(self, customer, num_days=num_days)
 
-    def stage_1(self, ix_agent, num_days=7):
+    def stage_1(self, ix_agent=None, num_days=7):
         self.evaluate_lang_exclusion()
         SpeakerAgent.stage_1(self, num_days=num_days)
 
@@ -1805,7 +1805,7 @@ class YoungUniv(Adolescent):
         mates = mates.difference({self})
         self.speak_in_random_subgroups(mates, num_days=2)
 
-    def stage_1(self, ix_agent, num_days=7):
+    def stage_1(self, ix_agent=None, num_days=7):
         self.evaluate_lang_exclusion()
         SpeakerAgent.stage_1(self, num_days=num_days)
 
@@ -1851,7 +1851,7 @@ class Adult(Young): # from 30 to 65
     def gather_siblings(self):
         pass
 
-    def stage_1(self, ix_agent, num_days=7):
+    def stage_1(self, ix_agent=None, num_days=7):
         self.evaluate_lang_exclusion()
         SpeakerAgent.stage_1(self, num_days=num_days)
 
@@ -1934,7 +1934,7 @@ class Teacher(Adult):
     def speak_with_colleagues(self):
         pass
 
-    def stage_1(self, ix_agent, num_days=7):
+    def stage_1(self, ix_agent=None, num_days=7):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):
@@ -2099,7 +2099,7 @@ class Pensioner(Adult):
                                                   np.maximum(mem_stab - step_decay, thresh),
                                                   thresh)
 
-    def stage_1(self, ix_agent, num_days=10):
+    def stage_1(self, ix_agent=None, num_days=7):
         super().stage_1(ix_agent, num_days=num_days)
 
     def stage_2(self, ix_agent):

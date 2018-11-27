@@ -7,6 +7,8 @@ import numpy as np
 from mesa.time import StagedActivation
 from agent import IndepAgent, Young
 
+from multiprocessing import Pool
+
 
 class StagedActivationModif(StagedActivation):
     # TODO : add/separate agents by type ??? Is it a good idea ??
@@ -47,7 +49,24 @@ class StagedActivationModif(StagedActivation):
         # Network adj matrices will be constant through all stages of one step
         self.model.nws.compute_adj_matrices()
 
-        for stage in self.stage_list:
+        # implement multiprocessing in stage_1
+        stage = self.stage_list[0]
+        # define unit task
+        def home_ags_stage_1(ags):
+            for ag in ags:
+                getattr(ag, stage)()
+        # define list of agents grouped by home
+        set_ags = [h.agents_in
+                   for cl_info in self.model.geo.clusters_info.values()
+                   for h in cl_info['homes'] if h.agents_in]
+        # define parallelization with Pool class
+        def parallelized_task(set_ags):
+            with Pool() as mypool:
+                comp = mypool.map(home_ags_stage_1, set_ags)
+        # run parallelization
+        parallelized_task(set_ags)
+
+        for stage in self.stage_list[1:]:
             for ix_ag, ag in enumerate(self.agents):
                 if isinstance(ag, IndepAgent):
                     getattr(ag, stage)(ix_ag)

@@ -58,14 +58,14 @@ class Home:
     def __repr__(self):
         return 'Home_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['info']['occupants'] = tuple(state['info']['occupants'])
-        state['agents_in'] = tuple(state['agents_in'])
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     state['info']['occupants'] = tuple(state['info']['occupants'])
+    #     state['agents_in'] = tuple(state['agents_in'])
+    #     return state
+    #
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
 
 
 class EducationCenter:
@@ -456,17 +456,17 @@ class EducationCenter:
     def __getitem__(self, key):
         return getattr(self, 'grouped_studs')[key]
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['info']['employees'] = tuple(state['info']['employees'])
-        state['info']['students'] = tuple(state['info']['students'])
-        state['agents_in'] = tuple(state['agents_in'])
-        for course in state['grouped_studs']:
-            state['grouped_studs'][course]['students'] = tuple(state['grouped_studs'][course]['students'])
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     state['info']['employees'] = tuple(state['info']['employees'])
+    #     state['info']['students'] = tuple(state['info']['students'])
+    #     state['agents_in'] = tuple(state['agents_in'])
+    #     for course in state['grouped_studs']:
+    #         state['grouped_studs'][course]['students'] = tuple(state['grouped_studs'][course]['students'])
+    #     return state
+    #
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
 
 
 class School(EducationCenter):
@@ -780,14 +780,14 @@ class University:
     def __repr__(self):
         return 'University_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['info']['employees'] = tuple(state['info']['employees'])
-        state['info']['students'] = tuple(state['info']['students'])
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     state['info']['employees'] = tuple(state['info']['employees'])
+    #     state['info']['students'] = tuple(state['info']['students'])
+    #     return state
+    #
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
 
 
 class Job:
@@ -974,14 +974,14 @@ class Job:
     def __repr__(self):
         return 'Job_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state['info']['employees'] = tuple(state['info']['employees'])
-        state['agents_in'] = tuple(state['agents_in'])
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     state['info']['employees'] = tuple(state['info']['employees'])
+    #     state['agents_in'] = tuple(state['agents_in'])
+    #     return state
+    #
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
 
 
 class MeetingPoint:

@@ -243,26 +243,26 @@ class NetworkBuilder:
                     for j in self.model.geo.clusters_info[cl]['jobs']}
         nx.draw(self.jobs_network, pos=jobs_pos)
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        for nw in ['known_people_network', 'family_network', 'friendship_network', 'jobs_network']:
-            state[nw] = [tuple(state[nw].nodes()), tuple(state[nw].edges(data=True))]
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.known_people_network = nx.DiGraph()
-        self.known_people_network.add_nodes_from(state['known_people_network'][0])
-        self.known_people_network.add_edges_from(state['known_people_network'][1])
-        self.family_network = nx.DiGraph()
-        self.family_network.add_nodes_from(state['family_network'][0])
-        self.family_network.add_edges_from(state['family_network'][1])
-        self.friendship_network = nx.Graph()
-        self.friendship_network.add_nodes_from(state['friendship_network'][0])
-        self.friendship_network.add_edges_from(state['friendship_network'][1])
-        self.jobs_network = nx.Graph()
-        self.jobs_network.add_nodes_from(state['jobs_network'][0])
-        self.jobs_network.add_edges_from(state['jobs_network'][1])
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     for nw in ['known_people_network', 'family_network', 'friendship_network', 'jobs_network']:
+    #         state[nw] = [tuple(state[nw].nodes()), tuple(state[nw].edges(data=True))]
+    #     return state
+    #
+    # def __setstate__(self, state):
+    #     self.__dict__.update(state)
+    #     self.known_people_network = nx.DiGraph()
+    #     self.known_people_network.add_nodes_from(state['known_people_network'][0])
+    #     self.known_people_network.add_edges_from(state['known_people_network'][1])
+    #     self.family_network = nx.DiGraph()
+    #     self.family_network.add_nodes_from(state['family_network'][0])
+    #     self.family_network.add_edges_from(state['family_network'][1])
+    #     self.friendship_network = nx.Graph()
+    #     self.friendship_network.add_nodes_from(state['friendship_network'][0])
+    #     self.friendship_network.add_edges_from(state['friendship_network'][1])
+    #     self.jobs_network = nx.Graph()
+    #     self.jobs_network.add_nodes_from(state['jobs_network'][0])
+    #     self.jobs_network.add_edges_from(state['jobs_network'][1])
 
 
 
