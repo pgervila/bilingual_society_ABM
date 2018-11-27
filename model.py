@@ -282,7 +282,8 @@ class LanguageModel(Model):
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
-                                             min_age_interlocs=conv_params['min_group_age'], num_days=num_days)
+                                             min_age_interlocs=conv_params['min_group_age'],
+                                             num_days=num_days)
                 # call listeners' lang arrays updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
