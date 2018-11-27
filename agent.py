@@ -22,6 +22,16 @@ def numba_speedup_2(a, b, c):
     return np.exp(a * b / c)
 
 
+@njit()
+def numba_speedup_3(a, b):
+    return np.maximum(a, b)
+
+
+@njit()
+def numba_speedup_4(a, b):
+    return np.power(a, b)
+
+
 class BaseAgent:
     """ Basic agent class that contains attributes and
         methods common to all lang agents subclasses
@@ -656,15 +666,19 @@ class ListenerAgent(BaseAgent):
 
         # compute increase in memory stability S due to (re)activation
         # TODO : I think it should be dS[reading]  < dS[media_listening]  < dS[listen_in_act_conv] < dS[speaking]
-        S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+
+        S_act = self.lang_stats[lang]['S'][act]
+        b_exp = -b
+        S_act_b = numba_speedup_4(S_act, b_exp)
         R_act = self.lang_stats[lang]['R'][act]
-        delta_S = ds_factor * (a * S_act_b * np.exp(c * 100 * R_act) + d)
+        delta_S = numba_speedup_1(ds_factor, act_c, S_act_b, R_act, a, c, d)
         # update memory stability value
         self.lang_stats[lang]['S'][act] += delta_S
         # discount counts by one unit
         act_c -= 1
         # Simplification with good approx : we apply delta_S without iteration !!
-        S_act_b = self.lang_stats[lang]['S'][act] ** (-b)
+        S_act = self.lang_stats[lang]['S'][act]
+        S_act_b = numba_speedup_4(S_act, b_exp)
         R_act = self.lang_stats[lang]['R'][act]
         delta_S = numba_speedup_1(ds_factor, act_c, S_act_b, R_act, a, c, d)
         # update
@@ -694,7 +708,9 @@ class ListenerAgent(BaseAgent):
             lang1, lang2 = ['L1', 'L12']
         else:
             lang1, lang2 = ['L2', 'L21']
-        real_lang_knowledge = np.maximum(self.lang_stats[lang1]['R'], self.lang_stats[lang2]['R'])
+        r_lang1 = self.lang_stats[lang1]['R']
+        r_lang2 = self.lang_stats[lang2]['R']
+        real_lang_knowledge = numba_speedup_3(r_lang1, r_lang2)
         pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
                      len(self.model.cdf_data['s'][self.info['age']]))
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value

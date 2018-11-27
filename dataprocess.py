@@ -247,7 +247,8 @@ class DataProcessor(DataCollector):
         if self.model.schedule.steps == save_data_freq:
             with pd.HDFStore(save_path, mode='w') as hdf_db:
                 hdf_db.append('model_data', df_model_data, format='t', data_columns=True)
-                hdf_db.append('agent_data', df_agent_data, format='t', data_columns=True)
+                hdf_db.append('agent_data', df_agent_data, format='t', data_columns=True,
+                              min_itemsize={'agent_type': 11})
                 ics = pd.DataFrame.from_dict(self.init_conds, orient='index').T
                 ics.to_hdf(save_path, key='init_conds')
         else:
@@ -262,6 +263,16 @@ class DataProcessor(DataCollector):
     @staticmethod
     def load_model_data(data_filename, key='/'):
         return dd.io.load(data_filename, key)
+
+    def optimize_data_saving_space(self):
+        save_path = os.path.join(self.save_dir, 'model_data.h5')
+        opt_save_path = os.path.join(self.save_dir, 'opt_model_data.h5')
+        with pd.HDFStore(save_path) as f:
+            for n in f.keys():
+                data = pd.read_hdf(f, n)
+                data.to_hdf(opt_save_path, n)
+        os.remove(save_path)
+        os.rename(opt_save_path, save_path)
 
 
 class DataViz:
@@ -362,4 +373,9 @@ class PostProcessor:
     # self.agent_data[self.agent_data['agent_type'] == 'Child'][filter_tokens].sum(1).unstack()
     # self.agent_data[self.agent_data['agent_type'] == 'Child'][filter_tokens].sum(1).unstack().mean().mean()
 
+    def get_grouped_lang_stats(self, step, group_by='agent_type'):
+        self.agent_data.loc[step, :].groupby(group_by)[['pct_cat_knowledge', 'pct_spa_knowledge',
+                                                        'pct_L21_knowledge', 'pct_L12_knowledge']].describe()
 
+    def plot_lang_trend(self):
+        return self.model_data[['pct_bil', 'pct_spa', 'pct_cat']].plot(grid=True)

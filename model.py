@@ -629,11 +629,10 @@ class LanguageModel(Model):
         self.set_available_ids.add(agent.unique_id)
 
     def step(self):
-
         self.schedule.step()
         self.data_process.collect()
 
-    def run_model(self, steps, save_data_freq=25, pickle_model_freq=100,
+    def run_model(self, steps, save_data_freq=50, pickle_model_freq=100,
                   viz_steps_period=None, save_dir=''):
         """ Run model and save frames if required
             Args
