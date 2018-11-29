@@ -1,8 +1,8 @@
 # IMPORT LIBS
 import random
 import string
+from math import ceil
 from collections import defaultdict
-from copy import deepcopy
 import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
@@ -12,22 +12,22 @@ from numba import jit, njit
 from zipf_generator import randZipf
 
 
-@njit()
+@njit
 def numba_speedup_1(a, b, c, d, e, f, g):
     return a * (b * (e * c * np.exp(f * 100 * d) + g))
 
 
-@njit()
+@njit
 def numba_speedup_2(a, b, c):
     return np.exp(a * b / c)
 
 
-@njit()
+@njit
 def numba_speedup_3(a, b):
     return np.maximum(a, b)
 
 
-@njit()
+@njit
 def numba_speedup_4(a, b):
     return np.power(a, b)
 
@@ -483,7 +483,7 @@ class ListenerAgent(BaseAgent):
                 * learning: boolean. True if agent is studying / learning words. Default False.
         """
 
-        for lang, (act, act_c) in deepcopy(sample_words).items():
+        for lang, (act, act_c) in sample_words.items():
 
             # UPDATE WORD COUNTING + pre-processing for S, t, R UPDATE
 
@@ -675,12 +675,13 @@ class ListenerAgent(BaseAgent):
         # update memory stability value
         self.lang_stats[lang]['S'][act] += delta_S
         # discount counts by one unit
-        act_c -= 1
+        act_c_c = np.array(act_c)
+        act_c_c -= 1
         # Simplification with good approx : we apply delta_S without iteration !!
         S_act = self.lang_stats[lang]['S'][act]
         S_act_b = numba_speedup_4(S_act, b_exp)
         R_act = self.lang_stats[lang]['R'][act]
-        delta_S = numba_speedup_1(ds_factor, act_c, S_act_b, R_act, a, c, d)
+        delta_S = numba_speedup_1(ds_factor, act_c_c, S_act_b, R_act, a, c, d)
         # update
         self.lang_stats[lang]['S'][act] += delta_S
         # update daily boolean mask to update elapsed-steps array t
@@ -711,7 +712,7 @@ class ListenerAgent(BaseAgent):
         r_lang1 = self.lang_stats[lang1]['R']
         r_lang2 = self.lang_stats[lang2]['R']
         real_lang_knowledge = numba_speedup_3(r_lang1, r_lang2)
-        pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+        pct_value = (np.count_nonzero(real_lang_knowledge > pct_threshold) /
                      len(self.model.cdf_data['s'][self.info['age']]))
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
@@ -834,8 +835,8 @@ class SpeakerAgent(ListenerAgent):
         # 3. Then assess which sampled words-concepts can be successfully retrieved from memory
         # get mask for words successfully retrieved from memory
         num_act = len(act)
-        mask_R = np.random.rand(num_act) <= self.lang_stats[lang]['R'][act]
-        spoken_words = {lang: [act[mask_R], act_c[mask_R]]}
+        mask_r = np.random.rand(num_act) <= self.lang_stats[lang]['R'][act]
+        spoken_words = {lang: [act[mask_r], act_c[mask_r]]}
         # if there are missing words-concepts, they might be found in the other known language(s)
         # TODO : model depending on interlocutor (whether he is bilingual or not)
         # TODO : should pure language always get priority in computing random access ????
@@ -843,24 +844,24 @@ class SpeakerAgent(ListenerAgent):
 
         # TODO : if word is similar, go for it ( need to quantify similarity !!)
 
-        if np.count_nonzero(mask_R) < num_act:
+        if np.count_nonzero(mask_r) < num_act:
             if lang in ['L1', 'L12']:
                 lang2 = 'L12' if lang == 'L1' else 'L1'
             elif lang in ['L2', 'L21']:
                 lang2 = 'L21' if lang == 'L2' else 'L2'
-            mask_R2 = np.random.rand(len(act[~mask_R])) <= self.lang_stats[lang2]['R'][act[~mask_R]]
-            if act[~mask_R][mask_R2].size:
-                spoken_words.update({lang2: [act[~mask_R][mask_R2], act_c[~mask_R][mask_R2]]})
+            mask_R2 = np.random.rand(len(act[~mask_r])) <= self.lang_stats[lang2]['R'][act[~mask_r]]
+            if act[~mask_r][mask_R2].size:
+                spoken_words.update({lang2: [act[~mask_r][mask_R2], act_c[~mask_r][mask_R2]]})
             # if still missing words, look for them in last lang available
-            if (act[mask_R].size + act[~mask_R][mask_R2].size) < len(act):
+            if (act[mask_r].size + act[~mask_r][mask_R2].size) < len(act):
                 lang3 = 'L2' if lang2 in ['L12', 'L1'] else 'L1'
-                rem_words = act[~mask_R][~mask_R2]
+                rem_words = act[~mask_r][~mask_R2]
                 mask_R3 = np.random.rand(len(rem_words)) <= self.lang_stats[lang3]['R'][rem_words]
                 if rem_words[mask_R3].size:
                     # VERY IMP: add to transition language instead of 'pure' one.
                     # This is the process of creation/adaption/translation
                     tr_lang = max([lang, lang2], key=len)
-                    spoken_words.update({tr_lang: [rem_words[mask_R3], act_c[~mask_R][~mask_R2][mask_R3]]})
+                    spoken_words.update({tr_lang: [rem_words[mask_R3], act_c[~mask_r][~mask_R2][mask_R3]]})
         # update speaker's lang arrays
         self.update_lang_arrays(spoken_words, delta_s_factor=1, num_days=num_days)
 
@@ -1663,20 +1664,25 @@ class Young(IndepAgent):
         # get all free homes from job cluster
         free_homes_job_1_clust = [home for home in self.model.geo.clusters_info[job_1_clust]['homes']
                                   if not home.info['occupants']]
-        if criteria == 'close_to_job':
-            # Sort all available homes by provided criteria
-            sorted_homes = sorted(free_homes_job_1_clust,
-                                  key=lambda home: pdist([job_1.pos, home.pos])[0])
-            # pick random home from the closest half to new job
-            home_ix = random.randint(1, int(len(sorted_homes) / 2))
-            new_home = sorted_homes[home_ix]
-        elif criteria == 'half_way':
-            consort = self.get_family_relative('consort')
-            job_2 = consort.get_current_job()
-            # define sum of distances from jobs to each home to sort by it
-            job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
-            sorted_homes = sorted(free_homes_job_1_clust, key=job_dist_fun)
-            new_home = sorted_homes[0]
+        if free_homes_job_1_clust:
+            if criteria == 'close_to_job':
+                # Sort all available homes by provided criteria
+                sorted_homes = sorted(free_homes_job_1_clust,
+                                      key=lambda home: pdist([job_1.pos, home.pos])[0])
+                # pick random home from the closest half to new job
+                # TODO: avoid case when int(len(sorted_homes) / 2) = 0
+                home_ix = random.randint(1, ceil(len(sorted_homes) / 2))
+                new_home = sorted_homes[home_ix]
+            elif criteria == 'half_way':
+                consort = self.get_family_relative('consort')
+                job_2 = consort.get_current_job()
+                # define sum of distances from jobs to each home to sort by it
+                job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
+                sorted_homes = sorted(free_homes_job_1_clust, key=job_dist_fun)
+                new_home = sorted_homes[0]
+        else:
+            # build new home
+            new_home = self.model.geo.add_new_home(job_1_clust)
 
         return new_home
 
