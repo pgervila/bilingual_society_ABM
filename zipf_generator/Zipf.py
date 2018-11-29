@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def Zipf_CDF(n, alpha):
     """Computes Zipf cumulative distribution function.
     Each percentage corresponds to word index in array"""

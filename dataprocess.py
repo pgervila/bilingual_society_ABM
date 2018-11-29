@@ -13,7 +13,7 @@ from agent import Adult, Teacher, TeacherUniv, Pensioner
 
 
 class DataProcessor(DataCollector):
-    def __init__(self, model):
+    def __init__(self, model, save_dir=''):
         self.model = model
         self.model_data = None
         super().__init__(model_reporters={"pct_spa": lambda dp: dp.get_lang_stats(0),
@@ -49,7 +49,7 @@ class DataProcessor(DataCollector):
                            'sort_by_dist': self.model.lang_ags_sorted_by_dist,
                            'sort_within_clust': self.model.lang_ags_sorted_in_clust}
 
-        self.save_dir = ''
+        self.save_dir = save_dir
 
     def collect(self):
         """ Collect all the data for the given model object. """
@@ -264,8 +264,8 @@ class DataProcessor(DataCollector):
     def load_model_data(data_filename, key='/'):
         return dd.io.load(data_filename, key)
 
-    def optimize_data_saving_space(self):
-        save_path = os.path.join(self.save_dir, 'model_data.h5')
+    def optimize_data_saving_space(self, filename='model_data.h5'):
+        save_path = os.path.join(self.save_dir, filename)
         opt_save_path = os.path.join(self.save_dir, 'opt_model_data.h5')
         with pd.HDFStore(save_path) as f:
             for n in f.keys():
@@ -348,15 +348,12 @@ class VizImpData:
 
 
 class PostProcessor:
-    def __init__(self, data_filename):
-        self.data = self.load_model_data(data_filename)
-        self.agent_data = self.data['agent_results']
-        self.model_data = self.data['model_results']
-        self.init_conditions = pd.Series(self.data['initial_conditions'])
-
-    @staticmethod
-    def load_model_data(data_filename, key='/'):
-        return dd.io.load(data_filename, key)
+    def __init__(self, data_filename, save_dir=''):
+        filepath = os.path.join(save_dir, data_filename)
+        with pd.HDFStore(filepath) as self.data:
+            self.agent_data = self.data['agent_data']
+            self.model_data = self.data['model_data']
+            self.init_conditions = self.data['init_conds']
 
     def ag_results_by_id(self, ag_id):
         """ Args:
@@ -374,8 +371,8 @@ class PostProcessor:
     # self.agent_data[self.agent_data['agent_type'] == 'Child'][filter_tokens].sum(1).unstack().mean().mean()
 
     def get_grouped_lang_stats(self, step, group_by='agent_type'):
-        self.agent_data.loc[step, :].groupby(group_by)[['pct_cat_knowledge', 'pct_spa_knowledge',
-                                                        'pct_L21_knowledge', 'pct_L12_knowledge']].describe()
+        return self.agent_data.loc[step, :].groupby(group_by)[['pct_cat_knowledge', 'pct_spa_knowledge',
+                                                               'pct_L21_knowledge', 'pct_L12_knowledge']].describe()
 
     def plot_lang_trend(self):
         return self.model_data[['pct_bil', 'pct_spa', 'pct_cat']].plot(grid=True)

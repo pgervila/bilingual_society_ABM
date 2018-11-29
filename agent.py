@@ -1,8 +1,8 @@
 # IMPORT LIBS
 import random
 import string
+from math import ceil
 from collections import defaultdict
-from copy import deepcopy
 import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
@@ -12,22 +12,22 @@ from numba import jit, njit
 from zipf_generator import randZipf
 
 
-@njit()
+@njit
 def numba_speedup_1(a, b, c, d, e, f, g):
     return a * (b * (e * c * np.exp(f * 100 * d) + g))
 
 
-@njit()
+@njit
 def numba_speedup_2(a, b, c):
     return np.exp(a * b / c)
 
 
-@njit()
+@njit
 def numba_speedup_3(a, b):
     return np.maximum(a, b)
 
 
-@njit()
+@njit
 def numba_speedup_4(a, b):
     return np.power(a, b)
 
@@ -712,7 +712,7 @@ class ListenerAgent(BaseAgent):
         r_lang1 = self.lang_stats[lang1]['R']
         r_lang2 = self.lang_stats[lang2]['R']
         real_lang_knowledge = numba_speedup_3(r_lang1, r_lang2)
-        pct_value = (np.where(real_lang_knowledge > pct_threshold)[0].shape[0] /
+        pct_value = (np.count_nonzero(real_lang_knowledge > pct_threshold) /
                      len(self.model.cdf_data['s'][self.info['age']]))
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
@@ -1664,20 +1664,25 @@ class Young(IndepAgent):
         # get all free homes from job cluster
         free_homes_job_1_clust = [home for home in self.model.geo.clusters_info[job_1_clust]['homes']
                                   if not home.info['occupants']]
-        if criteria == 'close_to_job':
-            # Sort all available homes by provided criteria
-            sorted_homes = sorted(free_homes_job_1_clust,
-                                  key=lambda home: pdist([job_1.pos, home.pos])[0])
-            # pick random home from the closest half to new job
-            home_ix = random.randint(1, int(len(sorted_homes) / 2))
-            new_home = sorted_homes[home_ix]
-        elif criteria == 'half_way':
-            consort = self.get_family_relative('consort')
-            job_2 = consort.get_current_job()
-            # define sum of distances from jobs to each home to sort by it
-            job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
-            sorted_homes = sorted(free_homes_job_1_clust, key=job_dist_fun)
-            new_home = sorted_homes[0]
+        if free_homes_job_1_clust:
+            if criteria == 'close_to_job':
+                # Sort all available homes by provided criteria
+                sorted_homes = sorted(free_homes_job_1_clust,
+                                      key=lambda home: pdist([job_1.pos, home.pos])[0])
+                # pick random home from the closest half to new job
+                # TODO: avoid case when int(len(sorted_homes) / 2) = 0
+                home_ix = random.randint(1, ceil(len(sorted_homes) / 2))
+                new_home = sorted_homes[home_ix]
+            elif criteria == 'half_way':
+                consort = self.get_family_relative('consort')
+                job_2 = consort.get_current_job()
+                # define sum of distances from jobs to each home to sort by it
+                job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
+                sorted_homes = sorted(free_homes_job_1_clust, key=job_dist_fun)
+                new_home = sorted_homes[0]
+        else:
+            # build new home
+            new_home = self.model.geo.add_new_home(job_1_clust)
 
         return new_home
 

@@ -134,8 +134,20 @@ class GeoMapper:
             self.clusters_info[idx]['homes'] = []
             self.clusters_info[idx]['agents'] = []
 
+    def generate_dim_coord(self, dim, pct_grid, clust_size=None):
+        """ Generate coordinate along a given dimension for a given cluster
+            Args:
+                * dim: integer. Total length of chosen dimension
+                * pct_grid: float (positive, <1). Coordinate of cluster center
+                * clust_size: integer. Number of requested coordinates
+        """
+        coord = np.random.binomial(dim, pct_grid, size=clust_size)
+        # limit coordinate value to grid boundaries
+        return np.clip(coord, 1, dim - 1)
+
     def generate_points_coords(self, pcts_grid, clust_size, clust_idx):
-        """ Using binomial distribution, this method generates initial coordinates
+        """
+            Using binomial distribution, this method generates initial coordinates
             for a given cluster, defined via its center and its size.
             Cluster size as well as cluster center coords (in grid percentage) must be provided
         Arguments:
@@ -146,13 +158,19 @@ class GeoMapper:
             * cluster_coordinates: two numpy arrays with x and y coordinates
             respectively
         """
-        x_coords = np.random.binomial(self.model.grid.width, pcts_grid[0], size=clust_size)
-        # limit coords values to grid boundaries
-        x_coords = np.clip(x_coords, 1, self.model.grid.width - 1)
+        # x_coords = np.random.binomial(self.model.grid.width, pcts_grid[0], size=clust_size)
+        # # limit coords values to grid boundaries
+        # x_coords = np.clip(x_coords, 1, self.model.grid.width - 1)
+        #
+        # y_coords = np.random.binomial(self.model.grid.height, pcts_grid[1], size=clust_size)
+        # # limit coords values to grid boundaries
+        # y_coords = np.clip(y_coords, 1, self.model.grid.height - 1)
 
-        y_coords = np.random.binomial(self.model.grid.height, pcts_grid[1], size=clust_size)
-        # limit coords values to grid boundaries
-        y_coords = np.clip(y_coords, 1, self.model.grid.height - 1)
+
+        x_coords = self.generate_dim_coord(self.model.grid.width, pcts_grid[0],
+                                           clust_size=clust_size)
+        y_coords = self.generate_dim_coord(self.model.grid.height, pcts_grid[1],
+                                           clust_size=clust_size)
 
         if (not self.model.lang_ags_sorted_by_dist) and self.model.lang_ags_sorted_in_clust:
             x_coords, y_coords = self.sort_coords_in_clust(x_coords, y_coords, clust_idx)
@@ -248,7 +266,7 @@ class GeoMapper:
             self.clusters_info[clust_idx]['university'] = univ
 
     def map_homes(self, num_people_per_home=4):
-        """ Generate coordinates for agent homes and instantiate Home objects"""
+        """ Generate coordinates for agent's homes and instantiate Home objects"""
 
         num_homes_per_agent = self.model.max_people_factor / num_people_per_home
 
@@ -259,6 +277,18 @@ class GeoMapper:
                                                    clust_idx)
             for x, y in zip(x_h, y_h):
                 self.clusters_info[clust_idx]['homes'].append(Home(clust_idx, (x, y)))
+
+    def add_new_home(self, clust_id):
+        """ Method to add a random new home to a given cluster
+            Args:
+                * clust_id: integer. Cluster index
+        """
+        x_c, y_c = self.model.geo.clust_centers[clust_id]
+        x_nh = self.model.geo.generate_dim_coord(self.model.grid.width, x_c)
+        y_nh = self.model.geo.generate_dim_coord(self.model.grid.height, y_c)
+        new_home = Home(clust_id, (x_nh, y_nh))
+        self.model.geo.clusters_info[clust_id]['homes'].append(new_home)
+        return new_home
 
     def generate_langs_per_clust(self):
         """ Method that generates a list of lists of lang labels.
