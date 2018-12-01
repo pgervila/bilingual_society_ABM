@@ -6,7 +6,7 @@ from collections import defaultdict
 import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
-from numba import jit, njit
+from numba import njit, prange
 
 # Import private library to model lang zipf CDF
 from zipf_generator import randZipf
@@ -30,6 +30,26 @@ def numba_speedup_3(a, b):
 @njit
 def numba_speedup_4(a, b):
     return np.power(a, b)
+
+
+@njit
+def numba_counter(a, b):
+    c = 0
+    for i in prange(len(a)):
+        if a[i] > b:
+            c += 1
+    return c
+
+
+@njit
+def numba_in1d(ar1, ar2, ret, bool_ar):
+    ar = np.concatenate((ar1, ar2))
+    order = ar.argsort(kind='mergesort')
+    sar = ar[order]
+    bool_ar[:-1] = (sar[1:] == sar[:-1])
+    for i, e in enumerate(order):
+        ret[e] = bool_ar[i]
+    return ret[:len(ar1)]
 
 
 class BaseAgent:
@@ -492,10 +512,12 @@ class ListenerAgent(BaseAgent):
 
             if mode_type in ['listen', 'media', 'read']:
                 # get all already-known words by agent in global reference system
-                known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)
+                known_words = np.nonzero(self.lang_stats[lang]['R'] > pct_threshold_und)[0]
                 # Of all active words, how many are already known by agent ?? =>
                 # boolean mask of known-active words projected on active words reference system
-                kn_act_bool = np.in1d(act, known_words, assume_unique=True)
+                ret = np.zeros(len(act) + len(known_words), dtype=bool)
+                bool_ar = np.zeros(len(act) + len(known_words), dtype=bool)
+                kn_act_bool = numba_in1d(act, known_words, ret, bool_ar)
                 # get indices of known words on active words reference system
                 kn_words_idxs = np.where(kn_act_bool)[0]
                 # update counting of known words
@@ -712,8 +734,8 @@ class ListenerAgent(BaseAgent):
         r_lang1 = self.lang_stats[lang1]['R']
         r_lang2 = self.lang_stats[lang2]['R']
         real_lang_knowledge = numba_speedup_3(r_lang1, r_lang2)
-        pct_value = (np.count_nonzero(real_lang_knowledge > pct_threshold) /
-                     len(self.model.cdf_data['s'][self.info['age']]))
+        counts = numba_counter(real_lang_knowledge, pct_threshold)
+        pct_value = counts / len(self.model.cdf_data['s'][self.info['age']])
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
 

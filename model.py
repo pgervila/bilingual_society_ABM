@@ -633,7 +633,7 @@ class LanguageModel(Model):
         self.schedule.step()
         self.data_process.collect()
 
-    def run_model(self, steps, save_data_freq=50, pickle_model_freq=100,
+    def run_model(self, steps, save_data_freq=50, pickle_model_freq=5000,
                   viz_steps_period=None, save_dir=''):
         """ Run model and save frames if required
             Args
@@ -658,7 +658,8 @@ class LanguageModel(Model):
                 self.data_process.pickle_model()
             if viz_steps_period:
                 if not self.schedule.steps % viz_steps_period:
-                    self.data_viz.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
+                    self.data_viz.show_results(step=self.schedule.steps,
+                                               plot_results=False, save_fig=True)
             pbar.update()
 
     def run_and_animate(self, steps, plot_type='imshow'):
