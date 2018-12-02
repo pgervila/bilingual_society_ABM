@@ -108,7 +108,9 @@ def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected):
         agent.lang_stats['L1']['pct'][agent.info['age']] = pcts_1[idx]
         agent.lang_stats['L2']['pct'][agent.info['age']] = pcts_2[idx]
     if delete_edges:
-        model.nws.known_people_network.remove_edges_from(model.nws.known_people_network.edges())
+            model.nws.known_people_network.remove_edges_from(
+                list(model.nws.known_people_network.edges())
+            )
 
     params = model.get_conv_params(agents)
     assert np.all(expected == (params['lang_group'], params['mute_type']))

@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 import numpy as np
 import os, sys
-import objgraph
+import gc
 from importlib import reload
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 import agent
@@ -178,6 +178,7 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
     #     objgraph.show_backrefs([old_ag], filename=str(old_ag) + '_backrefs.png')
 
     # check references to old agent are all deleted
+    gc.collect()
     assert sys.getrefcount(old_ag) == 2
     if labels[0] and labels[0] != labels[1]:
         assert labels[0] not in grown_ag.loc_info
