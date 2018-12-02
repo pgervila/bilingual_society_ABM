@@ -75,6 +75,7 @@ class BaseAgent:
 
     # define memory retrievability constant
     k = np.log(10 / 9)
+    max_life_steps = 3600
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
                  lang_passive_thresh=0.025, import_ic=False):
@@ -129,7 +130,7 @@ class BaseAgent:
         # word counter
         self.lang_stats[lang]['wc'] = np.copy(self.model.lang_ICs[pct_key]['wc'][self.info['age']])
         # vocab pct
-        self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['pct'] = np.zeros(self.max_life_steps, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
 
@@ -137,7 +138,7 @@ class BaseAgent:
         self.set_memory_effort_per_word(lang)
 
         # conversation failure counter
-        self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['excl_c'] = np.zeros(self.max_life_steps, dtype=np.float64)
 
     def _set_null_lang_attrs(self, lang, S_0=0.01, t_0=1000):
         """Private method that sets null linguistic knowledge in specified language, i.e. no knowledge
@@ -154,13 +155,13 @@ class BaseAgent:
                                             self.lang_stats[lang]['S']
                                             ).astype(np.float32)
         self.lang_stats[lang]['wc'] = np.zeros(self.model.vocab_red, dtype=np.int64)
-        self.lang_stats[lang]['pct'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['pct'] = np.zeros(self.max_life_steps, dtype=np.float64)
         self.lang_stats[lang]['pct'][self.info['age']] = (np.where(self.lang_stats[lang]['R'] > 0.9)[0].shape[0] /
                                                           len(self.model.cdf_data['s'][self.info['age']]))
         # memory effort per compressed word
         self.set_memory_effort_per_word(lang)
         # conversation failure counter
-        self.lang_stats[lang]['excl_c'] = np.zeros(3600, dtype=np.float64)
+        self.lang_stats[lang]['excl_c'] = np.zeros(self.max_life_steps, dtype=np.float64)
         # set memory weights to evaluate lang exclusion
         self.set_excl_weights()
 
@@ -2075,7 +2076,10 @@ class Pensioner(Adult):
         pass
 
     def random_death(self):
-        BaseAgent.random_death(self)
+        if self.info['age'] <= self.max_life_steps - 2:
+            BaseAgent.random_death(self)
+        else:
+            self.model.remove_after_death(self)
 
     def gather_family(self, num_days=1, freq=0.1):
         if random.random() < freq:
