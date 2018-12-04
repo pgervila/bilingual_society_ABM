@@ -633,6 +633,30 @@ class LanguageModel(Model):
         self.schedule.step()
         self.data_process.collect()
 
+    def update_centers(self):
+        """ Method to update students, teachers and courses
+            at the end of each year, as well as jobs' language policy
+        """
+        for clust_idx, clust_info in self.geo.clusters_info.items():
+            if 'university' in clust_info:
+                for fac in clust_info['university'].faculties.values():
+                    if fac.info['students']:
+                        fac.update_courses_phase_1()
+            for school in clust_info['schools']:
+                school.update_courses_phase_1()
+            for job in clust_info['jobs']:
+                job.set_lang_policy()
+        for clust_idx, clust_info in self.geo.clusters_info.items():
+            if 'university' in clust_info:
+                for fac in clust_info['university'].faculties.values():
+                    if fac.info['students']:
+                        fac.update_courses_phase_2()
+            for school in clust_info['schools']:
+                school.update_courses_phase_2()
+                # every 4 years only, make teachers swap
+                if not self.schedule.steps % (4 * self.steps_per_year):
+                    school.swap_teachers_courses()
+
     def run_model(self, steps, save_data_freq=50, pickle_model_freq=5000,
                   viz_steps_period=None, save_dir=''):
         """ Run model and save frames if required

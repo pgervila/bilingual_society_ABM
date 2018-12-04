@@ -1948,7 +1948,7 @@ class Teacher(Adult):
                 school.assign_teacher(self)
                 break
 
-    def random_death(self):
+    def random_death(self, ret_out=False):
         BaseAgent.random_death(self, ret_out=True)
 
     def speak_to_class(self):
@@ -2027,8 +2027,8 @@ class TeacherUniv(Teacher):
                 fac = univ[random.choice('abcde')]
                 fac.assign_teacher(self)
 
-    def random_death(self):
-        BaseAgent.random_death(self)
+    def random_death(self, ret_out=False):
+        BaseAgent.random_death(self, ret_out=ret_out)
 
     def speak_to_class(self):
         job, course_key, fac_key = self.loc_info['job']
@@ -2075,11 +2075,13 @@ class Pensioner(Adult):
         # TODO
         pass
 
-    def random_death(self):
+    def random_death(self, ret_out=False):
         if self.info['age'] <= self.max_life_steps - 2:
-            BaseAgent.random_death(self)
+            BaseAgent.random_death(self, ret_out=False)
         else:
             self.model.remove_after_death(self)
+            if ret_out:
+                return True
 
     def gather_family(self, num_days=1, freq=0.1):
         if random.random() < freq:

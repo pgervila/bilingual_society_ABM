@@ -17,26 +17,27 @@ class StagedActivationModif(StagedActivation):
         for ag in self.agents[:]:
             # set conversation counters to zero when step begins
             ag._conv_counts_per_step = 0
-
             # new step -> older age
             ag.grow()
             # set exclusion counter to zero ( TODO: should be agent method ??)
             # TODO: it's WRONG. We should compare relative lang knowledge !!!
+            # TODO: I think it is not needed to set 'excl_c' to zero
             ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
 
             for lang in ['L1', 'L12', 'L21', 'L2']:
                 # save copy of wc for each agent
                 ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
 
+                # TODO : following block should be an agent method
                 # update last-time word use vector
                 ag.lang_stats[lang]['t'][~ag.step_mask[lang]] += 1
                 # compute new memory retrievability R using updated t values
-                ag.lang_stats[lang]['R'] = np.exp(-ag.k * ag.lang_stats[lang]['t'] / ag.lang_stats[lang]['S'])
+                ag.lang_stats[lang]['R'] = np.exp(-ag.k * ag.lang_stats[lang]['t'] /
+                                                  ag.lang_stats[lang]['S'])
 
                 # set current lang knowledge
                 # compute current language knowledge in percentage after 't' update
                 ag.update_lang_knowledge(lang, pct_threshold=pct_threshold)
-
                 # reset day mask
                 ag.step_mask[lang] = np.zeros(ag.model.vocab_red, dtype=np.bool)
             # Update lang switch
@@ -64,31 +65,19 @@ class StagedActivationModif(StagedActivation):
         # check reproduction, death : make shallow copy of agents list,
         # since we are potentially removing agents as we iterate
         for ag in self.agents[:]:
-            if isinstance(ag, Young):
-                ag.reproduce()
-            ag.random_death()
+            # An agent might have changed type if hired as Teacher to replace dead one
+            # Old agent instance will be removed from model but it might still be in the copied list !
+            try:
+                if isinstance(ag, Young):
+                    ag.reproduce()
+                ag.random_death()
+            except KeyError:
+                pass
+
         # loop and update courses in schools and universities year after year
         # update jobs lang policy
-        # TODO: the following block should be a model method !!
         if self.steps and not self.steps % self.model.steps_per_year:
-            for clust_idx, clust_info in self.model.geo.clusters_info.items():
-                if 'university' in clust_info:
-                    for fac in clust_info['university'].faculties.values():
-                        if fac.info['students']:
-                            fac.update_courses_phase_1()
-                for school in clust_info['schools']:
-                    school.update_courses_phase_1()
-                for job in clust_info['jobs']:
-                    job.set_lang_policy()
-            for clust_idx, clust_info in self.model.geo.clusters_info.items():
-                if 'university' in clust_info:
-                    for fac in clust_info['university'].faculties.values():
-                        if fac.info['students']:
-                            fac.update_courses_phase_2()
-                for school in clust_info['schools']:
-                    school.update_courses_phase_2()
-                    if not self.steps % (4 * self.model.steps_per_year):  # every 4 years only, teachers swap
-                        school.swap_teachers_courses()
+            self.model.update_centers()
 
         self.steps += 1
 
