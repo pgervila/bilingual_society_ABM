@@ -1693,8 +1693,7 @@ class Young(IndepAgent):
                 sorted_homes = sorted(free_homes_job_1_clust,
                                       key=lambda home: pdist([job_1.pos, home.pos])[0])
                 # pick random home from the closest half to new job
-                # TODO: avoid case when int(len(sorted_homes) / 2) = 0
-                home_ix = random.randint(1, ceil(len(sorted_homes) / 2))
+                home_ix = random.randint(0, min(ceil(len(sorted_homes) / 2), len(sorted_homes) - 1))
                 new_home = sorted_homes[home_ix]
             elif criteria == 'half_way':
                 consort = self.get_family_relative('consort')
