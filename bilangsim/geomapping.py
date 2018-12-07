@@ -8,10 +8,10 @@ from collections import defaultdict, Counter
 from math import ceil
 
 # IMPORT AGENTS AND  ENTITIES
-import city_objects
-reload(sys.modules['city_objects'])
-from agent import Child, Adolescent, Young, Adult
-from city_objects import Job, School, University, Home
+# import city_objects
+# reload(sys.modules['city_objects'])
+from .agent import Child, Adolescent, Young, Adult
+from .city_objects import Job, School, University, Home
 
 
 class GeoMapper:

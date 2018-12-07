@@ -9,7 +9,7 @@ from scipy.spatial.distance import pdist
 from numba import njit, prange
 
 # Import private library to model lang zipf CDF
-from zipf_generator import randZipf
+from .zipf_generator import randZipf
 
 
 @njit

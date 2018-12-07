@@ -7,7 +7,7 @@ import warnings
 from sklearn.utils import DataConversionWarning
 warnings.filterwarnings("ignore", category=DataConversionWarning)
 
-from agent import Child, Young, Adult, Teacher
+from .agent import Child, Young, Adult, Teacher
 
 
 class NetworkBuilder:

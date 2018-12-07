@@ -8,8 +8,8 @@ import deepdish as dd
 import dill
 
 from mesa.datacollection import DataCollector
-from agent import Baby, Child, Adolescent, Young, YoungUniv
-from agent import Adult, Teacher, TeacherUniv, Pensioner
+from .agent import Baby, Child, Adolescent, Young, YoungUniv
+from .agent import Adult, Teacher, TeacherUniv, Pensioner
 
 
 class DataProcessor(DataCollector):

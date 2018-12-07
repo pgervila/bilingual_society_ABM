@@ -19,19 +19,19 @@ import deepdish as dd
 # IMPORT MESA LIBRARIES ( Model, Grid, Schedule )
 from mesa import Model
 from mesa.space import MultiGrid
-import schedule
-reload(sys.modules['schedule'])
-from schedule import StagedActivationModif
+# import schedule
+# reload(sys.modules['schedule'])
+from .schedule import StagedActivationModif
 
 # IMPORT MODEL LIBRARIES
-from agent import Baby, Child, Adolescent, Young, YoungUniv, Teacher, TeacherUniv, Adult, Pensioner
-import geomapping, networks, dataprocess
-reload(sys.modules['geomapping'])
-reload(sys.modules['networks'])
-reload(sys.modules['dataprocess'])
-from geomapping import GeoMapper
-from networks import NetworkBuilder
-from dataprocess import DataProcessor, DataViz
+from .agent import Baby, Child, Adolescent, Young, YoungUniv, Teacher, TeacherUniv, Adult, Pensioner
+# import geomapping, networks, dataprocess
+# reload(sys.modules['geomapping'])
+# reload(sys.modules['networks'])
+# reload(sys.modules['dataprocess'])
+from .geomapping import GeoMapper
+from .networks import NetworkBuilder
+from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
@@ -115,8 +115,8 @@ class LanguageModel(Model):
         self.set_available_ids = set(range(0, max_people_factor * num_people))
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
-        self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'init_conds', 'lang_spoken_ics_vs_step.h5'))
-        self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'cdfs', 'lang_cdfs_vs_step.h5'))
+        self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'data', 'init_conds', 'lang_spoken_ics_vs_step.h5'))
+        self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'data', 'cdfs', 'lang_cdfs_vs_step.h5'))
 
         # set init mode while building the model
         self.init_mode = True
@@ -632,6 +632,7 @@ class LanguageModel(Model):
     def step(self):
         self.schedule.step()
         self.data_process.collect()
+        #print('Completed step number {}'.format(self.schedule.steps))
 
     def update_centers(self):
         """ Method to update students, teachers and courses
