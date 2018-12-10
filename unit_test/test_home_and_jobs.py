@@ -1,16 +1,8 @@
 import random
 import pytest
-from unittest.mock import patch
-import numpy as np
-import os, sys
-from imp import reload
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-import agent
-import model
-reload(agent)
-reload(model)
-from agent import Child, Adolescent, YoungUniv, Young, Adult, Worker, Teacher
-from model import LanguageModel
+from bilangsim.agent import Adult
+from bilangsim.model import LanguageModel
+
 
 @pytest.fixture(scope="module")
 def model():
@@ -44,6 +36,3 @@ def test_remove_agent(model):
     h.remove_agent(agent)
     assert agent not in h.info['occupants']
     assert not agent.loc_info['home']
-    
-
-    

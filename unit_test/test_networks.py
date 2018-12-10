@@ -1,14 +1,6 @@
 import pytest
-import os
-import sys
-from imp import reload
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-import agent
-import model
-reload(agent)
-reload(model)
-from model import LanguageModel
-from agent import Child, Adolescent, Young, Pensioner
+from bilangsim.model import LanguageModel
+from bilangsim.agent import Child, Adolescent, Young, Pensioner
 
 
 @pytest.fixture(scope="module")

@@ -1,16 +1,13 @@
 import pytest
 from unittest.mock import patch
 import numpy as np
-import os, sys
+import sys
 import gc
-from importlib import reload
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-import agent
-import model
-reload(agent)
-reload(model)
-from agent import Baby, Child, Adolescent, Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
-from model import LanguageModel
+
+from bilangsim.agent import Baby, Child, Adolescent, Young, YoungUniv
+from bilangsim.agent import Adult, Teacher, TeacherUniv, Pensioner
+from bilangsim.model import LanguageModel
+
 
 np_seed = np.random.randint(10000)
 # np_seed = 3240

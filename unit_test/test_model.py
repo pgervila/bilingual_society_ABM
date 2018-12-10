@@ -1,18 +1,7 @@
-import pytest
-from unittest.mock import patch
-import os, sys
-from imp import reload
 import numpy as np
-from scipy.spatial.distance import pdist
-
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-import agent
-import model
-reload(agent)
-reload(model)
-from agent import Adolescent, Young, Adult, Teacher
-from model import LanguageModel
-from city_objects import Job, School
+import pytest
+from bilangsim.agent import Adolescent, Young, Adult, Teacher
+from bilangsim.model import LanguageModel
 
 
 @pytest.fixture(scope="module")
