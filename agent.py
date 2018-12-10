@@ -1820,6 +1820,9 @@ class YoungUniv(Adolescent):
             if len(h.info['occupants']) < max_num_occup:
                 new_home = h
                 break
+        else:
+            # no home available
+            new_home = self.model.geo.add_new_home(clust_univ)
         # assign new home to agent
         new_home.assign_to_agent(self)
 
