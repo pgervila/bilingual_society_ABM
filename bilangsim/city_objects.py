@@ -5,7 +5,7 @@ from math import ceil
 import string
 from scipy.spatial.distance import pdist
 
-from agent import Adolescent, Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
+from .agent import Adolescent, Young, YoungUniv, Adult, Teacher, TeacherUniv, Pensioner
 
 
 class Home:

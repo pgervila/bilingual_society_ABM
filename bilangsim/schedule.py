@@ -5,7 +5,7 @@ import random
 import numpy as np
 
 from mesa.time import StagedActivation
-from agent import IndepAgent, Young
+from .agent import IndepAgent, Young
 
 
 class StagedActivationModif(StagedActivation):
