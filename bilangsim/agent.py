@@ -760,15 +760,17 @@ class SpeakerAgent(ListenerAgent):
         """ TODO: method to think in best known language when alone """
         pass
 
-    def study_vocab(self, lang, delta_s_factor=1, num_words=50):
+    def study_vocab(self, lang, delta_s_factor=1, num_words=50, num_days=1):
         """
             Method to update vocabulary without conversations ( study, reading, etc... )
                 Args:
                     * lang: string. Language in which agent studies ['L1', 'L2']
                     * delta_s_factor: positive float < 1. Defines increase of mem stability
                         due to passive rehearsal as a fraction of that due to active rehearsal
-                    * num_words : integer. Number of words studied
+                    * num_words : integer. Number of words studied per study action
+                    * num_days : integer. Number of days per step the study is repeated
         """
+        num_words = num_words * num_days
         word_samples = randZipf(self.model.cdf_data['s'][self.info['age']], num_words)
         # get unique words and counts
         bcs = np.bincount(word_samples)
@@ -1400,15 +1402,16 @@ class Adolescent(IndepAgent, SchoolAgent):
         school, course_key = self.get_school_and_course()
         self.speak_at_school(school, course_key, num_days=num_days)
         school.remove_agent_in(self)
+        # study
         if school.info['lang_policy'] == [0, 1]:
-            self.study_vocab('L1', num_words=50)
-            self.study_vocab('L2', num_words=25)
+            self.study_vocab('L1', num_words=50, num_days=5)
+            self.study_vocab('L2', num_words=25, num_days=5)
         elif school.info['lang_policy'] == [1]:
-            self.study_vocab('L1')
-            self.study_vocab('L2')
+            self.study_vocab('L1', num_days=5)
+            self.study_vocab('L2', num_days=5)
         elif school.info['lang_policy'] == [1, 2]:
-            self.study_vocab('L1', num_words=25)
-            self.study_vocab('L2', num_words=50)
+            self.study_vocab('L1', num_words=25, num_days=5)
+            self.study_vocab('L2', num_words=50, num_days=5)
         if self.model.nws.friendship_network[self]:
             # TODO : add groups, more than one friend
             self.speak_to_random_friend(ix_agent, num_days=5)
@@ -1935,7 +1938,7 @@ class Teacher(Adult):
         """ Method that returns agent's current job """
         try:
             job = self.loc_info['job'][0]
-        except KeyError:
+        except (KeyError, TypeError):
             job = None
         return job
 
@@ -2011,7 +2014,7 @@ class TeacherUniv(Teacher):
         try:
             job = self.loc_info['job']
             job = job[0][job[2]]
-        except KeyError:
+        except (KeyError, TypeError):
             job = None
         return job
 

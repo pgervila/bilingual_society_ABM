@@ -35,11 +35,11 @@ from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-rand_seed = 5893
+#rand_seed = 5893
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-np_seed = 8082
+#np_seed = 8082
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -252,7 +252,7 @@ class LanguageModel(Model):
 
         return newborn_lang, lang_with_father, lang_with_mother
 
-    # @_Decorators.conv_counter
+    #@_Decorators.conv_counter
     def run_conversation(self, ag_init, others, bystander=None,
                          def_conv_length='M', num_days=10):
         """

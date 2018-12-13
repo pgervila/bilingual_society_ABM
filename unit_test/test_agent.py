@@ -107,12 +107,21 @@ def test_pensioner_methods(model):
     pass
 
 
-def test_young_methods(model):
-    pass
+def test_teacher_methods(model, city_places):
+    ag_id = model.set_available_ids.pop()
+    teacher = Teacher(model, ag_id, 0, 'M', age=1200, home=city_places['home'])
+    # test get_current_job
+    teacher.loc_info['job'] = None
+    teacher.get_current_job()
 
 
-def test_teacher_methods(model):
-    pass
+def test_teacheruniv_methods(model, city_places):
+    ag_id = model.set_available_ids.pop()
+    teacheruniv = TeacherUniv(model, ag_id, 0, 'M', age=1200, home=city_places['home'])
+    add_ag_to_world(model, city_places, teacheruniv)
+    # test get_current_job
+    teacheruniv.loc_info['job'] = None
+    teacheruniv.get_current_job()
 
 
 def test_Baby_methods(model):
@@ -170,10 +179,6 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
     else:
         grown_ag = old_ag.evolve(new_class, ret_output=True)
 
-    # if isinstance(old_ag, Teacher):
-    #     city_places['home'].info['occupants'].add(old_ag)
-    #     objgraph.show_backrefs([old_ag], filename=str(old_ag) + '_backrefs.png')
-
     # check references to old agent are all deleted
     gc.collect()
     assert sys.getrefcount(old_ag) == 2
@@ -181,13 +186,13 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         assert labels[0] not in grown_ag.loc_info
     if labels[1]:
         assert labels[1] in grown_ag.loc_info
-        
+
+
 def test_look_for_partner(model):
     for ag in model.schedule.agents:
         if isinstance(ag, Young):
             ag.info['married'] = False
             break
-
     ag.look_for_partner(avg_years=0.001)
     assert ag.info['married']
 
@@ -327,11 +332,6 @@ def test_update_words_memory(model, dummy_agent, sample_words, mode_type):
 
 def test_look_for_partner(model):
     pass
-
-
-
-
-
 
 
 # @pytest.mark.parametrize("long", test_data_vocab_choice_model)
