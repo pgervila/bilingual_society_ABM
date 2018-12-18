@@ -290,6 +290,18 @@ class GeoMapper:
         self.model.geo.clusters_info[clust_id]['homes'].append(new_home)
         return new_home
 
+    def add_new_school(self, clust_id):
+        """ Method to add a new school to a given cluster
+            Args:
+                * clust_id: integer. Cluster index
+        """
+        x_c, y_c = self.model.geo.clust_centers[clust_id]
+        x_nsc = self.model.geo.generate_dim_coord(self.model.grid.width, x_c)
+        y_nsc = self.model.geo.generate_dim_coord(self.model.grid.height, y_c)
+        new_school = School(self.model, (x_nsc, y_nsc), clust_id, school_size=400,
+                            lang_policy=self.model.school_lang_policy)
+        return new_school
+
     def generate_langs_per_clust(self):
         """ Method that generates a list of lists of lang labels.
             Each sublist represents a cluster

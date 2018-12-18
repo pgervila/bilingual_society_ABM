@@ -1,6 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name='bilangsim',
+      python_requires='>=3.6',
       version='0.1',
       description='Agent-based simulator of bilingual societies',
       url='https://github.com/pgervila/bilingual_society_ABM/',

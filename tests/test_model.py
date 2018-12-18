@@ -79,7 +79,6 @@ def test_run_conversation(model):
             ag2 = ag
             break
     others = [ag1, ag2]
-    # import ipdb; ipdb.set_trace()
     model.run_conversation(ag_init, others)
     assert kn_p_nw[ag_init][others[0]]
     assert kn_p_nw[others[0]][ag_init]

@@ -1,6 +1,3 @@
-# import os, sys
-# sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 import random
 import numpy as np
 
@@ -31,7 +28,7 @@ class StagedActivationModif(StagedActivation):
                 # TODO : following block should be an agent method
                 # update last-time word use vector
                 ag.lang_stats[lang]['t'][~ag.step_mask[lang]] += 1
-                # compute new memory retrievability R using updated t values
+                # compute new memory retention R using updated t values
                 ag.lang_stats[lang]['R'] = np.exp(-ag.k * ag.lang_stats[lang]['t'] /
                                                   ag.lang_stats[lang]['S'])
 

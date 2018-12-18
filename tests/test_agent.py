@@ -6,7 +6,7 @@ import gc
 
 from bilangsim.agent import Baby, Child, Adolescent, Young, YoungUniv
 from bilangsim.agent import Adult, Teacher, TeacherUniv, Pensioner
-from bilangsim.model import LanguageModel
+from bilangsim import LanguageModel
 
 
 np_seed = np.random.randint(10000)

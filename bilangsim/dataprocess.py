@@ -376,3 +376,12 @@ class PostProcessor:
 
     def plot_lang_trend(self):
         return self.model_data[['pct_bil', 'pct_spa', 'pct_cat']].plot(grid=True)
+
+    def get_num_tokens_per_agent_type(self, step):
+        idx = pd.IndexSlice
+        df_num_tokens = self.agent_data[
+            ['tokens_per_step_spa', 'tokens_per_step_cat', 'agent_type']
+                                       ].loc[idx[step, :], idx[:]]
+        df_num_tokens['total_tokens'] = df_num_tokens[['tokens_per_step_spa',
+                                                       'tokens_per_step_cat']].sum(1)
+        return df_num_tokens.groupby('agent_type').total_tokens.agg(['max', 'min', 'mean'])

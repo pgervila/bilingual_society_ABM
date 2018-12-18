@@ -1054,19 +1054,29 @@ class SchoolAgent(SpeakerAgent):
             if friend in educ_center[course_key]['students']:
                 self.model.run_conversation(self, friend, num_days=num_days)
 
-    def register_to_school(self):
+    def register_to_school(self, max_num_studs_per_course=25):
         # find closest school in cluster
         clust_info = self.model.geo.clusters_info[self['clust']]
         idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
                                 for school in clust_info['schools']])
-        school = clust_info['schools'][idx_school]
-        # register to new school if conditions met
-        if (('school' not in self.loc_info) or
-            (self.loc_info['school'][0] is school and not self.loc_info['school'][1]) or
-            (not self.loc_info['school']) or
-            (self.loc_info['school'][0] is not school)):
-            # register on condition school is not the same as current, or if currently no school
-            school.assign_student(self)
+
+        sorted_ixs = np.argsort([pdist([self.loc_info['home'].pos, school.pos])[0]
+                                for school in clust_info['schools']])
+        for idx_school in sorted_ixs:
+            school = clust_info['schools'][idx_school]
+            # register to new school if conditions met
+            if (('school' not in self.loc_info) or
+                (self.loc_info['school'][0] is school and not self.loc_info['school'][1]) or
+                (not self.loc_info['school']) or
+                (self.loc_info['school'][0] is not school)):
+                # if conditions met, check if num students in course is not too high
+                course_key = school.find_course_key(self)
+                if len(school.grouped_studs[course_key]) <= max_num_studs_per_course:
+                    # break for loop in current school
+                    break
+        else:
+            school = self.model.geo.add_new_school(self['clust'])
+        school.assign_student(self)
 
 
 class IndepAgent(SpeakerAgent):

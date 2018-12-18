@@ -645,6 +645,7 @@ class LanguageModel(Model):
                         fac.update_courses_phase_1()
             for school in clust_info['schools']:
                 school.update_courses_phase_1()
+            # set lang policy in job centers
             for job in clust_info['jobs']:
                 job.set_lang_policy()
         for clust_idx, clust_info in self.geo.clusters_info.items():
@@ -657,6 +658,8 @@ class LanguageModel(Model):
                 # every 4 years only, make teachers swap
                 if not self.schedule.steps % (4 * self.steps_per_year):
                     school.swap_teachers_courses()
+                # TODO: check if courses have more than 25 students enrolled => Create new school
+
 
     def run_model(self, steps, save_data_freq=50, pickle_model_freq=5000,
                   viz_steps_period=None, save_dir=''):

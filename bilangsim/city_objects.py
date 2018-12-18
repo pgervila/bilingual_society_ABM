@@ -87,11 +87,11 @@ class EducationCenter:
         if not self.grouped_studs:
             list_studs = list(self.info['students'])
             if list_studs:
-                studs_sorted = sorted(list_studs, key=lambda x: int(x.info['age'] / self.model.steps_per_year))
+                studs_sorted = sorted(list_studs, key=lambda x: self.find_course_key(x))
                 self.grouped_studs = dict([(c_key, {'students': set(gr_studs)})
                                            for c_key, gr_studs
                                            in groupby(studs_sorted,
-                                                      lambda x: int(x.info['age'] / self.model.steps_per_year))
+                                                      lambda x: self.find_course_key(x))
                                            if c_key <= self.info['age_range'][1]])
 
     def set_up_courses(self):
@@ -359,6 +359,9 @@ class EducationCenter:
         """ Method will be customized in subclasses """
         pass
 
+    def find_course_key(self, student):
+        return int(student.info['age'] / self.model.steps_per_year)
+
     def assign_student(self, student, course_key=None, hire_t=True):
         """
             Method that assigns student to educational center( school or university)
@@ -389,7 +392,7 @@ class EducationCenter:
         else:
             # if no course_key from former school, create one to register into new school
             if not course_key:
-                course_key = int(student.info['age'] / self.model.steps_per_year)
+                course_key = self.find_course_key(student)
             # Now assign student to new educ_center and corresponding course
             # assign student if course already exists, otherwise create course
             if course_key in self.grouped_studs:
