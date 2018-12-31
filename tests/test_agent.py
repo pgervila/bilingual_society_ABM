@@ -1,5 +1,7 @@
 import pytest
 from unittest.mock import patch
+
+import random
 import numpy as np
 import sys
 import gc
@@ -30,6 +32,28 @@ def dummy_agent(model):
     return agent
 
 
+@pytest.fixture(scope='module')
+def dummy_baby(model):
+    for _ in range(10):
+        parent_1 = random.choice([ag for ag in model.schedule.agents if type(ag) == Adult])
+        if parent_1.info['married']:
+            break
+    id_baby = model.set_available_ids.pop()
+    # get consort
+    consort = parent_1.get_family_relative('consort')
+    # find out baby language attribute and langs with parents
+    newborn_lang, lang_with_father, lang_with_mother = model.get_newborn_lang(parent_1, consort)
+    # Determine baby's sex
+    sex = 'M' if random.random() > 0.5 else 'F'
+    father, mother = (parent_1, consort) if parent_1.info['sex'] == 'M' else (consort, parent_1)
+    # Create baby instance
+    baby = Baby(father, mother, lang_with_father, lang_with_mother,
+                model, id_baby, newborn_lang, sex, age=40, home=parent_1.loc_info['home'])
+    # Add agent to grid, schedule, network and clusters info
+    model.add_new_agent_to_model(baby)
+    return baby
+
+
 @pytest.fixture(scope="module")
 def city_places(model):
     h1 = model.geo.clusters_info[0]['homes'][0]
@@ -38,7 +62,6 @@ def city_places(model):
     j1 = model.geo.clusters_info[0]['jobs'][0]
     
     places = {'home': h1, 'school': sc1, 'university': un1, 'job': j1}
-    
     return places
 
 
@@ -76,13 +99,6 @@ test_data_move_new_home = [(True, None, None), (True, True, None), (True, True, 
 test_data_get_job = [Young, Teacher, TeacherUniv]
 
 
-def add_ag_to_world(m, city_places, ag_to_add):
-    """ add agent to grid, schedule, clusters, networks """
-    m.geo.add_agents_to_grid_and_schedule(ag_to_add)
-    m.geo.clusters_info[city_places['home'].info['clust']]['agents'].append(ag_to_add)
-    m.nws.add_ags_to_networks(ag_to_add)
-
-
 def test_pensioner_methods(model):
     for h in model.geo.clusters_info[0]['homes']:
         if not h.info['occupants']:
@@ -118,18 +134,34 @@ def test_teacher_methods(model, city_places):
 def test_teacheruniv_methods(model, city_places):
     ag_id = model.set_available_ids.pop()
     teacheruniv = TeacherUniv(model, ag_id, 0, 'M', age=1200, home=city_places['home'])
-    add_ag_to_world(model, city_places, teacheruniv)
+    model.add_new_agent_to_model(teacheruniv)
     # test get_current_job
     teacheruniv.loc_info['job'] = None
     teacheruniv.get_current_job()
 
 
-def test_Baby_methods(model):
-    pass
+def test_Baby_methods(model, dummy_baby):
+    # check creation of needed course in school
+    dummy_baby.register_to_school(max_num_studs_per_course=1)
+    school_1 = dummy_baby.loc_info['school'][0]
+    assert school_1
+    assert dummy_baby.loc_info['school'][1]
+    # check creation of new school
+    dummy_baby.register_to_school(max_num_studs_per_course=0)
+    school_2 = dummy_baby.loc_info['school'][0]
+    assert school_1 != school_2
+    assert dummy_baby.loc_info['school'][0]
+    assert dummy_baby.loc_info['school'][1]
 
 
 def test_Child_methods(model):
-    pass
+    for ag in model.schedule.agents:
+        if type(ag) == Child:
+            children = ag
+            break
+    children.register_to_school(max_num_studs_per_course=1)
+    assert children.loc_info['school'][0]
+    assert children.loc_info['school'][1]
 
 
 def test_Adolescent_methods(model):
@@ -142,7 +174,7 @@ def test_Young_methods(model):
 
 @pytest.mark.parametrize("origin_class, new_class, labels", test_data_evolve)
 def test_evolve(model, city_places, origin_class, new_class, labels):
-
+    """ Check correct evolution of one agent class into another """
     if origin_class == Baby:
         father, mother = None, None
         for ag in model.schedule.agents:
@@ -156,11 +188,11 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
         old_ag = origin_class(father, mother, 0, 0, model, ag_id, 0, 'M', age=40,
                               home=city_places['home'],
                               **{labels[0]: city_places[labels[0]]})
-        add_ag_to_world(model, city_places, old_ag)
+        model.add_new_agent_to_model(old_ag)
     elif origin_class == Teacher:
         ag_id = model.set_available_ids.pop()
         old_ag = origin_class(model, ag_id, 0, 'M', age=1200, home=city_places['home'])
-        add_ag_to_world(model, city_places, old_ag)
+        model.add_new_agent_to_model(old_ag)
         school = city_places['school']
         ckey = np.random.choice(list(school.grouped_studs.keys()))
         school.assign_teacher(old_ag, ckey)
@@ -169,7 +201,7 @@ def test_evolve(model, city_places, origin_class, new_class, labels):
 
         old_ag = origin_class(model, ag_id, 0, 'M', age=100, home=city_places['home'],
                               **{labels[0]: city_places[labels[0]]})
-        add_ag_to_world(model, city_places, old_ag)
+        model.add_new_agent_to_model(old_ag)
     
     city_places['home'].agents_in.add(old_ag)
 
@@ -252,7 +284,7 @@ def test_move_to_new_home(model, job1, job2, j2_teach):
 def test_get_job(model, city_places, agent_class):
     ag_id = model.set_available_ids.pop()
     ag = agent_class(model, ag_id, 1, 'M', age=1200, home=city_places['home'])
-    add_ag_to_world(model, city_places, ag)
+    model.add_new_agent_to_model(ag)
     # get a job
     ag.get_job()
 

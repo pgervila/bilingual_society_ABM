@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from bilangsim.agent import Adolescent, Young, Adult, Teacher
-from bilangsim.model import LanguageModel
+from bilangsim import LanguageModel
 
 
 @pytest.fixture(scope="module")

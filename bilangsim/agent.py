@@ -739,6 +739,35 @@ class ListenerAgent(BaseAgent):
         pct_value = counts / len(self.model.cdf_data['s'][self.info['age']])
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
+    def register_to_school(self, reg_conds, max_num_studs_per_course=25):
+        # find school in cluster (with needed course available) from closest to farthest
+        clust_info = self.model.geo.clusters_info[self['clust']]
+        sorted_ixs_with_course = np.argsort([pdist([self.loc_info['home'].pos, school.pos])[0]
+                                                    for school in clust_info['schools']
+                                                    if school.find_course_key(self) in school.grouped_studs])
+        for idx_school in sorted_ixs_with_course:
+            school = clust_info['schools'][idx_school]
+            # register to new school if conditions met
+            if reg_conds(school):
+                # if conditions met, check if num students in course is not too high
+                course_key = school.find_course_key(self)
+                if len(school.grouped_studs[course_key]) <= max_num_studs_per_course:
+                    # break for loop in current school
+                    break
+        else:
+            # find school in cluster (without available course) from closest to farthest
+            sorted_ixs_no_course = np.argsort([pdist([self.loc_info['home'].pos, school.pos])[0]
+                                               for school in clust_info['schools']
+                                               if school.find_course_key(self) not in school.grouped_studs])
+            for idx_school in sorted_ixs_no_course:
+                school = clust_info['schools'][idx_school]
+                if reg_conds(school):
+                    break
+            else:
+                # create new school
+                school = self.model.geo.add_new_school(self['clust'])
+        school.assign_student(self)
+
 
 class SpeakerAgent(ListenerAgent):
 
@@ -1055,28 +1084,14 @@ class SchoolAgent(SpeakerAgent):
                 self.model.run_conversation(self, friend, num_days=num_days)
 
     def register_to_school(self, max_num_studs_per_course=25):
-        # find closest school in cluster
-        clust_info = self.model.geo.clusters_info[self['clust']]
-        idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
-                                for school in clust_info['schools']])
-
-        sorted_ixs = np.argsort([pdist([self.loc_info['home'].pos, school.pos])[0]
-                                for school in clust_info['schools']])
-        for idx_school in sorted_ixs:
-            school = clust_info['schools'][idx_school]
-            # register to new school if conditions met
-            if (('school' not in self.loc_info) or
-                (self.loc_info['school'][0] is school and not self.loc_info['school'][1]) or
-                (not self.loc_info['school']) or
-                (self.loc_info['school'][0] is not school)):
-                # if conditions met, check if num students in course is not too high
-                course_key = school.find_course_key(self)
-                if len(school.grouped_studs[course_key]) <= max_num_studs_per_course:
-                    # break for loop in current school
-                    break
-        else:
-            school = self.model.geo.add_new_school(self['clust'])
-        school.assign_student(self)
+        # define registration conditions
+        def reg_conds(school):
+            conds = ((not self.loc_info['school']) or
+                     (self.loc_info['school'][0] is not school) or
+                     (self.loc_info['school'][0] is school and not self.loc_info['school'][1])
+                     )
+            return conds
+        super().register_to_school(reg_conds, max_num_studs_per_course=max_num_studs_per_course)
 
 
 class IndepAgent(SpeakerAgent):
@@ -1209,23 +1224,14 @@ class Baby(ListenerAgent):
         """
             Method to get school center and corresponding course for student agent
         """
-
         educ_center, course_key = self.loc_info['school']
         return educ_center, course_key
 
-    def register_to_school(self):
-        # find closest school in cluster
-        clust_info = self.model.geo.clusters_info[self['clust']]
-        idx_school = np.argmin([pdist([self.loc_info['home'].pos, school.pos])
-                                for school in clust_info['schools']])
-        school = clust_info['schools'][idx_school]
-
-        if 'school' not in self.loc_info:
-            school.assign_student(self)
-        else:
-            # register on condition school is not the same as current
-            if self.loc_info['school'][0] is not school:
-                school.assign_student(self)
+    def register_to_school(self, max_num_studs_per_course=25):
+        def reg_conds(school):
+            conds = self.loc_info['school'][0] is not school
+            return conds
+        super().register_to_school(reg_conds, max_num_studs_per_course=max_num_studs_per_course)
 
     def stage_1(self, num_days=10):
         # listen to close family at home
@@ -1235,7 +1241,7 @@ class Baby(ListenerAgent):
                            if isinstance(ag, SpeakerAgent)]
             for ag in ags_at_home:
                 self.listen(to_agent=ag, min_age_interlocs=self.info['age'], num_days=num_days)
-            if 'school' not in self.loc_info or not self.loc_info['school'][1]:
+            if not self.loc_info['school'][1]:
                 self.register_to_school()
 
     def stage_2(self, num_days=7, prob_father=0.2):

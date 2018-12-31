@@ -3,8 +3,6 @@
 from __future__ import division
 # IMPORT RELEVANT LIBRARIES
 import os
-import sys
-from importlib import reload
 import bisect
 import random
 import numpy as np
@@ -19,27 +17,21 @@ import deepdish as dd
 # IMPORT MESA LIBRARIES ( Model, Grid, Schedule )
 from mesa import Model
 from mesa.space import MultiGrid
-# import schedule
-# reload(sys.modules['schedule'])
 from .schedule import StagedActivationModif
 
 # IMPORT MODEL LIBRARIES
 from .agent import Baby, Child, Adolescent, Young, YoungUniv, Teacher, TeacherUniv, Adult, Pensioner
-# import geomapping, networks, dataprocess
-# reload(sys.modules['geomapping'])
-# reload(sys.modules['networks'])
-# reload(sys.modules['dataprocess'])
 from .geomapping import GeoMapper
 from .networks import NetworkBuilder
 from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 5893
+#rand_seed = 9675
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 8082
+#np_seed = 7357
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -154,7 +146,7 @@ class LanguageModel(Model):
     def check_model_set_up(self):
         # check some key configs in model are correct
         for ag in self.schedule.agents:
-            if ag.info['age'] > 36:
+            if ag.info['age'] > self.steps_per_year:
                 if isinstance(ag, Young):
                     if ag.loc_info['job']:
                         if isinstance(ag, Teacher):
@@ -659,7 +651,6 @@ class LanguageModel(Model):
                 if not self.schedule.steps % (4 * self.steps_per_year):
                     school.swap_teachers_courses()
                 # TODO: check if courses have more than 25 students enrolled => Create new school
-
 
     def run_model(self, steps, save_data_freq=50, pickle_model_freq=5000,
                   viz_steps_period=None, save_dir=''):

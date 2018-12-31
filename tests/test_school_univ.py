@@ -13,9 +13,11 @@ np_seed = np.random.randint(10000)
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
+
 @pytest.fixture(scope="module")
 def model():
     return LanguageModel(903, num_clusters=4)
+
 
 @pytest.fixture(scope="module")
 def univ(model):
@@ -32,7 +34,7 @@ def univ(model):
 
 
 def test_group_students_per_year(model):
-    # check that num_employees_per_school is the same or greater than num_courses_per_school
+    """Check that num_employees_per_school is the same or greater than num_courses_per_school"""
     employees_and_courses_per_school = [(len(model.geo.clusters_info[cl]['schools'][sch].info['employees']),
                                          len(model.geo.clusters_info[cl]['schools'][sch].grouped_studs))
                                          for cl in range(model.geo.num_clusters)
@@ -54,10 +56,9 @@ def test_school_set_up_and_update(model, univ):
     # check students older than 18 are out of school
     while 18 not in school.grouped_studs:
         for st in list(school.info['students'])[:]:
-            st.info['age'] += 36
+            st.grow(growth_inc=36)
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
-
         school.update_courses_phase_1()
         school.update_courses_phase_2()
         for k, c_info in school.grouped_studs.items():
@@ -68,7 +69,7 @@ def test_school_set_up_and_update(model, univ):
         assert num_course_teachers == num_courses
     studs = school.grouped_studs[18]['students'].copy()
     for st in list(school.info['students'])[:]:
-        st.info['age'] += 36
+        st.grow(growth_inc=36)
         if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
             st.evolve(Adolescent)
     school.update_courses_phase_1()
@@ -90,7 +91,7 @@ def test_school_set_up_and_update(model, univ):
     rand_teacher = np.random.choice([t for t in school.info['employees'] 
                                      if t.loc_info['job'][1]])
     while (rand_teacher.info['age'] / 36) <= 65:
-        rand_teacher.info['age'] += 36
+        rand_teacher.grow(growth_inc=36)
     course_key = rand_teacher.loc_info['job'][1]
     school.update_courses_phase_1()
     school.update_courses_phase_2()
@@ -103,7 +104,7 @@ def test_school_set_up_and_update(model, univ):
     # test students exit
     for _ in range(3):
         for st in list(school.info['students'])[:]:
-            st.info['age'] += 36
+            st.grow(growth_inc=36)
             if isinstance(st, Child) and st.info['age'] >= st.age_high * st.model.steps_per_year:
                 st.evolve(Adolescent)
         school.update_courses_phase_1()

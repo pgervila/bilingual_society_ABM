@@ -298,8 +298,9 @@ class GeoMapper:
         x_c, y_c = self.model.geo.clust_centers[clust_id]
         x_nsc = self.model.geo.generate_dim_coord(self.model.grid.width, x_c)
         y_nsc = self.model.geo.generate_dim_coord(self.model.grid.height, y_c)
-        new_school = School(self.model, (x_nsc, y_nsc), clust_id, school_size=400,
+        new_school = School(self.model, (x_nsc, y_nsc), clust_id, num_places=400,
                             lang_policy=self.model.school_lang_policy)
+        self.clusters_info[clust_id]['schools'].append(new_school)
         return new_school
 
     def generate_langs_per_clust(self):

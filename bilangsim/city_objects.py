@@ -25,7 +25,7 @@ class Home:
         for ag in agents:
             # check if agent already has a home
             if ag.loc_info['home']:
-                curr_clust = ag.loc_info['home'].info['clust']
+                curr_clust = ag['clust']
                 ag.loc_info['home'].remove_agent(ag)
                 # change cluster info reference to agent if new home is in another cluster
                 if self.info['clust'] != curr_clust:
@@ -192,11 +192,6 @@ class EducationCenter:
                 self.hire_teachers([c_id])
             elif c_info['teacher'].info['age'] >= retirement_age:
                 c_info['teacher'].evolve(Pensioner)
-
-        # check if teacher has to retire and replace it if needed
-        # for (c_id, course) in list(self.grouped_studs.items()):
-        #     if course['teacher'].info['age'] >= retirement_age:
-        #         course['teacher'].evolve(Pensioner)
 
     def find_teachers(self, courses_keys):
         """
@@ -385,7 +380,7 @@ class EducationCenter:
         if old_educ_center and old_educ_center is not self:
             old_educ_center.remove_student(student)
 
-        # check if we are in initializat mode and if school has already been initialized
+        # check if we are in initialization mode and if school has already been initialized
         if self.model.init_mode and not self.grouped_studs:
             student.loc_info['school'] = [self, None]
             self.info['students'].add(student)
@@ -614,7 +609,7 @@ class School(EducationCenter):
         if replace and not isinstance(student, Adolescent):
             self.info['students'].add(grown_agent)
         else:
-            student.loc_info['school'] = None
+            student.loc_info['school'] = [None, None]
 
     def remove_employee(self, teacher, replace=False, new_teacher=None):
         self.info['employees'].remove(teacher)
@@ -818,7 +813,7 @@ class Job:
             self.set_lang_policy()
 
     def set_lang_policy(self, min_pct=0.1):
-        """ Computes langs distribution in cluster the job instance belongs to,
+        """ Computes the distribution of languages in the cluster the job instance belongs to,
             and sets value for job lang policy accordingly. In order to be taken
             into account, monolinguals need to make > min_pct % cluster population
             Args:
@@ -956,7 +951,6 @@ class Job:
         agent.loc_info['job'] = self
         # reset job seniority steps counter
         agent.info['job_steps'] = 0
-
 
     def remove_employee(self, agent, replace=None, new_agent=None):
         self.num_places += 1
