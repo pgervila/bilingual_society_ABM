@@ -455,9 +455,9 @@ class GeoMapper:
 
         # check for model inconsistencies in school assignment
         # check if there is a teacher for each created course
-        error_message = ('MODELING ERROR: not all school courses have a '
-                        'teacher assigned. The specified school lang policy '
-                        'cannot be met by current population language knowledge.')
+        error_message = ("""MODELING ERROR: not all school courses have a
+                            teacher assigned. The specified school lang policy
+                            cannot be met by current population language knowledge.""")
         try:
             teachers_per_course = [course['teacher'] if 'teacher' in course else False
                                    for cl in range(self.num_clusters)

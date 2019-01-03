@@ -739,14 +739,26 @@ class ListenerAgent(BaseAgent):
         pct_value = counts / len(self.model.cdf_data['s'][self.info['age']])
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
-    def register_to_school(self, reg_conds, max_num_studs_per_course=25):
+    def register_to_school(self, max_num_studs_per_course=25):
+        def reg_conds(school):
+            conds = ((self.loc_info['school'][0] is not school) or
+                     (self.loc_info['school'][0] is school and not self.loc_info['school'][1])
+                     )
+            return conds
+
         # find school in cluster (with needed course available) from closest to farthest
         clust_info = self.model.geo.clusters_info[self['clust']]
+
+        schools_with_course = [school for school in clust_info['schools']
+                               if school.find_course_key(self) in school.grouped_studs]
+
         sorted_ixs_with_course = np.argsort([pdist([self.loc_info['home'].pos, school.pos])[0]
-                                                    for school in clust_info['schools']
-                                                    if school.find_course_key(self) in school.grouped_studs])
+                                             for school in schools_with_course])
         for idx_school in sorted_ixs_with_course:
-            school = clust_info['schools'][idx_school]
+            school = schools_with_course[idx_school]
+            # check best school is not current one
+            if (self.loc_info['school'][0] is school) and (self.loc_info['school'][1]):
+                return
             # register to new school if conditions met
             if reg_conds(school):
                 # if conditions met, check if num students in course is not too high
@@ -756,11 +768,12 @@ class ListenerAgent(BaseAgent):
                     break
         else:
             # find school in cluster (without available course) from closest to farthest
+            schools_without_course = [school for school in clust_info['schools']
+                                      if school.find_course_key(self) not in school.grouped_studs]
             sorted_ixs_no_course = np.argsort([pdist([self.loc_info['home'].pos, school.pos])[0]
-                                               for school in clust_info['schools']
-                                               if school.find_course_key(self) not in school.grouped_studs])
+                                               for school in schools_without_course])
             for idx_school in sorted_ixs_no_course:
-                school = clust_info['schools'][idx_school]
+                school = schools_without_course[idx_school]
                 if reg_conds(school):
                     break
             else:
@@ -1042,6 +1055,12 @@ class SpeakerAgent(ListenerAgent):
 class SchoolAgent(SpeakerAgent):
     """ SpeakerAgent augmented with methods related to school activity """
 
+    def set_educ_center_info(self, school, course_key):
+        """ Convenience method to set values to school information attribute
+            * args: school, course_key
+        """
+        self.loc_info['school'] = [school, course_key]
+
     def go_to_school(self):
         school = self.loc_info['school'][0]
         self.model.grid.move_agent(self, school.pos)
@@ -1082,16 +1101,6 @@ class SchoolAgent(SpeakerAgent):
         for friend in self.model.nws.friendship_network[self]:
             if friend in educ_center[course_key]['students']:
                 self.model.run_conversation(self, friend, num_days=num_days)
-
-    def register_to_school(self, max_num_studs_per_course=25):
-        # define registration conditions
-        def reg_conds(school):
-            conds = ((not self.loc_info['school']) or
-                     (self.loc_info['school'][0] is not school) or
-                     (self.loc_info['school'][0] is school and not self.loc_info['school'][1])
-                     )
-            return conds
-        super().register_to_school(reg_conds, max_num_studs_per_course=max_num_studs_per_course)
 
 
 class IndepAgent(SpeakerAgent):
@@ -1218,7 +1227,10 @@ class Baby(ListenerAgent):
         if school:
             school.assign_student(self)
         else:
-            self.loc_info['school'] = [school, None]
+            self.set_educ_center_info(school, None)
+
+    def set_educ_center_info(self, school, course_key):
+        self.loc_info['school'] = [school, course_key]
 
     def get_school_and_course(self):
         """
@@ -1226,12 +1238,6 @@ class Baby(ListenerAgent):
         """
         educ_center, course_key = self.loc_info['school']
         return educ_center, course_key
-
-    def register_to_school(self, max_num_studs_per_course=25):
-        def reg_conds(school):
-            conds = self.loc_info['school'][0] is not school
-            return conds
-        super().register_to_school(reg_conds, max_num_studs_per_course=max_num_studs_per_course)
 
     def stage_1(self, num_days=10):
         # listen to close family at home
@@ -1309,7 +1315,7 @@ class Child(SchoolAgent):
         if school:
             school.assign_student(self)
         else:
-            self.loc_info['school'] = [school, None]
+            self.set_educ_center_info(school, None)
 
     def speak_at_school(self, school, course_key, num_days=7):
         super().speak_at_school(school, course_key, num_days=num_days)
@@ -1368,7 +1374,7 @@ class Adolescent(IndepAgent, SchoolAgent):
         if school:
             school.assign_student(self)
         else:
-            self.loc_info['school'] = [school, None]
+            self.set_educ_center_info(school, None)
 
     def speak_at_school(self, school, course_key, num_days=7):
         super().speak_at_school(school, course_key, num_days=num_days)
@@ -1800,7 +1806,10 @@ class YoungUniv(Adolescent):
             fac_key = random.choice(string.ascii_letters[:5])
             university[fac_key].assign_student(self)
         else:
-            self.loc_info['university'] = [university, None, fac_key]
+            self.set_educ_center_info(university, None, fac_key)
+
+    def set_educ_center_info(self, univ, fac, fac_key):
+        self.loc_info['university'] = [univ, fac, fac_key]
 
     def get_school_and_course(self):
         educ_center, course_key, fac_key = self.loc_info['university']
