@@ -11,7 +11,8 @@ def model():
 
 @pytest.fixture(scope="module", params=[(457, 3), (521, 2), (897, 5), (1501, 6)])
 def model_param(request):
-    return LanguageModel(request.param[0], num_clusters=request.param[1])
+    return LanguageModel(request.param[0], num_clusters=request.param[1],
+                         init_lang_distrib=[0.25, 0.5, 0.25])
 
 # define cases to test => Inputs and optionally expected results
 

@@ -2,9 +2,10 @@ import pytest
 from unittest.mock import patch
 
 import random
-import numpy as np
 import sys
 import gc
+import numpy as np
+from scipy.spatial.distance import pdist
 
 from bilangsim.agent import Baby, Child, Adolescent, Young, YoungUniv
 from bilangsim.agent import Adult, Teacher, TeacherUniv, Pensioner
@@ -147,21 +148,49 @@ def test_Baby_methods(model, dummy_baby):
     assert school_1
     assert dummy_baby.loc_info['school'][1]
     # check creation of new school
-    dummy_baby.register_to_school(max_num_studs_per_course=0)
-    school_2 = dummy_baby.loc_info['school'][0]
-    assert school_1 != school_2
-    assert dummy_baby.loc_info['school'][0]
-    assert dummy_baby.loc_info['school'][1]
+    # school_1.remove_student(dummy_baby)
+    # dummy_baby.register_to_school(max_num_studs_per_course=0)
+    # school_2 = dummy_baby.loc_info['school'][0]
+    # assert school_1 != school_2
+    # assert dummy_baby.loc_info['school'][0]
+    # assert dummy_baby.loc_info['school'][1]
 
 
 def test_Child_methods(model):
     for ag in model.schedule.agents:
         if type(ag) == Child:
-            children = ag
+            child = ag
             break
-    children.register_to_school(max_num_studs_per_course=1)
-    assert children.loc_info['school'][0]
-    assert children.loc_info['school'][1]
+
+    ck = int(child.info['age'] / model.steps_per_year)
+    clust_schools = model.geo.clusters_info[child['clust']]['schools']
+    if len(clust_schools) == 1:
+        model.geo.add_new_school(child['clust'])
+        clust_schools = model.geo.clusters_info[child['clust']]['schools']
+    clust_schools = sorted(clust_schools, key=lambda x: pdist([x.pos, child.loc_info['home'].pos]))
+    old_num_schools = len(clust_schools)
+
+    schools_with_ck = [sc for sc in clust_schools if ck in sc.grouped_studs]
+    schools_without_ck = [sc for sc in clust_schools if ck not in sc.grouped_studs]
+
+    child.register_to_school()
+    child_school = child.loc_info['school'][0]
+    assert child_school
+    assert child.loc_info['school'][1]
+
+    for sc in clust_schools:
+        if ck in sc.grouped_studs and len(sc.grouped_studs[ck]) <= 25:
+            assert child_school in schools_with_ck
+            break
+    else:
+        if schools_without_ck:
+            assert child_school in schools_without_ck
+        else:
+            assert len(clust_schools) == old_num_schools + 1
+
+
+
+
 
 
 def test_Adolescent_methods(model):

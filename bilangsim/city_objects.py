@@ -359,10 +359,11 @@ class EducationCenter:
 
     def assign_student(self, student, course_key=None, hire_t=True):
         """
-            Method that assigns student to educational center( school or university)
+            Method that assigns student to educational center (school or university)
             and corresponding course.
-            It creates new course in center if it does not already exist
-            It checks for old school if any and removes student from it
+            First it checks for old school if any and removes student from it
+            Then it creates new course in center if it does not already exist
+            and hires corresponding teacher if requested.
             Args:
                 * student: agent instance.
                 * course_key: integer. Specify course_key
@@ -382,7 +383,7 @@ class EducationCenter:
 
         # check if we are in initialization mode and if school has already been initialized
         if self.model.init_mode and not self.grouped_studs:
-            student.loc_info['school'] = [self, None]
+            student.set_educ_center_info(self, None)
             self.info['students'].add(student)
         else:
             # if no course_key from former school, create one to register into new school
@@ -390,6 +391,11 @@ class EducationCenter:
                 course_key = self.find_course_key(student)
             # Now assign student to new educ_center and corresponding course
             # assign student if course already exists, otherwise create course
+            if type(self) == School:
+                student.set_educ_center_info(self, course_key)
+            elif type(self) == Faculty:
+                self.univ.info['students'].add(student)
+                student.set_educ_center_info(self.univ, course_key, self.info['type'])
             if course_key in self.grouped_studs:
                 self[course_key]['students'].add(student)
             else:
@@ -558,13 +564,6 @@ class School(EducationCenter):
                 return other_clusters_free_staff
         return other_clusters_free_staff
 
-    def assign_student(self, student, course_key=None, hire_t=True):
-        """
-            Method to assign student to school, and school to agent
-        """
-        course_key = super().assign_student(student, course_key=course_key, hire_t=hire_t)
-        student.loc_info['school'] = [self, course_key]
-
     def exit_studs(self, studs):
         """ Method to send studs from last year to univ or job market """
 
@@ -609,7 +608,7 @@ class School(EducationCenter):
         if replace and not isinstance(student, Adolescent):
             self.info['students'].add(grown_agent)
         else:
-            student.loc_info['school'] = [None, None]
+            student.set_educ_center_info(None, None)
 
     def remove_employee(self, teacher, replace=False, new_teacher=None):
         self.info['employees'].remove(teacher)
@@ -720,11 +719,6 @@ class Faculty(EducationCenter):
     def exit_studs(self, studs):
         for st in list(studs):
             st.evolve(Young, upd_course=True)
-
-    def assign_student(self, student, course_key=None, hire_t=True):
-        course_key = super().assign_student(student, course_key=course_key, hire_t=hire_t)
-        self.univ.info['students'].add(student)
-        student.loc_info['university'] = [self.univ, course_key, self.info['type']]
 
     def remove_student(self, student, upd_course=False):
         # remove from uni and fac
