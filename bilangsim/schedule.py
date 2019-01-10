@@ -31,7 +31,6 @@ class StagedActivationModif(StagedActivation):
                 # compute new memory retention R using updated t values
                 ag.lang_stats[lang]['R'] = np.exp(-ag.k * ag.lang_stats[lang]['t'] /
                                                   ag.lang_stats[lang]['S'])
-
                 # set current lang knowledge
                 # compute current language knowledge in percentage after 't' update
                 ag.update_lang_knowledge(lang, pct_threshold=pct_threshold)

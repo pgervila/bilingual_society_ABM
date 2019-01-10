@@ -10,6 +10,38 @@ def model():
 
 
 @pytest.fixture(scope="module")
+def family_ags(model):
+    for ag in model.schedule.agents:
+        if type(ag) == Adult and ag.info['married']:
+            child1, child2 = ag.get_family_relative('child')
+            if type(child1) == Adolescent or type(child2) == Adolescent:
+                ag1 = ag
+                break
+    ag2 = ag1.get_family_relative('consort')
+    ag3 = [ag for ag in ag.get_family_relative('child') if type(ag) == Adolescent][0]
+
+    return ag1, ag2, ag3
+
+
+@pytest.fixture(scope="module")
+def stranger_ags(model):
+    ags = []
+    known_ags = set()
+    for ix, ag in enumerate(model.schedule.agents):
+        if type(ag) == Adult:
+            ags.append(ag)
+            known_ags.update(set(model.nws.known_people_network[ag]))
+            break
+    for ag in model.schedule.agents[ix + 1:]:
+        if type(ag) == Adult and ag not in known_ags:
+            ags.append(ag)
+            known_ags.update(set(model.nws.known_people_network[ag]))
+        if len(ags) == 4:
+            break
+    return ags
+
+
+@pytest.fixture(scope="module")
 def family_and_stranger_ags(model):
     class Found(Exception):
         pass
@@ -26,10 +58,10 @@ def family_and_stranger_ags(model):
     except Found:
         parent, child = ag, ch
 
-    for strg in model.schedule.agents:
-        if type(strg) == Adult and strg.info['language'] == 0:
-            if strg.lang_stats['L2']['pct'][strg.info['age']] <= 0.05:
-                stranger = strg
+    for stranger in model.schedule.agents:
+        if type(stranger) == Adult and stranger.info['language'] == 0:
+            if stranger.lang_stats['L2']['pct'][stranger.info['age']] <= 0.05:
+                break
 
     return parent, child, stranger
 
@@ -44,25 +76,31 @@ def model_param(request):
 
 test_data_comp_cl_centers = [(10, 0.2), (20, 0.1), (26, 0.2)]
 
-test_data_get_conv_params = [
-            ([0, 0], [0.5, 0.5], [0.0, 0.0], False, ((0, 0), None)),
-            ([1, 1], [0.5, 0.4], [0.4, 0.5], False, ((0, 0), None)),
-            ([0, 0, 1], [0.5, 0.5, 0.5], [0.02, 0.04, 0.4], False, ((0, 0, 0), None)),
-            ([1, 1, 2], [0.5, 0.5, 0.04], [0.4, 0.4, 0.5], False, ((1, 1, 1), None)),
-            ([1, 1, 1], [0.4, 0.5, 0.5], [0.5, 0.5, 0.4], False, ((0, 0, 0), None)),
-            ([1, 1], [0.4, 0.4], [0.5, 0.5], True, ((1, 1), None)),
-            ([0, 2], [0.5, 0.04], [0.04, 0.5], True, ((0, 1), None)),
-            ([0, 2], [0.5, 0.04], [0.02, 0.5], True, ((0, 0), 2)),
-            ([1, 1, 1], [0.5, 0.5, 0.4], [0.4, 0.5, 0.5], True, ((0, 0, 0), None)),
-            ([1, 1, 1], [0.4, 0.5, 0.5], [0.5, 0.5, 0.4], True, ((1, 1, 1), None)),
-            ([0, 2, 2], [0.5, 0.02, 0.02], [0.02, 0.5, 0.5], True, ((0, 0, 0), 2)),
-            ([0, 1, 2], [0.5, 0.5, 0.04], [0.04, 0.5, 0.5], True, ((0, 0, 1), None)),
-            ([0, 1, 2], [0.5, 0.5, 0.02], [0.02, 0.4, 0.5], True, ((0, 0, 0), 2)),
-            ([0, 1, 2], [0.5, 0.5, 0.04], [0.04, 0.4, 0.5], True, ((0, 0, 1), None)),
-            ([2, 1, 0], [0.02, 0.5, 0.5], [0.5, 0.4, 0.04], True, ((1, 1, 1), 0)),
-            ([2, 1, 0, 0], [0.04, 0.4, 0.5, 0.5], [0.5, 0.5, 0.02, 0.02], True, ((1, 1, 1, 1), 0)),
-            ([0, 1, 2, 2], [0.5, 0.5, 0.04, 0.02], [0.04, 0.4, 0.5, 0.5], True, ((0, 0, 0, 0), 2))
+test_data_get_conv_params_strangers = [
+            ([1, 1], [0.4, 0.4], [0.5, 0.5], ((1, 1), None)),
+            ([0, 2], [0.5, 0.04], [0.04, 0.5], ((0, 1), None)),
+            ([0, 2], [0.5, 0.04], [0.02, 0.5], ((0, 0), 2)),
+            ([1, 1, 1], [0.5, 0.5, 0.4], [0.4, 0.5, 0.5], ((0, 0, 0), None)),
+            ([1, 1, 1], [0.4, 0.5, 0.5], [0.5, 0.5, 0.4], ((1, 1, 1), None)),
+            ([0, 2, 2], [0.5, 0.02, 0.02], [0.02, 0.5, 0.5], ((0, 0, 0), 2)),
+            ([0, 1, 2], [0.5, 0.5, 0.04], [0.04, 0.5, 0.5], ((0, 0, 1), None)),
+            ([0, 1, 2], [0.5, 0.5, 0.02], [0.02, 0.4, 0.5], ((0, 0, 0), 2)),
+            ([0, 1, 2], [0.5, 0.5, 0.04], [0.04, 0.4, 0.5], ((0, 0, 1), None)),
+            ([2, 1, 0], [0.02, 0.5, 0.5], [0.5, 0.4, 0.04], ((1, 1, 1), 0)),
+            ([2, 1, 0, 0], [0.04, 0.4, 0.5, 0.5], [0.5, 0.5, 0.02, 0.02], ((1, 1, 1, 1), 0)),
+            ([0, 1, 2, 2], [0.5, 0.5, 0.04, 0.02], [0.04, 0.4, 0.5, 0.5], ((0, 0, 0, 0), 2))
 ]
+
+test_data_get_conv_params_family = [([0, 0], [0.5, 0.5], [0.0, 0.0], {(0, 1): 0}, ((0, 0), None)),
+                                    ([1, 1], [0.5, 0.4], [0.4, 0.5], {(0, 1): 1}, ((1, 1), None)),
+                                    ([1, 1], [0.5, 0.4], [0.4, 0.5], {(0, 1): 0}, ((0, 0), None)),
+                                    ([0, 0, 1], [0.5, 0.5, 0.5], [0.02, 0.04, 0.4],
+                                     {(0, 1): 0, (0, 2): 0, (1, 2): 0}, ((0, 0, 0), None)),
+                                    ([1, 1, 2], [0.5, 0.5, 0.04], [0.4, 0.4, 0.5],
+                                     {(0, 1): 0, (0, 2): 1, (1, 2): 1}, ((1, 1, 1), None)),
+                                    ([1, 1, 1], [0.4, 0.5, 0.5], [0.5, 0.5, 0.4],
+                                     {(0, 1): 1, (0, 2): 0, (1, 2): 0}, ((0, 0, 0), None))
+                                    ]
 
 test_data_run_conversation = [([1, 1, 1, 2, 2], True)]
 
@@ -113,24 +151,33 @@ def test_run_conversation(model):
     assert ag_init not in kn_p_nw[others[1]]
 
 
-@pytest.mark.parametrize("langs, pcts_1, pcts_2, delete_edges, expected", 
-                         test_data_get_conv_params)
-def test_get_conv_params(model, langs, pcts_1, pcts_2, delete_edges, expected): 
-    agents = model.schedule.agents[:len(langs)]
+@pytest.mark.parametrize("langs, pcts_1, pcts_2, expected",
+                         test_data_get_conv_params_strangers)
+def test_get_conv_params_strangers(model, stranger_ags, langs, pcts_1, pcts_2, expected):
+    agents = stranger_ags[:len(langs)]
     for idx, agent in enumerate(agents):
         agent.info['language'] = langs[idx]
         agent.lang_stats['L1']['pct'][agent.info['age']] = pcts_1[idx]
         agent.lang_stats['L2']['pct'][agent.info['age']] = pcts_2[idx]
-    if delete_edges:
-            model.nws.known_people_network.remove_edges_from(
-                list(model.nws.known_people_network.edges())
-            )
-
     params = model.get_conv_params(agents)
     assert np.all(expected == (params['lang_group'], params['mute_type']))
 
 
-def test_get_conv_params2(model, family_and_stranger_ags):
+@pytest.mark.parametrize("langs, pcts_1, pcts_2, langs_with_known, expected",
+                         test_data_get_conv_params_family)
+def test_get_conv_params_family(model, family_ags,
+                                langs, pcts_1, pcts_2, langs_with_known, expected):
+    agents = family_ags[:len(langs)]
+    for idx, agent in enumerate(agents):
+        agent.info['language'] = langs[idx]
+        agent.lang_stats['L1']['pct'][agent.info['age']] = pcts_1[idx]
+        agent.lang_stats['L2']['pct'][agent.info['age']] = pcts_2[idx]
+    # set spoken language between acquainted agents
+    for ixs, lang in langs_with_known.items():
+        model.nws.known_people_network[agents[ixs[0]]][agents[ixs[1]]]['lang'] = lang
+
+
+def test_get_conv_relatives_with_stranger(model, family_and_stranger_ags):
     parent, child, stranger = family_and_stranger_ags
     params = model.get_conv_params([parent, child, stranger])
     assert params['lang_group'] == (0, 0, 0)
