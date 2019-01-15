@@ -1810,10 +1810,13 @@ class YoungUniv(Adolescent):
             fac_key = random.choice(string.ascii_letters[:5])
             university[fac_key].assign_student(self)
         else:
-            self.set_educ_center_info(university, None, fac_key)
+            self.set_educ_center_info(fac=None, course_key=None)
 
-    def set_educ_center_info(self, univ, fac, fac_key):
-        self.loc_info['university'] = [univ, fac, fac_key]
+    def set_educ_center_info(self, fac, course_key):
+        if fac:
+            self.loc_info['university'] = [fac.univ, course_key, fac.info['type']]
+        else:
+            self.loc_info['university'] = [None, course_key, None]
 
     def get_school_and_course(self):
         educ_center, course_key, fac_key = self.loc_info['university']

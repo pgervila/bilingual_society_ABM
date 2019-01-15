@@ -623,7 +623,7 @@ class LanguageModel(Model):
         # remove agent from all locations where it belonged to
         self.remove_from_locations(agent)
         # make id from deceased agent available
-        self.set_available_ids.add(agent.unique_id)
+        # self.set_available_ids.add(agent.unique_id)
 
     def step(self):
         self.schedule.step()

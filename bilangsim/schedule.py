@@ -19,7 +19,7 @@ class StagedActivationModif(StagedActivation):
             # set exclusion counter to zero ( TODO: should be agent method ??)
             # TODO: it's WRONG. We should compare relative lang knowledge !!!
             # TODO: I think it is not needed to set 'excl_c' to zero
-            ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
+            # ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
 
             for lang in ['L1', 'L12', 'L21', 'L2']:
                 # save copy of wc for each agent

@@ -1,3 +1,5 @@
+import sys
+import gc
 import numpy as np
 import pytest
 from bilangsim.agent import Adolescent, Young, Adult, Teacher
@@ -9,7 +11,7 @@ def model():
     return LanguageModel(300, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25])
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def family_ags(model):
     for ag in model.schedule.agents:
         if type(ag) == Adult and ag.info['married']:
@@ -23,7 +25,7 @@ def family_ags(model):
     return ag1, ag2, ag3
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def stranger_ags(model):
     ags = []
     known_ags = set()
@@ -41,7 +43,7 @@ def stranger_ags(model):
     return ags
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def family_and_stranger_ags(model):
     class Found(Exception):
         pass
@@ -104,12 +106,12 @@ test_data_get_conv_params_family = [([0, 0], [0.5, 0.5], [0.0, 0.0], {(0, 1): 0}
 
 test_data_run_conversation = [([1, 1, 1, 2, 2], True)]
 
-test_data_remove_after_death = [Teacher, Adult, Adolescent]
+test_data_remove_after_death = [Adult, Adolescent, Teacher, Young]
 
 test_data_remove_from_locations = [False, True]
 
 
-@pytest.mark.skip(reason="too long and currently disabled")
+#@pytest.mark.skip(reason="too long and currently disabled")
 def test_model_consistency(model_param):
     """ Check that all agents live in the same
         cluster as that of their occupation """
@@ -187,11 +189,21 @@ def test_get_conv_relatives_with_stranger(model, family_and_stranger_ags):
 
 @pytest.mark.parametrize("agent_type", test_data_remove_after_death)
 def test_remove_after_death(model, agent_type):
-    # corr_dict = {'Adult': 'Young', 'YoungUniv': 'Adolescent', 'Pensioner': 'Adult'}
     for ag in model.schedule.agents:
-        if isinstance(ag, agent_type):
+        if type(ag) == agent_type:
             break
     model.remove_after_death(ag)
+    gc.collect()
+    assert sys.getrefcount(ag) == 2
+    assert ag not in model.schedule.agents
+    assert ag not in model.nws.known_people_network
+    assert ag not in model.nws.family_network
+    assert ag not in model.nws.friendship_network
+
+
+def test_run(model):
+    pass
+    model.run_model(2)
 
 
 @pytest.mark.parametrize("replace", test_data_remove_from_locations)
