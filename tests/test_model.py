@@ -146,9 +146,17 @@ def test_run_conversation(model):
             ag2 = ag
             break
     others = [ag1, ag2]
+    # check method does not break if others is empty list
+    wc_before = ag_init.lang_stats['L1']['wc']
+    model.run_conversation(ag_init, others=[])
+    wc_after = ag_init.lang_stats['L1']['wc']
+    assert np.all(wc_before == wc_after)
+    # check method
     model.run_conversation(ag_init, others)
+    # check acquaintance network gets updated by communicating agents
     assert kn_p_nw[ag_init][others[0]]
     assert kn_p_nw[others[0]][ag_init]
+    # check agents that can't communicate do not enter acquaintance network
     assert others[1] not in kn_p_nw[ag_init]
     assert ag_init not in kn_p_nw[others[1]]
 

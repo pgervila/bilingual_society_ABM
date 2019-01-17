@@ -270,7 +270,10 @@ class LanguageModel(Model):
         ags.extend(others) if (type(others) is list) else ags.append(others)
 
         # get all parameters of conversation
-        conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
+        try:
+            conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
+        except ZeroDivisionError:
+            return
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
