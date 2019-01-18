@@ -265,11 +265,10 @@ class LanguageModel(Model):
                 * Method updates lang arrays for all active agents involved. It also updates acquaintances
         """
 
-        # define list of all agents involved
-        ags = [ag_init]
-        ags.extend(others) if (type(others) is list) else ags.append(others)
+        # define list of all agents involved in conversation
+        ags = [ag_init, others] if (type(others) is not list) else [ag_init, *others]
 
-        # get all parameters of conversation
+        # get all parameters of conversation if len(ags) >= 2, otherwise exit method
         try:
             conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
         except ZeroDivisionError:
@@ -409,7 +408,6 @@ class LanguageModel(Model):
                 else:
                     lang_group, mute_type = 0, 2
                 conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
-
             else:
                 # There are agents on both lang sides unable to follow other's speech.
                 # Initiator agent will speak with whom understands him, others will listen but understand nothing
