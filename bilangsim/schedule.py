@@ -19,7 +19,7 @@ class StagedActivationModif(StagedActivation):
             # set exclusion counter to zero ( TODO: should be agent method ??)
             # TODO: it's WRONG. We should compare relative lang knowledge !!!
             # TODO: I think it is not needed to set 'excl_c' to zero
-            ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
+            # ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
 
             for lang in ['L1', 'L12', 'L21', 'L2']:
                 # save copy of wc for each agent
@@ -31,7 +31,6 @@ class StagedActivationModif(StagedActivation):
                 # compute new memory retention R using updated t values
                 ag.lang_stats[lang]['R'] = np.exp(-ag.k * ag.lang_stats[lang]['t'] /
                                                   ag.lang_stats[lang]['S'])
-
                 # set current lang knowledge
                 # compute current language knowledge in percentage after 't' update
                 ag.update_lang_knowledge(lang, pct_threshold=pct_threshold)

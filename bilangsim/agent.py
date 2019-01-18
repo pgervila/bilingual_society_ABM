@@ -268,8 +268,10 @@ class BaseAgent:
            This method is called from schedule at each step
            Args:
                 * switch_threshold: float. Threshold value below which agent
-                    is no longer considered fluent in that language. It defaults to 0.2
+                is no longer considered fluent in that language. It defaults to 0.2
         """
+
+        # TODO : adapt all languages spoken to known people when threshold reaches 0.1
 
         if self.info['language'] == 0:
             if self.get_langs_pcts(1) >= switch_threshold:
@@ -739,6 +741,8 @@ class ListenerAgent(BaseAgent):
         pct_value = counts / len(self.model.cdf_data['s'][self.info['age']])
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
 
+        # TODO: if pct < 0.1 => update language spoken to known people, since self is now really MONOLINGUAL
+
     def register_to_school(self, max_num_studs_per_course=25):
         def reg_conds(school):
             conds = ((self.loc_info['school'][0] is not school) or
@@ -1032,7 +1036,7 @@ class SpeakerAgent(ListenerAgent):
             return True
 
     def make_friend(self, other):
-        """ Method to implement friendship bounds between self agent and"""
+        """ Method to implement friendship bounds between self agent and other """
         friends = [self, other]
         # who speaks first may determine communication lang
         random.shuffle(friends)
@@ -1806,10 +1810,13 @@ class YoungUniv(Adolescent):
             fac_key = random.choice(string.ascii_letters[:5])
             university[fac_key].assign_student(self)
         else:
-            self.set_educ_center_info(university, None, fac_key)
+            self.set_educ_center_info(fac=None, course_key=None)
 
-    def set_educ_center_info(self, univ, fac, fac_key):
-        self.loc_info['university'] = [univ, fac, fac_key]
+    def set_educ_center_info(self, fac, course_key):
+        if fac:
+            self.loc_info['university'] = [fac.univ, course_key, fac.info['type']]
+        else:
+            self.loc_info['university'] = [None, course_key, None]
 
     def get_school_and_course(self):
         educ_center, course_key, fac_key = self.loc_info['university']

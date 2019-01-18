@@ -265,12 +265,14 @@ class LanguageModel(Model):
                 * Method updates lang arrays for all active agents involved. It also updates acquaintances
         """
 
-        # define list of all agents involved
-        ags = [ag_init]
-        ags.extend(others) if (type(others) is list) else ags.append(others)
+        # define list of all agents involved in conversation
+        ags = [ag_init, others] if (type(others) is not list) else [ag_init, *others]
 
-        # get all parameters of conversation
-        conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
+        # get all parameters of conversation if len(ags) >= 2, otherwise exit method
+        try:
+            conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
+        except ZeroDivisionError:
+            return
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
@@ -325,39 +327,43 @@ class LanguageModel(Model):
         # set output default parameters
         conv_params = dict(multilingual=False, mute_type=None, conv_length=def_conv_length)
 
-        # get lists of favorite language per agent and set of language types involved
+        # get set of language types involved
         ags_lang_types = set([ag.info['language'] for ag in ags])
-
-        # define lists with agent competences and preferences in each language
+        # get lists of favorite language per agent
         fav_langs_and_pcts = [ag.get_dominant_lang(ret_pcts=True) for ag in ags]
+        # define lists with agent competences and preferences in each language
         fav_lang_per_agent, l_pcts = list(zip(*fav_langs_and_pcts))
         l1_pcts, l2_pcts = list(zip(*l_pcts))
+
+        known_others = [ag for ag in others
+                        if ag in self.nws.known_people_network[ag_init]]
+        unknown_others = [ag for ag in others
+                          if ag not in self.nws.known_people_network[ag_init]]
+
+        def compute_lang_group(default_lang):
+            if unknown_others:
+                lang_group = default_lang
+            else:
+                langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
+                                           for ag in known_others]
+                langs_with_known_agents = [lang[0] if isinstance(lang, tuple) else lang
+                                           for lang in langs_with_known_agents]
+                lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
+            return lang_group
+
         # define current case
         # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
         if ags_lang_types in [{0}, {0, 1}]:
-            lang_group = 0
-            conv_params['lang_group'] = lang_group
+            conv_params['lang_group'] = compute_lang_group(default_lang=0)
         elif ags_lang_types in [{1, 2}, {2}]:
-            lang_group = 1
-            conv_params['lang_group'] = lang_group
+            conv_params['lang_group'] = compute_lang_group(default_lang=1)
         elif ags_lang_types == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
             # ( TODO: best language has to be compatible with constraints !!!!)
             # who starts conversation matters, but also average lang spoken with already known agents
             lang_init = fav_lang_per_agent[0]
-            # TODO : why known agents only checked for this option ??????????????
-            langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
-                                       for ag in others
-                                       if ag in self.nws.known_people_network[ag_init]]
-            langs_with_known_agents = [lang[0] if isinstance(lang, tuple) else lang
-                                       for lang in langs_with_known_agents]
-            if langs_with_known_agents:
-                lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
-            else:
-                lang_group = lang_init
-
-            conv_params['lang_group'] = lang_group
+            conv_params['lang_group'] = compute_lang_group(default_lang=lang_init)
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
@@ -402,7 +408,6 @@ class LanguageModel(Model):
                 else:
                     lang_group, mute_type = 0, 2
                 conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
-
             else:
                 # There are agents on both lang sides unable to follow other's speech.
                 # Initiator agent will speak with whom understands him, others will listen but understand nothing
@@ -619,7 +624,7 @@ class LanguageModel(Model):
         # remove agent from all locations where it belonged to
         self.remove_from_locations(agent)
         # make id from deceased agent available
-        self.set_available_ids.add(agent.unique_id)
+        # self.set_available_ids.add(agent.unique_id)
 
     def step(self):
         self.schedule.step()

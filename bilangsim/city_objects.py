@@ -391,11 +391,8 @@ class EducationCenter:
                 course_key = self.find_course_key(student)
             # Now assign student to new educ_center and corresponding course
             # assign student if course already exists, otherwise create course
-            if type(self) == School:
-                student.set_educ_center_info(self, course_key)
-            elif type(self) == Faculty:
-                self.univ.info['students'].add(student)
-                student.set_educ_center_info(self.univ, course_key, self.info['type'])
+            student.set_educ_center_info(self, course_key)
+
             if course_key in self.grouped_studs:
                 self[course_key]['students'].add(student)
             else:
@@ -671,6 +668,11 @@ class Faculty(EducationCenter):
             # move only if current home is not in the same cluster as job
             if teacher_clust != school_clust:
                 teacher.move_to_new_home(marriage=False)
+
+    def assign_student(self, student, course_key=None, hire_t=True):
+        """ Augmented method to assign student to university as well """
+        super().assign_student(student, course_key, hire_t)
+        self.univ.info['students'].add(student)
 
     def get_free_staff_from_cluster(self, num_missing_teachers):
         """
