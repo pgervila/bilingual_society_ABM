@@ -1,8 +1,10 @@
+# Author: Paolo Gervasoni
+
+from __future__ import division
 # IMPORT RELEVANT LIBRARIES
-import os, sys
-from importlib import reload
-import random
+import os
 import bisect
+import random
 import numpy as np
 import networkx as nx
 # import matplotlib
@@ -15,40 +17,74 @@ import deepdish as dd
 # IMPORT MESA LIBRARIES ( Model, Grid, Schedule )
 from mesa import Model
 from mesa.space import MultiGrid
-import schedule
-reload(sys.modules['schedule'])
-from schedule import StagedActivationModif
+from .schedule import StagedActivationModif
 
 # IMPORT MODEL LIBRARIES
-from agent import Baby, Child, Adolescent, Young, YoungUniv, Teacher, TeacherUniv, Adult, Pensioner
-import geomapping, networks, dataprocess
-reload(sys.modules['geomapping'])
-reload(sys.modules['networks'])
-reload(sys.modules['dataprocess'])
-from geomapping import GeoMapper
-from networks import NetworkBuilder
-from dataprocess import DataProcessor, DataViz
+from .agent import Baby, Child, Adolescent, Young, YoungUniv, Teacher, TeacherUniv, Adult, Pensioner
+from .geomapping import GeoMapper
+from .networks import NetworkBuilder
+from .dataprocess import DataProcessor, DataViz
+
+# setting random seed
+rand_seed = random.randint(0, 10000)
+#rand_seed = 9675
+random.seed(rand_seed)
+# setting numpy seed
+np_seed = np.random.randint(10000)
+#np_seed = 7357
+np.random.seed(np_seed)
+
+print('rand_seed is {}'.format(rand_seed))
+print('np_seed is {}'.format(np_seed))
+print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 
 class LanguageModel(Model):
 
+    class _Decorators:
+        @classmethod
+        def conv_counter(cls, func):
+            """
+                Decorator that tracks the number of conversations
+                each agent has per step
+            """
+            def wrapper(self, ag_init, others, *args, **kwargs):
+                ags = [ag_init]
+                ags.extend(others) if (type(others) is list) else ags.append(others)
+                for ag in ags:
+                    try:
+                        ag._conv_counts_per_step += 1
+                    except AttributeError:
+                        # create attribute if it does not exist yet
+                        ag._conv_counts_per_step = 0
+                return func(self, ag_init, others, *args, **kwargs)
+            return wrapper
+
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
-    school_lang_policy = [1]
-    steps_per_year = 36
+    # TODO : lang policies should be model params, not class attrs
+    school_lang_policy = [0, 1]
+    jobs_lang_policy = None
+    media_lang_policy = None
 
-    def __init__(self, num_people, spoken_only=True, num_words_conv=(3, 25, 250),
-                 width=100, height=100,
-                 max_people_factor=5, init_lang_distrib=[0.25, 0.65, 0.1],
-                 num_clusters=10, max_run_steps=1000,
-                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True):
+    steps_per_year = 36
+    max_lifetime = 4000
+    similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
+    # avg conversation : 3 min, 20 sec
+    # 125 words per minute on average
+    # 400 words per avg conversation -> avg conv has 10 tokens if comp_ratio = 40
+    num_words_conv = {'VS': 1, 'S': 3, 'M': 10, 'L': 100}
+
+    def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
+                 init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
+                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3,
+                 check_setup=False, rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
         if spoken_only:
             self.vocab_red = 500
         else:
             self.vocab_red = 1000
-        self.num_words_conv = num_words_conv
         self.grid_width = width
         self.grid_height = height
         self.max_people_factor = max_people_factor
@@ -57,14 +93,25 @@ class LanguageModel(Model):
         self.max_run_steps = max_run_steps
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
-        self.random_seeds = np.random.randint(1, 10000, size=2)
+        self.seeds = [rand_seed, np_seed]
+
+        self.conv_length_age_factor = None
+        self.death_prob_curve = None
+
+        # define Levenshtein distances between corresponding words of two languages
+        self.edit_distances = dict()
+        self.edit_distances['original'] = np.random.binomial(10, mean_word_distance, size=self.vocab_red)
+        self.edit_distances['mixed'] = np.random.binomial(10, 0.1, size=self.vocab_red)
 
         # define container for available ids
-        self.set_available_ids = set(range(num_people, max_people_factor * num_people))
+        self.set_available_ids = set(range(0, max_people_factor * num_people))
 
         # import lang ICs and lang CDFs data as function of steps. Use directory of executed file
-        self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_spoken_ics_vs_step.h5'))
-        self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'lang_cdfs_vs_step.h5'))
+        self.lang_ICs = dd.io.load(os.path.join(os.path.dirname(__file__), 'data', 'init_conds', 'lang_spoken_ics_vs_step.h5'))
+        self.cdf_data = dd.io.load(os.path.join(os.path.dirname(__file__), 'data', 'cdfs', 'lang_cdfs_vs_step.h5'))
+
+        # set init mode while building the model
+        self.init_mode = True
 
         # define model grid and schedule
         self.grid = MultiGrid(height, width, False)
@@ -80,11 +127,87 @@ class LanguageModel(Model):
         # instantiate and setup networks
         self.nws = NetworkBuilder(self)
         self.nws.build_networks()
+
         # define datacollector and dataprocessor
         self.data_process = DataProcessor(self)
         # define dataviz
         self.data_viz = DataViz(self)
 
+        # set model curves
+        self.set_conv_length_age_factor()
+        self.set_death_prob_curve()
+
+        # switch to run mode once model initialization is completed
+        self.init_mode = False
+        # check model setup if requested
+        if check_setup:
+            self.check_model_set_up()
+
+    def check_model_set_up(self):
+        # check some key configs in model are correct
+        for ag in self.schedule.agents:
+            if ag.info['age'] > self.steps_per_year:
+                if isinstance(ag, Young):
+                    if ag.loc_info['job']:
+                        if isinstance(ag, Teacher):
+                            assert ag['clust'] == ag.loc_info['job'][0].info['clust']
+                        else:
+                            assert ag['clust'] == ag.loc_info['job'].info['clust']
+                else:
+                    if ag.loc_info['school']:
+                        assert ag['clust'] == ag.loc_info['school'][0].info['clust']
+        print('Model is correctly set')
+
+    def set_conv_length_age_factor(self, age_1=14, age_2=65, rate_1=0.0001, rate_3=0.0005,
+                                   exp_mult=400):
+        """
+            Method to compute the correction factor for conversation lengths as a function of age
+            The correction factor is a curve with three different sections, defined by the values
+            of age_1 and age_2. The middle section defines the plateau value that is equal to one.
+            The first section grows from a very small value up to one, according to an S curve whose
+            shape is defined by rate_1 and exp_mult. The third section decays from the max value
+            according to the exponential rate defined by rate_3.
+            Args:
+                * age_1: integer. Defines lower key age for slope change in num_words vs age curve
+                * age_2: integer. Defines higher key age for slope change in num_words vs age curve
+                * rate_1: float. Value to set exponential growth rate for factor in section 1
+                * rate_3: float. Value to set exponential decay rate in section 3
+                * exp_mult: integer. Value that multiplies exponential function in section 1
+            Output:
+                * Method sets the factor value as instance attribute. The factor value is a numpy array
+                    where values are a function of index (index == age)
+        """
+        age = np.arange(self.max_lifetime)
+        factor = np.zeros(self.max_lifetime)
+        # define maximum value for factor
+        f = 1.
+        # convert pivot ages into steps values
+        age_1, age_2 = [self.steps_per_year * age for age in (age_1, age_2)]
+
+        # define sector 1
+        decay = -np.log(rate_1 / 100) / age_1
+        factor[:age_1] = f + exp_mult * np.exp(- decay * age[:age_1])
+        # define sector 2
+        factor[age_1:age_2] = f
+        # define sector 3
+        factor[age_2:] = f - 1 + np.exp(rate_3 * (age[age_2:] - age_2))
+
+        # set factor value
+        self.conv_length_age_factor = 1 / factor
+
+    def set_death_prob_curve(self, a=1.23368173e-05, b=2.99120806e-03, c=3.19126705e+01):
+        """
+            Computes fitted function that provides the death likelihood for a given rounded age
+            In order to get the death-probability per step we divide by number of steps per year
+            Fitting parameters are from
+            https://www.demographic-research.org/volumes/vol27/20/27-20.pdf
+            ' Smoothing and projecting age-specific probabilities of death by TOPALS ' by Joop de Beer
+            Resulting life expectancy is 77 years and std is ~ 15 years
+
+            Args:
+                * a, b, c : float. Fitted model parameters
+        """
+        self.death_prob_curve = a * (np.exp(b * np.arange(self.max_lifetime)) + c) / self.steps_per_year
 
     @staticmethod
     def get_newborn_lang(parent1, parent2):
@@ -94,8 +217,11 @@ class LanguageModel(Model):
             Args:
                 * parent1: newborn parent agent
                 * parent2 : other newborn parent agent
+            Output:
+                * Method returns 3 integers: newborn lang_type, lang_with_father, lang_with_mother
         """
         # TODO : implement a more elaborated decision process
+        # TODO: implement consistence with siblings-parents language
         pcts = np.array(parent1.get_langs_pcts() + parent2.get_langs_pcts())
         langs_with_parents = []
         for pcs, parent in zip([pcts[:2], pcts[2:]], [parent1, parent2]):
@@ -118,44 +244,59 @@ class LanguageModel(Model):
 
         return newborn_lang, lang_with_father, lang_with_mother
 
-    def run_conversation(self, ag_init, others, bystander=None, num_days=10):
-        """ Method that models conversation between ag_init and others
-            Calls method to determine conversation parameters
-            Then makes each speaker speak and the rest listen (loop through all involved agents)
+    #@_Decorators.conv_counter
+    def run_conversation(self, ag_init, others, bystander=None,
+                         def_conv_length='M', num_days=10):
+        """
+            Method that models conversation between ag_init (initiator) and others
+            Calls 'get_conv_params' model method to determine conversation parameters
+            Then it makes each speaker speak and the rest listen (loop through all involved agents)
             Args:
                 * ag_init : agent object instance. Agent that starts conversation
                 * others : list of agent class instances. Rest of agents that take part in conversation
                     It can be a single agent object that will be automatically converted into a list
                 * bystander: extra agent that may listen to conversation words without actually being involved.
                     Agent vocabulary gets correspondingly updated if bystander agent is specified
+                * def_conv_length: string. Default conversation length. Value may be modified
+                    depending on agents linguistic knowledge. Values are from keys of 'num_words_conv'
+                    model class attribute ('VS', 'S', 'M', 'L')
                 * num_days: integer [1, 10]. Number of days in one 10day-step this kind of speech is done
+            Output:
+                * Method updates lang arrays for all active agents involved. It also updates acquaintances
         """
-        # define list of all agents involved
-        ags = [ag_init]
-        ags.extend(others) if (type(others) is list) else ags.append(others)
-        # get all parameters of conversation
-        conv_params = self.get_conv_params(ags)
+
+        # define list of all agents involved in conversation
+        ags = [ag_init, others] if (type(others) is not list) else [ag_init, *others]
+
+        # get all parameters of conversation if len(ags) >= 2, otherwise exit method
+        try:
+            conv_params = self.get_conv_params(ags, def_conv_length=def_conv_length)
+        except ZeroDivisionError:
+            return
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
             if ag.info['language'] != conv_params['mute_type']:
-                spoken_words = ag.pick_vocab(lang, long=conv_params['long'], num_days=num_days)
-                # call 'self' agent update
-                ag.update_lang_arrays(spoken_words, delta_s_factor=1)
-                # call listeners' updates ( check if there is a bystander)
+                spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
+                                             min_age_interlocs=conv_params['min_group_age'],
+                                             num_days=num_days)
+                # call listeners' lang arrays updates ( check if there is a bystander)
                 listeners = ags[:ix] + ags[ix + 1:] + [bystander] if bystander else ags[:ix] + ags[ix + 1:]
                 for listener in listeners:
-                    listener.update_lang_arrays(spoken_words, speak=False, delta_s_factor=0.75)
+                    listener.update_lang_arrays(spoken_words, mode_type='listen', delta_s_factor=0.1)
+            else:
+                # update exclusion counter for excluded agent
+                ag.update_lang_exclusion()
         # update acquaintances
         if isinstance(others, list):
             for ix, ag in enumerate(others):
                 if ag.info['language'] != conv_params['mute_type']:
                     ag_init.update_acquaintances(ag, conv_params['lang_group'][0])
-                    ag.update_acquaintances(ag_init, conv_params['lang_group'][ix])
+                    ag.update_acquaintances(ag_init, conv_params['lang_group'][ix + 1])
         else:
             if others.info['language'] != conv_params['mute_type']:
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])
                 others.update_acquaintances(ag_init, conv_params['lang_group'][1])
 
-    def get_conv_params(self, ags):
+    def get_conv_params(self, ags, def_conv_length='M'): # TODO: add higher thresholds for job conversation
         """
         Method to find out parameters of conversation between 2 or more agents:
             conversation lang or lang spoken by each involved speaker,
@@ -165,13 +306,18 @@ class LanguageModel(Model):
         It implements MAXIMIN language rule from Van Parijs
         Args:
             * ags : list of all agent class instances that take part in conversation
+            * def_conv_length: string. Default conversation length. Value may be modified
+                depending on agents linguistic knowledge. Values are from keys of 'num_words_conv'
+                model class attribute ('VS', 'S', 'M', 'L')
         Returns:
-            * conv_params dict with following keys and values:
-                * lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1] if multilang conversation
-                * mute_type: integer. Agent lang type that is unable to speak in conversation
-                * multilingual: boolean. True if conv is held in more than one language
-                * long: boolean. True if conv is long
-                * fav_langs: list of integers in [0, 1].
+            * 'conv_params' dict with following keys and values:
+                - lang_group: integer in [0, 1] if unique lang conv or list of integers in [0, 1]
+                    if multilingual conversation
+                - mute_type: integer. Agent lang type that is unable to speak in conversation
+                - multilingual: boolean. True if conv is held in more than one language
+                - conv_length: string. Values are from keys of 'num_words_conv'
+                    model class attribute ('VS', 'S', 'M', 'L')
+                - fav_langs: list of integers in [0, 1].
         """
 
         # redefine separate agents for readability
@@ -179,41 +325,45 @@ class LanguageModel(Model):
         others = ags[1:]
 
         # set output default parameters
-        conv_params = dict(multilingual=False, mute_type=None, long=True)
+        conv_params = dict(multilingual=False, mute_type=None, conv_length=def_conv_length)
 
-        # get lists of favorite language per agent and set of language types involved
-
+        # get set of language types involved
         ags_lang_types = set([ag.info['language'] for ag in ags])
-
-        # define lists with agent competences and preferences in each language
+        # get lists of favorite language per agent
         fav_langs_and_pcts = [ag.get_dominant_lang(ret_pcts=True) for ag in ags]
+        # define lists with agent competences and preferences in each language
         fav_lang_per_agent, l_pcts = list(zip(*fav_langs_and_pcts))
         l1_pcts, l2_pcts = list(zip(*l_pcts))
+
+        known_others = [ag for ag in others
+                        if ag in self.nws.known_people_network[ag_init]]
+        unknown_others = [ag for ag in others
+                          if ag not in self.nws.known_people_network[ag_init]]
+
+        def compute_lang_group(default_lang):
+            if unknown_others:
+                lang_group = default_lang
+            else:
+                langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
+                                           for ag in known_others]
+                langs_with_known_agents = [lang[0] if isinstance(lang, tuple) else lang
+                                           for lang in langs_with_known_agents]
+                lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
+            return lang_group
+
         # define current case
         # TODO: need to save info of how init wanted to talk-> Feedback for AI learning
         if ags_lang_types in [{0}, {0, 1}]:
-            lang_group = 0
-            conv_params['lang_group'] = lang_group
+            conv_params['lang_group'] = compute_lang_group(default_lang=0)
         elif ags_lang_types in [{1, 2}, {2}]:
-            lang_group = 1
-            conv_params['lang_group'] = lang_group
+            conv_params['lang_group'] = compute_lang_group(default_lang=1)
         elif ags_lang_types == {1}:
             # simplified PRELIMINARY NEUTRAL assumption: ag_init will start speaking the language they speak best
             # ( TODO : at this stage no modeling of place bias !!!!)
+            # ( TODO: best language has to be compatible with constraints !!!!)
             # who starts conversation matters, but also average lang spoken with already known agents
             lang_init = fav_lang_per_agent[0]
-            # TODO : why known agents only checked for this option ??????????????
-            langs_with_known_agents = [self.nws.known_people_network[ag_init][ag]['lang']
-                                       for ag in others
-                                       if ag in self.nws.known_people_network[ag_init]]
-            langs_with_known_agents = [lang[0] if isinstance(lang, tuple) else lang
-                                       for lang in langs_with_known_agents]
-            if langs_with_known_agents:
-                lang_group = round(sum(langs_with_known_agents) / len(langs_with_known_agents))
-            else:
-                lang_group = lang_init
-
-            conv_params['lang_group'] = lang_group
+            conv_params['lang_group'] = compute_lang_group(default_lang=lang_init)
         else:
             # monolinguals on both linguistic sides => VERY SHORT CONVERSATION
             # get agents on both lang sides unable to speak in other lang
@@ -233,31 +383,31 @@ class LanguageModel(Model):
                                     else fav_lang_per_agent[ix]
                                     for ix, ag in enumerate(ags)])
                 conv_params.update({'lang_group': lang_group,
-                                    'multilingual': True, 'long': False})
+                                    'multilingual': True, 'conv_length': 'S'})
             elif idxs_real_monolings_l1 and not idxs_real_monolings_l2:
                 # There are real L1 monolinguals in the group
                 # Everybody partially understands L1, but some agents don't understand L2 at all
                 # Some agents only understand and speak L1, while others partially understand but can't speak L1
-                # slight bias towards l1 => conversation in l1 but some speakers will stay mute = > short conversation
+                # slight bias towards L1 => conversation in L1 (if initiator belongs to this group)
+                # but some speakers will stay mute = > short conversation
                 mute_type = 2
                 if ag_init.info['language'] != mute_type:
                     lang_group = 0
                 else:
                     lang_group, mute_type = 1, 0
-                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
 
             elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
                 # There are real L2 monolinguals in the group
                 # Everybody partially understands L2, but some agents don't understand L1 at all
-                # Some agents only understand and speak l2, while others partially understand but can't speak l2
+                # Some agents only understand and speak l2, while others partially understand but can't speak L2
                 # slight bias towards l2 => conversation in L2 but some speakers will stay mute = > short conversation
                 mute_type = 0
                 if ag_init.info['language'] != mute_type:
                     lang_group = 1
                 else:
                     lang_group, mute_type = 0, 2
-                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
-
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
             else:
                 # There are agents on both lang sides unable to follow other's speech.
                 # Initiator agent will speak with whom understands him, others will listen but understand nothing
@@ -278,7 +428,7 @@ class LanguageModel(Model):
                     # init agent is monolang
                     lang_group = fav_lang_per_agent[0]
                     mute_type = 2 if lang_group == 0 else 0
-                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'long': False})
+                conv_params.update({'lang_group': lang_group, 'mute_type': mute_type, 'conv_length': 'VS'})
 
         if not conv_params['multilingual']:
             conv_params['lang_group'] = (conv_params['lang_group'],) * len(ags)
@@ -337,21 +487,19 @@ class LanguageModel(Model):
                     member.set_lang_ics()
 
     def get_lang_fam_members(self, family):
-        """ Find out lang of interaction btw family members in a 4-members family
+        """
+            Method to find out lang of interaction btw family members in a 4-members family
             Args:
                 * family: list of family agents
             Output:
-                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: list of integers
+                * lang_consorts, lang_with_father, lang_with_mother, lang_siblings: tuple of integers
         """
         # language between consorts
-
         consorts_lang_params = self.get_conv_params([family[0], family[1]])
         lang_consorts = consorts_lang_params['lang_group'][0]
-
         # language of children with parents
         lang_with_father = consorts_lang_params['fav_langs'][0]
         lang_with_mother = consorts_lang_params['fav_langs'][1]
-
         # language between siblings
         avg_lang = (lang_with_father + lang_with_mother) / 2
         if avg_lang == 0:
@@ -364,19 +512,44 @@ class LanguageModel(Model):
 
         return lang_consorts, lang_with_father, lang_with_mother, lang_siblings
 
+    def add_new_agent_to_model(self, agent):
+        """
+            Method to add a given agent instance to all relevant model entities,
+            i.e. grid, schedule, network and clusters info
+            Args:
+                * agent: agent class instance
+            Output:
+                * Method adds specified agent to grid, schedule, networks and clusters info
+        """
+
+        # Add agent to grid, schedule, network and clusters info
+        self.geo.add_agents_to_grid_and_schedule(agent)
+        self.nws.add_ags_to_networks(agent)
+        self.geo.clusters_info[agent['clust']]['agents'].append(agent)
+
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """
-            Method to remove agent instance from locations in agent loc_info dict attribute
+            Method to remove agent instance from locations in agent 'loc_info' dict attribute
             Replacement by grown_agent will depend on self type
+            Args:
+                * agent: agent instance to be removed
+                * replace: boolean. True if agent has to be replaced. Default False
+                * grown_agent: agent instance. It must be specified in case 'replace'
+                    is set to True
+                * upd_course: boolean. True if removal action is because of periodic updating
+                every academic year. Only applies to removal from school or university. Default False.
+            Output:
+                * agent removed from all instances it belonged to. If replace is set to True,
+                    agent is replaced in all locations by specified 'grown_agent'
         """
         # TODO : should it be a geomapping method ?
 
         # remove old instance from cluster (and replace with new one if requested)
         if replace:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust,
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].info['clust'],
                                              update_type='replace', grown_agent=grown_agent)
         else:
-            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].clust)
+            self.geo.update_agent_clust_info(agent, agent.loc_info['home'].info['clust'])
 
         # remove agent from all locations where it belongs to
         for key in agent.loc_info:
@@ -410,14 +583,15 @@ class LanguageModel(Model):
                         if isinstance(grown_agent, Pensioner):
                             school.remove_employee(agent)
                         else:
-                            school.remove_employee(agent, replace=replace,
-                                                   new_teacher=grown_agent)
+                            school.remove_employee(agent, replace=replace, new_teacher=grown_agent)
                     except TypeError:
                         pass
                 elif isinstance(agent, Adult):
+                    # if Adult, remove from job without replacement
                     job = agent.loc_info['job']
                     if job: job.remove_employee(agent)
                 elif isinstance(agent, Young):
+                    # if Young, remove from job with replacement
                     job = agent.loc_info['job']
                     if job: job.remove_employee(agent, replace=replace, new_agent=grown_agent)
             elif key == 'university':
@@ -444,37 +618,72 @@ class LanguageModel(Model):
                 network.remove_node(agent)
             except nx.NetworkXError:
                 continue
-        # remove agent from all locations where it belonged to
-        self.remove_from_locations(agent)
         # remove agent from grid and schedule
         self.grid._remove_agent(agent.pos, agent)
         self.schedule.remove(agent)
+        # remove agent from all locations where it belonged to
+        self.remove_from_locations(agent)
         # make id from deceased agent available
-        self.set_available_ids.add(agent.unique_id)
+        # self.set_available_ids.add(agent.unique_id)
 
     def step(self):
-        self.data_process.collect()
         self.schedule.step()
+        self.data_process.collect()
+        #print('Completed step number {}'.format(self.schedule.steps))
 
-    def run_model(self, steps, recording_steps_period=None, save_dir=''):
+    def update_centers(self):
+        """ Method to update students, teachers and courses
+            at the end of each year, as well as jobs' language policy
+        """
+        for clust_idx, clust_info in self.geo.clusters_info.items():
+            if 'university' in clust_info:
+                for fac in clust_info['university'].faculties.values():
+                    if fac.info['students']:
+                        fac.update_courses_phase_1()
+            for school in clust_info['schools']:
+                school.update_courses_phase_1()
+            # set lang policy in job centers
+            for job in clust_info['jobs']:
+                job.set_lang_policy()
+        for clust_idx, clust_info in self.geo.clusters_info.items():
+            if 'university' in clust_info:
+                for fac in clust_info['university'].faculties.values():
+                    if fac.info['students']:
+                        fac.update_courses_phase_2()
+            for school in clust_info['schools']:
+                school.update_courses_phase_2()
+                # every 4 years only, make teachers swap
+                if not self.schedule.steps % (4 * self.steps_per_year):
+                    school.swap_teachers_courses()
+                # TODO: check if courses have more than 25 students enrolled => Create new school
+
+    def run_model(self, steps, save_data_freq=50, pickle_model_freq=5000,
+                  viz_steps_period=None, save_dir=''):
         """ Run model and save frames if required
             Args
                 * steps: integer. Total steps to run
-                * recording_steps_period : integer. Save frames every specified number of steps
+                * save_data_freq: int. Frequency of model data saving as measured in steps
+                * pickle_model_freq: int. Frequency of model pickling as measured in steps
+                * viz_steps_period : integer. Save frames every specified number of steps
                 * save_dir : string. It specifies directory where frames will be saved
         """
         pbar = pyprind.ProgBar(steps)
         self.save_dir = save_dir
-        if recording_steps_period:
+        if viz_steps_period:
             script_dir = os.path.dirname(__file__)
             results_dir = os.path.join(script_dir, save_dir)
             if not os.path.isdir(results_dir):
                 os.makedirs(results_dir)
         for _ in range(steps):
             self.step()
-            if recording_steps_period:
-                if not self.schedule.steps % recording_steps_period:
-                    self.data_viz.show_results(step=self.schedule.steps, plot_results=False, save_fig=True)
+            if not self.schedule.steps % save_data_freq:
+                self.data_process.save_model_data(save_data_freq)
+            if not self.schedule.steps % pickle_model_freq:
+                self.data_process.pickle_model()
+            if viz_steps_period:
+                if not self.schedule.steps % viz_steps_period:
+                    self.data_viz.show_results(step=self.schedule.steps,
+                                               plot_results=False, save_fig=True)
             pbar.update()
 
     def run_and_animate(self, steps, plot_type='imshow'):
@@ -560,4 +769,7 @@ class LanguageModel(Model):
                                       frames=steps, interval=100, blit=True, repeat=False)
         #plt.tight_layout()
         plt.show()
+
+
+
 

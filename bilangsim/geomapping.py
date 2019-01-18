@@ -4,14 +4,14 @@ import numpy as np
 import random
 from scipy.spatial.distance import pdist
 from itertools import product
-from collections import defaultdict
+from collections import defaultdict, Counter
 from math import ceil
 
 # IMPORT AGENTS AND  ENTITIES
-import city_objects
-reload(sys.modules['city_objects'])
-from agent import Child, Adult
-from city_objects import Job, School, University, Home
+# import city_objects
+# reload(sys.modules['city_objects'])
+from .agent import Child, Adolescent, Young, Adult
+from .city_objects import Job, School, University, Home
 
 
 class GeoMapper:
@@ -23,21 +23,36 @@ class GeoMapper:
         self.compute_cluster_centers()
         self.compute_cluster_sizes()
         self.set_clusters_info()
+        # generate lang distribution for each cluster
+        self.generate_langs_per_clust()
+
+    def import_geo(self):
+        """ Idea: import coordinates and assign them to model current object definition """
+        # import clusters' centers and sizes
+        # import jobs, schools, univs locations
+        # import agents
+        pass
+
+    def import_model_ics(self):
+        """ Import data from save model computation and map it to current model """
 
     def map_model_objects(self):
-        """ Instantiate and position all model objects on 2-D grid """
+        """ Instantiate and locate all model objects on 2-D grid """
         self.map_jobs()
         self.map_schools()
         self.map_universities()
         self.map_homes()
         self.map_lang_agents()
 
-    def compute_cluster_centers(self, min_dist=0.20, min_grid_pct_val=0.1, max_grid_pct_val=0.9):
+    def compute_cluster_centers(self, min_dist=0.10, min_grid_pct_val=0.1, max_grid_pct_val=0.9):
 
-        """ Generate 2D coordinates for all cluster (towns/villages) centers
+        """
+            Generate 2D coordinates for all cluster (towns/villages) centers
             Args:
                 * min_dist: float. Minimum distance between cluster centers
                             expressed as percentage of square grid AVAILABLE side dimension
+                * min_grid_pct_val: float
+                * max_grid_pct_val: float
 
             Returns:
                 * A numpy array with 2D coordinates of cluster centers
@@ -119,8 +134,20 @@ class GeoMapper:
             self.clusters_info[idx]['homes'] = []
             self.clusters_info[idx]['agents'] = []
 
+    def generate_dim_coord(self, dim, pct_grid, clust_size=None):
+        """ Generate coordinate along a given dimension for a given cluster
+            Args:
+                * dim: integer. Total length of chosen dimension
+                * pct_grid: float (positive, <1). Coordinate of cluster center
+                * clust_size: integer. Number of requested coordinates
+        """
+        coord = np.random.binomial(dim, pct_grid, size=clust_size)
+        # limit coordinate value to grid boundaries
+        return np.clip(coord, 1, dim - 1)
+
     def generate_points_coords(self, pcts_grid, clust_size, clust_idx):
-        """ Using binomial distribution, this method generates initial coordinates
+        """
+            Using binomial distribution, this method generates initial coordinates
             for a given cluster, defined via its center and its size.
             Cluster size as well as cluster center coords (in grid percentage) must be provided
         Arguments:
@@ -131,13 +158,19 @@ class GeoMapper:
             * cluster_coordinates: two numpy arrays with x and y coordinates
             respectively
         """
-        x_coords = np.random.binomial(self.model.grid.width, pcts_grid[0], size=clust_size)
-        # limit coords values to grid boundaries
-        x_coords = np.clip(x_coords, 1, self.model.grid.width - 1)
+        # x_coords = np.random.binomial(self.model.grid.width, pcts_grid[0], size=clust_size)
+        # # limit coords values to grid boundaries
+        # x_coords = np.clip(x_coords, 1, self.model.grid.width - 1)
+        #
+        # y_coords = np.random.binomial(self.model.grid.height, pcts_grid[1], size=clust_size)
+        # # limit coords values to grid boundaries
+        # y_coords = np.clip(y_coords, 1, self.model.grid.height - 1)
 
-        y_coords = np.random.binomial(self.model.grid.height, pcts_grid[1], size=clust_size)
-        # limit coords values to grid boundaries
-        y_coords = np.clip(y_coords, 1, self.model.grid.height - 1)
+
+        x_coords = self.generate_dim_coord(self.model.grid.width, pcts_grid[0],
+                                           clust_size=clust_size)
+        y_coords = self.generate_dim_coord(self.model.grid.height, pcts_grid[1],
+                                           clust_size=clust_size)
 
         if (not self.model.lang_ags_sorted_by_dist) and self.model.lang_ags_sorted_in_clust:
             x_coords, y_coords = self.sort_coords_in_clust(x_coords, y_coords, clust_idx)
@@ -164,11 +197,12 @@ class GeoMapper:
         return x_coords, y_coords
 
     def map_jobs(self, min_places=2, max_places=200):
-        """ Generates job centers coordinates and num places per center
+        """
+            Generates job centers coordinates and num places per center
             Instantiates job objects
-        Args:
-            * min_places: integer. Minimum number of places for each job center
-            * max_places: integer. Maximum number of places for each job center
+            Args:
+                * min_places: integer. Minimum number of places for each job center
+                * max_places: integer. Maximum number of places for each job center
         """
         # iterate to generate job center coordinates
 
@@ -176,21 +210,28 @@ class GeoMapper:
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
+            # adults account for approximately half of the cluster size
+            clust_size = int(clust_size / 2)
             x_j, y_j = self.generate_points_coords(clust_c_coords,
                                                    ceil(clust_size * num_job_cs_per_agent),
                                                    clust_idx)
             # compute percentage number places per each job center in cluster using lognormal distrib
+            # many small companies and a few of very large ones
             p = np.random.lognormal(1, 1, size=int(clust_size * num_job_cs_per_agent))
             pcts = p / p.sum()
             # compute num of places out of percentages
             num_places_job_c = np.random.multinomial(int(clust_size * self.model.max_people_factor), pcts)
+            # adapt array to minimum and maximum number of places
             num_places_job_c = np.clip(num_places_job_c, min_places, max_places)
 
             for x, y, num_places in zip(x_j, y_j, num_places_job_c):
-                self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y),
-                                                                 num_places, lang_policy=[0, 1, 2]))
+                if self.model.jobs_lang_policy:
+                    self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places,
+                                                                     lang_policy=self.model.jobs_lang_policy))
+                else:
+                    self.clusters_info[clust_idx]['jobs'].append(Job(self.model, clust_idx, (x, y), num_places))
 
-    def map_schools(self, max_school_size=100, min_school_size=40, buffer_factor=1.2):
+    def map_schools(self, max_school_size=400, min_school_size=40, buffer_factor=1.2):
         """ Generate coordinates for school centers and instantiate school objects
             Args:
                 * max_school_size: integer. Maximum size of all schools generated
@@ -225,7 +266,7 @@ class GeoMapper:
             self.clusters_info[clust_idx]['university'] = univ
 
     def map_homes(self, num_people_per_home=4):
-        """ Generate coordinates for agent homes and instantiate Home objects"""
+        """ Generate coordinates for agent's homes and instantiate Home objects"""
 
         num_homes_per_agent = self.model.max_people_factor / num_people_per_home
 
@@ -237,10 +278,37 @@ class GeoMapper:
             for x, y in zip(x_h, y_h):
                 self.clusters_info[clust_idx]['homes'].append(Home(clust_idx, (x, y)))
 
-    def generate_lang_distrib(self):
-        """ Method that generates a list of lists of lang labels in the requested order
-            Returns:
-                * A list of lists where each list contains lang labels per cluster
+    def add_new_home(self, clust_id):
+        """ Method to add a random new home to a given cluster
+            Args:
+                * clust_id: integer. Cluster index
+        """
+        x_c, y_c = self.model.geo.clust_centers[clust_id]
+        x_nh = self.model.geo.generate_dim_coord(self.model.grid.width, x_c)
+        y_nh = self.model.geo.generate_dim_coord(self.model.grid.height, y_c)
+        new_home = Home(clust_id, (x_nh, y_nh))
+        self.model.geo.clusters_info[clust_id]['homes'].append(new_home)
+        return new_home
+
+    def add_new_school(self, clust_id):
+        """ Method to add a new school to a given cluster
+            Args:
+                * clust_id: integer. Cluster index
+        """
+        x_c, y_c = self.model.geo.clust_centers[clust_id]
+        x_nsc = self.model.geo.generate_dim_coord(self.model.grid.width, x_c)
+        y_nsc = self.model.geo.generate_dim_coord(self.model.grid.height, y_c)
+        new_school = School(self.model, (x_nsc, y_nsc), clust_id, num_places=400,
+                            lang_policy=self.model.school_lang_policy)
+        self.clusters_info[clust_id]['schools'].append(new_school)
+        return new_school
+
+    def generate_langs_per_clust(self):
+        """ Method that generates a list of lists of lang labels.
+            Each sublist represents a cluster
+            Output:
+                * Sets value of attribute 'langs_per_clust'.
+                    A list of lists where each list contains lang labels per cluster
         """
         # generate random array with lang labels ( no sorting at all )
         langs_per_ag_array = np.random.choice([0, 1, 2],
@@ -276,52 +344,76 @@ class GeoMapper:
                     clust_subsorted_by_fam = [val for group in clust_subsorted_by_fam
                                               for val in group]
                     clust[:len(clust_subsorted_by_fam)] = clust_subsorted_by_fam
-        return langs_per_clust
 
-    def map_lang_agents(self, parents_age_range=(32, 42), children_age_range=(2, 11)):
-        """ Method to instantiate all agents according to requested linguistic order """
-        # get lang distribution for each cluster
-        langs_per_clust = self.generate_lang_distrib()
-        # set agents ids
-        lang_ags_ids = set(range(self.model.num_people))
+        self.langs_per_clust = langs_per_clust
+
+    def map_lang_agents(self, parents_age_range=(25, 50), children_age_range=(2, 17),
+                        max_age_diff=35):
+        """
+            Method to instantiate all agents grouped by families of 4 members and
+            according to requested linguistic order.
+            It also assigns a home and an occupation to each agent
+            Args:
+                * parents_age_range: tuple. Minimum and maximum parent's age
+                * children_age_range: tuple. Minimum and maximum children's age
+                * max_age_diff: integer. Maximum allowed age difference between parent and child
+            Output:
+                * Assigns home and job/school to all agents grouped by families of four members.
+                    Assigns home and job to lonely agents
+        """
+
+        # set available agents' ids
+        av_ags_ids = self.model.set_available_ids
         for clust_idx, clust_info in self.clusters_info.items():
-            for idx, family_langs in enumerate(zip(*[iter(langs_per_clust[clust_idx])] * self.model.family_size)):
+            for idx, family_langs in enumerate(zip(*[iter(self.langs_per_clust[clust_idx])] * self.model.family_size)):
                 # family sexes
                 family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
+                # get parents ages
+                age1 = np.random.randint(*parents_age_range)
+                age2 = max(parents_age_range[0],
+                           min(parents_age_range[1], age1 + np.random.randint(-5, 5)))
                 # instantiate 2 adults with neither job nor home assigned
-                # lang ics will be set later on
-                ag1 = Adult(self.model, lang_ags_ids.pop(), family_langs[0], family_sexes[0],
-                            married=True, num_children=2)
-                ag2 = Adult(self.model, lang_ags_ids.pop(), family_langs[1], family_sexes[1],
-                            married=True, num_children=2)
+                # lang ics will be set later on when defining family network
+                ag_type = Adult if age1 >= 30 else Young
+                ag1 = ag_type(self.model, av_ags_ids.pop(), family_langs[0], family_sexes[0],
+                              age=self.model.steps_per_year * age1, married=True, num_children=2)
+                ag_type = Adult if age2 >= 30 else Young
+                ag2 = ag_type(self.model, av_ags_ids.pop(), family_langs[1], family_sexes[1],
+                              age=self.model.steps_per_year * age2, married=True, num_children=2)
+
                 # instantiate 2 children with neither school nor home assigned
-                # lang ics will be set later on
-                ag3 = Child(self.model, lang_ags_ids.pop(), family_langs[2], family_sexes[2])
-                ag4 = Child(self.model, lang_ags_ids.pop(), family_langs[3], family_sexes[3])
-                # set ages of family members
-                (ag1.info['age'],
-                 ag2.info['age']) = self.model.steps_per_year * np.random.randint(parents_age_range[0],
-                                                                                  parents_age_range[1],
-                                                                                  2)
-                (ag3.info['age'],
-                 ag4.info['age']) = self.model.steps_per_year * np.random.randint(children_age_range[0],
-                                                                                  children_age_range[1],
-                                                                                  2)
-                # assign same home to all family members to locate them at step=0
+                # lang ics will be set later on when defining family network
+                # get children ages
+                age3, age4 = np.random.randint(max(2, age2 - max_age_diff),
+                                               min(children_age_range[1],
+                                                   age2 - parents_age_range[0] + children_age_range[0] + 1),
+                                               size=2)
+                if age3 == age4:
+                    if age4 + 2 <= children_age_range[1]:
+                        age4 += 2
+                    elif age4 - 2 >= children_age_range[0]:
+                        age4 -= 2
+
+                ag_type = Adolescent if age3 >= 12 else Child
+                ag3 = ag_type(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2],
+                              age=self.model.steps_per_year * age3)
+                ag_type = Adolescent if age4 >= 12 else Child
+                ag4 = ag_type(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3],
+                              age=self.model.steps_per_year * age4)
+
+                # assign same home to all family members to locate them at step = 0
                 family_agents = [ag1, ag2, ag3, ag4]
                 home = clust_info['homes'][idx]
                 home.assign_to_agent(family_agents)
-                # add agents to clust_info, schedule and grid
+                # add agents to clust_info, schedule and grid, but not yet to networks
                 clust_info['agents'].extend(family_agents)
                 self.add_agents_to_grid_and_schedule(family_agents)
-                # assign job to parents
+
+                # assign job in current cluster to parents, without moving to a new home
                 for parent in family_agents[:2]:
-                    while True:
-                        job = np.random.choice(clust_info['jobs'])
-                        if job.num_places:
-                            job.hire_employee(parent, move_home=False)
-                            break
-                # assign school to children
+                    parent.get_job(keep_cluster=True, move_home=False)
+
+                # assign school to children ( but not yet course !!!!)
                 # find closest school to home
                 # TODO : introduce also University for age > 18
                 home = clust_info['homes'][idx]
@@ -336,9 +428,9 @@ class GeoMapper:
             len_clust = clust_info['num_agents']
             num_left_agents = len_clust % self.model.family_size
             if num_left_agents:
-                for idx2, lang in enumerate(langs_per_clust[clust_idx][-num_left_agents:]):
+                for idx2, lang in enumerate(self.langs_per_clust[clust_idx][-num_left_agents:]):
                     sex = 'M' if random.random() < 0.5 else 'F'
-                    ag = Adult(self.model, lang_ags_ids.pop(), lang, sex)
+                    ag = Adult(self.model, av_ags_ids.pop(), lang, sex)
                     ag.info['age'] = self.model.steps_per_year * np.random.randint(parents_age_range[0],
                                                                                    parents_age_range[1])
                     clust_info['agents'].append(ag)
@@ -347,18 +439,33 @@ class GeoMapper:
                     home = clust_info['homes'][idx + idx2 + 1]
                     home.assign_to_agent(ag)
                     # assign job
-                    while True:
-                        job = np.random.choice(clust_info['jobs'])
-                        if job.num_places:
-                            job.hire_employee(ag, move_home=False)
-                            break
+                    ag.get_job(keep_cluster=True, move_home=False)
 
     def assign_school_jobs(self):
-        # assign school jobs
-        # Loop over schools to assign teachers
+        """
+            Method to set up all courses in all schools at initialization.
+            It calls 'set_up_courses' school method for each school,
+            that hires teachers for all courses after grouping students
+            by age
+        """
+        # Loop over all model schools to assign teachers
         for clust_idx, clust_info in self.clusters_info.items():
             for school in clust_info['schools']:
                 school.set_up_courses()
+
+        # check for model inconsistencies in school assignment
+        # check if there is a teacher for each created course
+        error_message = ("""MODELING ERROR: not all school courses have a
+                            teacher assigned. The specified school lang policy
+                            cannot be met by current population language knowledge.""")
+        try:
+            teachers_per_course = [course['teacher'] if 'teacher' in course else False
+                                   for cl in range(self.num_clusters)
+                                   for sch in self.clusters_info[cl]['schools']
+                                   for ck, course in sch.grouped_studs.items()]
+            assert all(teachers_per_course)
+        except AssertionError:
+            raise Exception(error_message)
 
     def add_agents_to_grid_and_schedule(self, ags):
         """ Method to add a number of agents to grid, schedule and system networks
@@ -393,10 +500,63 @@ class GeoMapper:
                 raise Exception('new cluster must be specified for switch option')
 
     def get_clusters_with_univ(self):
+        """ Convenience method to get ids of clusters with university """
         sorted_clusts = np.argsort(self.cluster_sizes)[::-1]
         for ix, clust in enumerate(sorted_clusts):
             if 'university' not in self.clusters_info[clust]:
                 ix_max_univ = ix
                 break
         return sorted_clusts[:ix_max_univ]
+
+    def get_current_clust_size(self, clust_ix):
+        if self.clusters_info[clust_ix]['agents']:
+            curr_clust_size = len(self.clusters_info[clust_ix]['agents'])
+        else:
+            curr_clust_size = self.cluster_sizes[clust_ix]
+        return curr_clust_size
+
+    def get_lang_distrib_per_clust(self, clust_ix):
+        """ Method to find language percentages for each language cathegory
+            in a given cluster 0-> mono L1, 1-> biling, 2-> mono L2
+            Args:
+                * clust_ix: integer. Identifies cluster by its index in model
+            Output:
+                * numpy array where indices are lang cathegories and values are percentages
+        """
+        if self.clusters_info[clust_ix]['agents']:
+            clust_lang_cts = Counter([ag.info['language'] for ag
+                                      in self.clusters_info[clust_ix]['agents']])
+        else:
+            clust_lang_cts = Counter(self.langs_per_clust[clust_ix])
+        clust_size = self.get_current_clust_size(clust_ix)
+        return np.array([clust_lang_cts[lang] / clust_size for lang in range(3)])
+
+    def get_dominant_lang_per_clust(self, clust_ix):
+        """
+            Method to compute the dominant language per cluster
+            as measured by the average percentage knowledge of
+            cluster inhabitants.
+            Args:
+                * clust_ix: integer. Identifies cluster by its index in model
+            Output:
+                * integer that identifies dominant language or None if no language is dominant
+        """
+
+        L1_pcts, L2_pcts = list(zip(*[[ag.lang_stats['L1']['pct'][ag.info['age']],
+                                        ag.lang_stats['L2']['pct'][ag.info['age']]]
+                                        for ag in self.clusters_info[clust_ix]['agents']
+                                     ]))
+        L1_pct, L2_pct = np.array(L1_pcts).mean(), np.array(L2_pcts).mean()
+
+        # For a lang to be dominant, its quality must be on average 10% higher than the other's
+
+        if L1_pct >= L2_pct + 0.1:
+            return 0
+        elif L2_pct >= L1_pct + 0.1:
+            return 1
+        else:
+            return None
+
+
+
 
