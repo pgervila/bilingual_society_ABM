@@ -1,11 +1,11 @@
 import pytest
-from bilangsim.model import LanguageModel
+from bilangsim.model import BiLangModel
 from bilangsim.agent import Child, Adolescent, Young, Pensioner
 
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(100, num_clusters=1, init_lang_distrib=[0.5, 0.5, 0.])
+    return BiLangModel(100, num_clusters=1, init_lang_distrib=[0.5, 0.5, 0.])
 
 
 def test_networks_consistency(model):

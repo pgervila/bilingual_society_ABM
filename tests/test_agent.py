@@ -9,7 +9,7 @@ from scipy.spatial.distance import pdist
 
 from bilangsim.agent import Baby, Child, Adolescent, Young, YoungUniv
 from bilangsim.agent import Adult, Teacher, TeacherUniv, Pensioner
-from bilangsim import LanguageModel
+from bilangsim import BiLangModel
 
 
 np_seed = np.random.randint(10000)
@@ -20,7 +20,7 @@ print('test seed is {}'.format(np_seed))
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(251, num_clusters=2)
+    return BiLangModel(251, num_clusters=2)
 
 
 @pytest.fixture(scope='module')

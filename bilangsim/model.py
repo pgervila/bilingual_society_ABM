@@ -39,7 +39,7 @@ print('np_seed is {}'.format(np_seed))
 print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 
-class LanguageModel(Model):
+class BiLangModel(Model):
 
     class _Decorators:
         @classmethod

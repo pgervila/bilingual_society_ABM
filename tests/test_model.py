@@ -3,12 +3,12 @@ import gc
 import numpy as np
 import pytest
 from bilangsim.agent import Adolescent, Young, Adult, Teacher
-from bilangsim import LanguageModel
+from bilangsim import BiLangModel
 
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(300, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25])
+    return BiLangModel(300, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25])
 
 
 @pytest.fixture(scope="function")
@@ -70,8 +70,8 @@ def family_and_stranger_ags(model):
 
 @pytest.fixture(scope="module", params=[(457, 3), (521, 2), (897, 5), (1501, 6)])
 def model_param(request):
-    return LanguageModel(request.param[0], num_clusters=request.param[1],
-                         init_lang_distrib=[0.25, 0.5, 0.25])
+    return BiLangModel(request.param[0], num_clusters=request.param[1],
+                       init_lang_distrib=[0.25, 0.5, 0.25])
 
 # define cases to test => Inputs and optionally expected results
 

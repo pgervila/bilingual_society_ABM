@@ -393,8 +393,8 @@ class PostProcessor:
         return aggregated_data.unstack()
 
     def group_by_step_and_language_type(self, *cols, method='mean'):
-        grouped_data = self.agent_data.agent_data[[*cols,
-                                                   'language']].groupby(['Step', 'language'])
+        grouped_data = self.agent_data[[*cols,
+                                        'language']].groupby(['Step', 'language'])
         aggregated_data = getattr(grouped_data, method)()
         return aggregated_data.unstack()
 

@@ -1,12 +1,12 @@
 import random
 import pytest
 from bilangsim.agent import Adult
-from bilangsim.model import LanguageModel
+from bilangsim.model import BiLangModel
 
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(400, num_clusters=3) 
+    return BiLangModel(400, num_clusters=3)
 
 
 def test_home_assign_to_agent(model):

@@ -1,11 +1,11 @@
 import pytest
-from bilangsim import LanguageModel
+from bilangsim import BiLangModel
 from bilangsim.agent import Child, Adolescent
 
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(400, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25])
+    return BiLangModel(400, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25])
 
 
 def test_add_new_school(model):

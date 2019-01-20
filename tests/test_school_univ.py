@@ -3,7 +3,7 @@ import numpy as np
 import os
 import sys
 from bilangsim.agent import Child, Adolescent, YoungUniv, Young, Teacher
-from bilangsim.model import LanguageModel
+from bilangsim.model import BiLangModel
 
 print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
@@ -16,7 +16,7 @@ print('test seed is {}'.format(np_seed))
 
 @pytest.fixture(scope="module")
 def model():
-    return LanguageModel(903, num_clusters=4)
+    return BiLangModel(903, num_clusters=4)
 
 
 @pytest.fixture(scope="module")
