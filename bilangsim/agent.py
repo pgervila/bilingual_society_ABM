@@ -13,22 +13,22 @@ from .zipf_generator import randZipf
 
 
 @njit
-def numba_speedup_1(a, b, c, d, e, f, g):
+def numba_comp_delta_S(a, b, c, d, e, f, g):
     return a * (b * (e * c * np.exp(f * 100 * d) + g))
 
 
 @njit
-def numba_speedup_2(a, b, c):
+def numba_comp_R(a, b, c):
     return np.exp(a * b / c)
 
 
 @njit
-def numba_speedup_3(a, b):
+def numba_comp_max(a, b):
     return np.maximum(a, b)
 
 
 @njit
-def numba_speedup_4(a, b):
+def numba_comp_exp(a, b):
     return np.power(a, b)
 
 
@@ -650,10 +650,8 @@ class ListenerAgent(BaseAgent):
         idx_ukn_act = np.where(~kn_act_bool)[0]
         # unknown words values ( indices on global coordinates == the words themselves )
         val_ukn_act = act[idx_ukn_act]
-
         # update counting of recognised words
         self.lang_stats[lang]['wc'][val_ukn_act] += act_c[idx_ukn_act]
-
         # check if memory can be updated
         upd_cond = self.lang_stats[lang]['wc'][val_ukn_act] >= self.lang_stats[lang]['mem_eff'][val_ukn_act]
         idx_ukn_act_upd = idx_ukn_act[upd_cond]
@@ -694,9 +692,9 @@ class ListenerAgent(BaseAgent):
 
         S_act = self.lang_stats[lang]['S'][act]
         b_exp = -b
-        S_act_b = numba_speedup_4(S_act, b_exp)
+        S_act_b = numba_comp_exp(S_act, b_exp)
         R_act = self.lang_stats[lang]['R'][act]
-        delta_S = numba_speedup_1(ds_factor, act_c, S_act_b, R_act, a, c, d)
+        delta_S = numba_comp_delta_S(ds_factor, act_c, S_act_b, R_act, a, c, d)
         # update memory stability value
         self.lang_stats[lang]['S'][act] += delta_S
         # discount counts by one unit
@@ -704,24 +702,30 @@ class ListenerAgent(BaseAgent):
         act_c_c -= 1
         # Simplification with good approx : we apply delta_S without iteration !!
         S_act = self.lang_stats[lang]['S'][act]
-        S_act_b = numba_speedup_4(S_act, b_exp)
+        S_act_b = numba_comp_exp(S_act, b_exp)
         R_act = self.lang_stats[lang]['R'][act]
-        delta_S = numba_speedup_1(ds_factor, act_c_c, S_act_b, R_act, a, c, d)
+        delta_S = numba_comp_delta_S(ds_factor, act_c_c, S_act_b, R_act, a, c, d)
         # update
         self.lang_stats[lang]['S'][act] += delta_S
         # update daily boolean mask to update elapsed-steps array t
         self.step_mask[lang][act] = True
         # set last activation time counter to zero if word act
         self.lang_stats[lang]['t'][self.step_mask[lang]] = 0.
-        # compute new memory retrievability R and current lang_knowledge from t, S values
+        # compute new memory retention R and current lang_knowledge from t, S values
+        self.update_memory_retention(lang, pct_threshold=pct_threshold)
+
+    def update_memory_retention(self, lang, pct_threshold=0.9):
+        # compute new memory retention R using updated t values
         fk = -self.k
         elapsed_time = self.lang_stats[lang]['t']
         lang_stability = self.lang_stats[lang]['S']
-        self.lang_stats[lang]['R'] = numba_speedup_2(fk, elapsed_time, lang_stability)
-        # update language knowledge
-        self.update_lang_knowledge(lang, pct_threshold=pct_threshold)
+        # compute new memory retention R using updated t values
+        self.lang_stats[lang]['R'] = numba_comp_R(fk, elapsed_time, lang_stability)
+        # set current lang knowledge
+        # update current language knowledge in percentage
+        self.update_lang_pct_knowledge(lang, pct_threshold=pct_threshold)
 
-    def update_lang_knowledge(self, lang, pct_threshold=0.9):
+    def update_lang_pct_knowledge(self, lang, pct_threshold=0.9):
         """ Update value that measures language knowledge in percentage
             Args:
                 * lang: string. Language whose knowledge level has to be updated
@@ -736,12 +740,19 @@ class ListenerAgent(BaseAgent):
             lang1, lang2 = ['L2', 'L21']
         r_lang1 = self.lang_stats[lang1]['R']
         r_lang2 = self.lang_stats[lang2]['R']
-        real_lang_knowledge = numba_speedup_3(r_lang1, r_lang2)
+        real_lang_knowledge = numba_comp_max(r_lang1, r_lang2)
         counts = numba_counter(real_lang_knowledge, pct_threshold)
         pct_value = counts / len(self.model.cdf_data['s'][self.info['age']])
         self.lang_stats[lang1]['pct'][self.info['age']] = pct_value
-
         # TODO: if pct < 0.1 => update language spoken to known people, since self is now really MONOLINGUAL
+
+    def update_word_activation_elapsed_time(self, lang):
+        # update last-time word use vector
+        self.lang_stats[lang]['t'][~self.step_mask[lang]] += 1
+
+    def reset_step_mask(self, lang):
+        # reset agent's step mask
+        self.step_mask[lang] = np.zeros(self.model.vocab_red, dtype=np.bool)
 
     def register_to_school(self, max_num_studs_per_course=25):
         def reg_conds(school):
@@ -1020,6 +1031,9 @@ class SpeakerAgent(ListenerAgent):
             # check if mates at school can teach some words 50% of steps
             pass
 
+    def pick_friend_candidate(self):
+        pass
+
     def check_friend_conds(self, other, max_num_friends=10):
         """
             Method to check if given agent meets compatibility conditions to become a friend
@@ -1211,6 +1225,16 @@ class IndepAgent(SpeakerAgent):
     def meet_agent(self):
         pass
     # TODO : method to meet new agents
+
+    def check(self):
+        """ Check num_meet in known people network to filter candidates """
+
+        # TODO: pick random acquaintance with condition num meets > 5
+
+        # TODO : check similar age
+        # TODO : check lang profile not too distant
+        # TODO : check residence in same cluster or  close one
+        pass
 
 
 class Baby(ListenerAgent):
@@ -1758,10 +1782,12 @@ class Young(IndepAgent):
 
     def speak_to_customer(self, num_days=5):
         job = self.loc_info['job']
-        if self.model.nws.jobs_network[job]:
+        try:
             rand_cust_job = random.choice(list(self.model.nws.jobs_network[job]))
-            customer = random.choice(list(rand_cust_job.info['employees']))
-            self.model.run_conversation(self, customer, num_days=num_days)
+            rand_customer = random.choice(list(rand_cust_job.info['employees']))
+            self.model.run_conversation(self, rand_customer, num_days=num_days)
+        except IndexError:
+            pass
 
     def stage_1(self, ix_agent, num_days=7):
         self.evaluate_lang_exclusion()
