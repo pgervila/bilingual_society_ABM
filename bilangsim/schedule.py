@@ -1,5 +1,4 @@
 import random
-import numpy as np
 
 from mesa.time import StagedActivation
 from .agent import IndepAgent, Young
@@ -10,32 +9,18 @@ class StagedActivationModif(StagedActivation):
 
     def step(self, pct_threshold=0.9):
         """ Executes all the stages for all agents """
-
+        #
         for ag in self.agents[:]:
             # set conversation counters to zero when step begins
             ag._conv_counts_per_step = 0
             # new step -> older age
             ag.grow()
-            # set exclusion counter to zero ( TODO: should be agent method ??)
-            # TODO: it's WRONG. We should compare relative lang knowledge !!!
-            # TODO: I think it is not needed to set 'excl_c' to zero
-            # ag.lang_stats['L1' if ag.info['language'] == 2 else 'L2']['excl_c'][ag.info['age']] = 0
-
             for lang in ['L1', 'L12', 'L21', 'L2']:
                 # save copy of wc for each agent
                 ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
-
-                # TODO : following block should be an agent method
-                # update last-time word use vector
-                ag.lang_stats[lang]['t'][~ag.step_mask[lang]] += 1
-                # compute new memory retention R using updated t values
-                ag.lang_stats[lang]['R'] = np.exp(-ag.k * ag.lang_stats[lang]['t'] /
-                                                  ag.lang_stats[lang]['S'])
-                # set current lang knowledge
-                # compute current language knowledge in percentage after 't' update
-                ag.update_lang_knowledge(lang, pct_threshold=pct_threshold)
-                # reset day mask
-                ag.step_mask[lang] = np.zeros(ag.model.vocab_red, dtype=np.bool)
+                ag.update_word_activation_elapsed_time(lang)
+                ag.update_memory_retention(lang, pct_threshold=pct_threshold)
+                ag.reset_step_mask(lang)
             # Update lang switch
             ag.update_lang_switch()
         if self.shuffle:
