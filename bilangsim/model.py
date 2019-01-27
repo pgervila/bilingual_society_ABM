@@ -69,6 +69,7 @@ class BiLangModel(Model):
 
     steps_per_year = 36
     max_lifetime = 4000
+    langs = ('L1', 'L12', 'L21', 'L2')
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
     # avg conversation : 3 min, 20 sec
     # 125 words per minute on average
@@ -526,6 +527,22 @@ class BiLangModel(Model):
         self.geo.add_agents_to_grid_and_schedule(agent)
         self.nws.add_ags_to_networks(agent)
         self.geo.clusters_info[agent['clust']]['agents'].append(agent)
+
+    def update_friendships(self):
+        """ Method to update all agents' friendship bonds """
+        for ag in self.schedule.agents[:]:
+            try:
+                friend_cands = np.random.choice(self.nws.known_people_network[ag],
+                                                size=5, replace=False)
+            except ValueError:
+                friend_cands = []
+            for cand in friend_cands:
+                try:
+                    if ag.check_friend_conds(cand, min_times=10):
+                        ag.make_friend(cand)
+                        break
+                except AttributeError:
+                    break
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """

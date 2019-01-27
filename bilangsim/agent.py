@@ -82,7 +82,9 @@ class BaseAgent:
         """ language => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
-        self.info = {'age': age, 'language': language, 'sex': sex}
+        # generate random number of maxim friends with fat-tail distribution
+        max_num_friends = np.clip(np.random.lognormal(1, 1), a_min=3, a_max=None).astype(int)
+        self.info = {'age': age, 'language': language, 'sex': sex, 'max_num_friends': max_num_friends }
         self.loc_info = {'home': None}
         if home:
             home.assign_to_agent(self)
@@ -90,20 +92,20 @@ class BaseAgent:
 
         # define container for languages' tracking and statistics
         self.lang_stats = defaultdict(dict)
-        # define list of all lang labels in model
-        all_langs = ['L1', 'L12', 'L21', 'L2']
+
         # define mask for each step
-        self.step_mask = {l: np.zeros(self.model.vocab_red, dtype=np.bool) for l in all_langs}
+        self.step_mask = {lang: np.zeros(self.model.vocab_red, dtype=np.bool)
+                          for lang in self.model.langs}
         if import_ic:
             self.set_lang_ics()
         else:
             # set null knowledge in all possible langs
-            for lang in all_langs:
+            for lang in self.model.langs:
                 self._set_null_lang_attrs(lang)
         # initialize word counter
         self.wc_init = dict()
         self.wc_final = dict()
-        for lang in all_langs:
+        for lang in self.model.langs:
             self.wc_init[lang] = np.zeros(self.model.vocab_red, dtype=np.int64)
             self.wc_final[lang] = np.zeros(self.model.vocab_red, dtype=np.int64)
         # initialize conversation counter for data collection
@@ -1034,20 +1036,34 @@ class SpeakerAgent(ListenerAgent):
     def pick_friend_candidate(self):
         pass
 
-    def check_friend_conds(self, other, max_num_friends=10):
+    def check_friend_conds(self, other, min_times=None):
         """
             Method to check if given agent meets compatibility conditions to become a friend
             Input:
-                * ag: agent instance. Instance whose friendship conditions must be checked
+                * other: agent instance. Instance whose friendship conditions must be checked
+                * min_times: int. Minimum number of times agents need to have met
             Output:
                 * Boolean. Returns True if friendship is possible, None otherwise
         """
+
+        max_num_friends = self.info['max_num_friends']
 
         if (abs(other.info['language'] - self.info['language']) <= 1 and
                 len(self.model.nws.friendship_network[other]) < max_num_friends and
                 other not in self.model.nws.friendship_network[self] and
                 other not in self.model.nws.family_network[self]):
-            return True
+            if not min_times:
+                return True
+            else:
+                num_times = self.model.nws.known_people_network[self][other]['num_meet']
+                if num_times >= min_times:
+                    comm_lang = self.model.nws.known_people_network[self][other]['lang']
+                    comm_lang = 'L1' if comm_lang == 0 else 'L2'
+                    age_1, age_2 = self.info['age'], other.info['age']
+                    pct_1, pct_2 = (self.lang_stats[comm_lang]['pct'][age_1],
+                                    other.lang_stats[comm_lang]['pct'][age_2])
+                    if abs(pct_1 - pct_2) <= 0.3:
+                        return True
 
     def make_friend(self, other):
         """ Method to implement friendship bounds between self agent and other """
@@ -1187,13 +1203,6 @@ class IndepAgent(SpeakerAgent):
             picked_agent = self.model.schedule.agents[ix]
             return picked_agent
 
-        #
-        # ags_ids = np.nonzero(adj_mat)[0]
-        # probs = adj_mat[ags_ids]
-        # if ags_ids.size:
-        #     picked_agent = self.model.schedule.agents[np.random.choice(ags_ids, p=probs)]
-        #     return picked_agent
-
     def speak_to_random_friend(self, ix_agent, num_days):
         """ Method to speak to a randomly chosen friend
             Args:
@@ -1220,7 +1229,6 @@ class IndepAgent(SpeakerAgent):
         # TODO : ask friends to teach unknown words
         # TODO : join conversations in target language
         # TODO : listen to media
-        pass
 
     def meet_agent(self):
         pass

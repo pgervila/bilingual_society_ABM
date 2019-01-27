@@ -543,8 +543,8 @@ class GeoMapper:
         """
 
         L1_pcts, L2_pcts = list(zip(*[[ag.lang_stats['L1']['pct'][ag.info['age']],
-                                        ag.lang_stats['L2']['pct'][ag.info['age']]]
-                                        for ag in self.clusters_info[clust_ix]['agents']
+                                       ag.lang_stats['L2']['pct'][ag.info['age']]]
+                                       for ag in self.clusters_info[clust_ix]['agents']
                                      ]))
         L1_pct, L2_pct = np.array(L1_pcts).mean(), np.array(L2_pcts).mean()
 
