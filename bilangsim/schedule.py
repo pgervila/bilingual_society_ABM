@@ -56,7 +56,7 @@ class StagedActivationModif(StagedActivation):
             except KeyError:
                 pass
 
-        if self.steps % (2 * self.model.steps_per_year):
+        if not self.steps % (2 * self.model.steps_per_year):
             self.model.update_friendships()
 
         # loop and update courses in schools and universities year after year
