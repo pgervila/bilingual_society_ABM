@@ -214,6 +214,10 @@ def test_run(model):
     model.run_model(2)
 
 
+def test_update_frienship(model):
+    model.update_friendships()
+
+
 @pytest.mark.parametrize("replace", test_data_remove_from_locations)
 def test_remove_from_locations(model, replace):
     corr_dict = {'Baby': 'Child', 'Child': 'Adolescent', 'Adolescent': 'Young',

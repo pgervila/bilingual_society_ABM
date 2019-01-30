@@ -1,5 +1,4 @@
 import random
-import numpy as np
 
 from mesa.time import StagedActivation
 from .agent import IndepAgent, Young
@@ -12,7 +11,7 @@ class StagedActivationModif(StagedActivation):
         """ Executes all the stages for all agents """
 
         # TODO: following block should be a model method
-        for ag in self.agents[:]:
+        for ag in self.agents:
             # set conversation counters to zero when step begins
             ag._conv_counts_per_step = 0
             # new step -> older age
@@ -37,8 +36,6 @@ class StagedActivationModif(StagedActivation):
                     getattr(ag, stage)(ix_ag)
                 else:
                     getattr(ag, stage)()
-            if self.shuffle_between_stages:
-                random.shuffle(self.agents)
             self.time += self.stage_time
 
         # check reproduction, death : Need to make shallow copy of agents list,

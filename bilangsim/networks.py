@@ -91,35 +91,36 @@ class NetworkBuilder:
         # assign school jobs
         self.model.geo.assign_school_jobs()
 
-    def define_friendship_networks(self):
+    def define_friendship_networks(self, init_max_num_friends=10):
         """ """
         # TODO : Apply small world graph to relevant nodes using networkx
         for ag in self.model.schedule.agents:
             num_friends = len(self.friendship_network[ag])
             max_num_friends = ag.info['max_num_friends']
-            if type(ag) in (Adult, Young) and num_friends < max_num_friends:
+            if type(ag) in (Adult, Young):
                 if ag.loc_info['job']:
                     info_occupation = ag.loc_info['job'].info
                 else:
                     clust = ag['clust']
                     info_occupation = random.choice(self.model.geo.clusters_info[clust]['jobs']).info
                 colleagues = 'employees'
-            elif isinstance(ag, Teacher) and num_friends < max_num_friends:
+            elif isinstance(ag, Teacher):
                 if ag.loc_info['job'][0]:
                     info_occupation = ag.loc_info['job'][0].info
                 colleagues = 'employees'
-            elif isinstance(ag, (Child, Adolescent)) and num_friends < max_num_friends:
+            elif isinstance(ag, (Child, Adolescent)):
                 school, course_key = ag.loc_info['school']
                 info_occupation = school.grouped_studs[course_key]
                 colleagues = 'students'
             else:
                 continue
             for coll in info_occupation[colleagues].difference({ag}):
-                # check colleague lang distance and all friendship conditions
-                if ag.check_friend_conds(coll, ):
-                    ag.make_friend(coll)
-                if len(self.friendship_network[ag]) == max_num_friends:
+                if len(self.friendship_network[ag]) >= min(max_num_friends, init_max_num_friends):
                     break
+                # check colleague lang distance and all friendship conditions
+                if ag.check_friend_conds(coll, init_max_num_friends=init_max_num_friends):
+                    ag.make_friend(coll)
+
 
     def define_jobs_network(self, p=0.3):
         """ Defines random graph with probability p where nodes are job instances"""

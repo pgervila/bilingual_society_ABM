@@ -530,10 +530,10 @@ class BiLangModel(Model):
 
     def update_friendships(self):
         """ Method to update all agents' friendship bonds """
-        for ag in self.schedule.agents[:]:
+        for ag in self.schedule.agents:
             try:
                 friend_cands = np.random.choice(self.nws.known_people_network[ag],
-                                                size=5, replace=False)
+                                                size=10, replace=False)
             except ValueError:
                 friend_cands = []
             for cand in friend_cands:

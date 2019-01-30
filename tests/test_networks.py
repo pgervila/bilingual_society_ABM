@@ -82,4 +82,8 @@ def test_set_link_with_relatives(model):
     assert child in new_agent.get_family_relative('grandchild')
 
 
+def test_friends_per_agent(model):
+    assert max([len(model.nws.friendship_network[ag]) for ag in model.schedule.agents]) <= 10
+
+
 

@@ -1036,7 +1036,7 @@ class SpeakerAgent(ListenerAgent):
     def pick_friend_candidate(self):
         pass
 
-    def check_friend_conds(self, other, min_times=None):
+    def check_friend_conds(self, other, min_times=None, init_max_num_friends=None):
         """
             Method to check if given agent meets compatibility conditions to become a friend
             Input:
@@ -1045,11 +1045,16 @@ class SpeakerAgent(ListenerAgent):
             Output:
                 * Boolean. Returns True if friendship is possible, None otherwise
         """
-
-        max_num_friends = self.info['max_num_friends']
+        if not init_max_num_friends:
+            max_num_friends = self.info['max_num_friends']
+            max_num_friends_other = other.info['max_num_friends']
+        else:
+            max_num_friends = min(self.info['max_num_friends'], init_max_num_friends)
+            max_num_friends_other = min(other.info['max_num_friends'], init_max_num_friends)
 
         if (abs(other.info['language'] - self.info['language']) <= 1 and
-                len(self.model.nws.friendship_network[other]) < max_num_friends and
+                len(self.model.nws.friendship_network[self]) < max_num_friends and
+                len(self.model.nws.friendship_network[other]) < max_num_friends_other and
                 other not in self.model.nws.friendship_network[self] and
                 other not in self.model.nws.family_network[self]):
             if not min_times:
