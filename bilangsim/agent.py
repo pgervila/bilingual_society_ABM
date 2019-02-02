@@ -1568,7 +1568,7 @@ class Young(IndepAgent):
         # find appartment to move in together
         self.move_to_new_home()
 
-    def reproduce(self, day_prob=0.001, max_num_children=4):
+    def reproduce(self, day_prob=0.0014, max_num_children=4):
         """ Method to give birth to a new agent if conditions and likelihoods are met """
 
         # TODO: check method integration with creation of 'Baby' class
@@ -1941,7 +1941,7 @@ class Adult(Young): # from 30 to 65
         if ret_output:
             return grown_agent
 
-    def reproduce(self, day_prob=0.002, limit_age=40):
+    def reproduce(self, day_prob=0.0024, limit_age=40):
         if self.info['age'] <= limit_age * self.model.steps_per_year:
             super().reproduce(day_prob=day_prob)
 

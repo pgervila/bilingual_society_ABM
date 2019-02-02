@@ -27,11 +27,11 @@ from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 9675
+#rand_seed = 6239
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 7357
+#np_seed = 3080
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -533,8 +533,8 @@ class BiLangModel(Model):
         for ag in self.schedule.agents:
             try:
                 friend_cands = np.random.choice(self.nws.known_people_network[ag],
-                                                size=10, replace=False)
-            except ValueError:
+                                                size=20, replace=False)
+            except (ValueError, KeyError):
                 friend_cands = []
             for cand in friend_cands:
                 try:
