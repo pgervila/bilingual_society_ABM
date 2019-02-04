@@ -894,7 +894,7 @@ class Job:
                 self.hire_employee(ag)
                 break
 
-    def hire_employee(self, agent, move_home=True):
+    def hire_employee(self, agent, move_home=True, force_hiring=False):
         """
             Method to remove agent from former employment (if any) and hire it
             into a new one. Method checks that job's language policy is compatible
@@ -917,7 +917,7 @@ class Job:
             pass
 
         # hire agent
-        if agent.info['language'] in self.info['lang_policy']:
+        if agent.info['language'] in self.info['lang_policy'] or force_hiring:
             self.assign_employee(agent)
             # move agent to new home closer to job if necessary (and requested)
             if move_home:

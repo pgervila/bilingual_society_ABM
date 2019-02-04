@@ -210,8 +210,34 @@ def test_remove_after_death(model, agent_type):
 
 
 def test_run(model):
-    pass
     model.run_model(2)
+
+
+def test_add_immigration(model, lang=0, clust=0):
+    num_init_agents = model.schedule.get_agent_count()
+    model.add_immigration(lang, clust)
+    num_agents = model.schedule.get_agent_count()
+    family = model.schedule.agents[-4:]
+    father, mother = family[:2]
+    home = father.loc_info['home']
+    father_job = father.get_current_job()
+    children = family[2:]
+    for ag in family:
+        assert ag in model.nws.known_people_network
+        assert ag in model.nws.friendship_network
+        assert ag in model.nws.family_network
+        assert ag in home.info['occupants']
+        assert ag in model.geo.clusters_info[clust]['agents']
+
+    assert num_agents == num_init_agents + 4
+    assert father_job
+    assert mother.get_family_relative('child') == children
+    for child in children:
+        school, course_key = child.get_school_and_course()
+        assert child.get_family_relative('father') == father
+        assert child.get_family_relative('mother') == mother
+        assert child in school.info['students']
+        assert child in school[course_key]['students']
 
 
 @pytest.mark.parametrize("replace", test_data_remove_from_locations)

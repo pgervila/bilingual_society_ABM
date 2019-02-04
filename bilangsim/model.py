@@ -527,6 +527,23 @@ class BiLangModel(Model):
         self.nws.add_ags_to_networks(agent)
         self.geo.clusters_info[agent['clust']]['agents'].append(agent)
 
+    def add_immigration(self, lang, clust_ix):
+        family_langs = [lang] * self.family_size
+        family = self.geo.create_new_family(family_langs)
+        parent = family[0]
+        # find random job
+        job = random.choice(self.geo.clusters_info[clust_ix]['jobs'])
+        job.hire_employee(parent, move_home=False, force_hiring=True)
+        # assign same home to all family members
+        fam_home = parent.find_home(criteria="close_to_job")
+        fam_home.assign_to_agent(family)
+        for agent in family:
+            self.add_new_agent_to_model(agent)
+        self.nws.define_family_links(family)
+        # find closest school to home
+        for child in family[2:]:
+            child.register_to_school()
+
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """
             Method to remove agent instance from locations in agent 'loc_info' dict attribute

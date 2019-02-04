@@ -20,7 +20,7 @@ print('test seed is {}'.format(np_seed))
 
 @pytest.fixture(scope="module")
 def model():
-    return BiLangModel(251, num_clusters=2)
+    return BiLangModel(251, num_clusters=2, check_setup=True)
 
 
 @pytest.fixture(scope='module')
