@@ -8,7 +8,8 @@ from bilangsim import BiLangModel
 
 @pytest.fixture(scope="module")
 def model():
-    return BiLangModel(300, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25])
+    return BiLangModel(300, num_clusters=1, init_lang_distrib=[0.25, 0.5, 0.25],
+                       immigration=True, pct_immigration=0.005)
 
 
 @pytest.fixture(scope="function")
@@ -213,9 +214,9 @@ def test_run(model):
     model.run_model(2)
 
 
-def test_add_immigration(model, lang=0, clust=0):
+def test_add_immigration_family(model, lang=0, clust=0):
     num_init_agents = model.schedule.get_agent_count()
-    model.add_immigration(lang, clust)
+    model.add_immigration_family(lang, clust)
     num_agents = model.schedule.get_agent_count()
     family = model.schedule.agents[-4:]
     father, mother = family[:2]
@@ -238,6 +239,11 @@ def test_add_immigration(model, lang=0, clust=0):
         assert child.get_family_relative('mother') == mother
         assert child in school.info['students']
         assert child in school[course_key]['students']
+
+
+def test_add_immigration(model):
+    model.add_immigration()
+
 
 
 @pytest.mark.parametrize("replace", test_data_remove_from_locations)
