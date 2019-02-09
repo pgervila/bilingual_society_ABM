@@ -9,13 +9,14 @@ class StagedActivationModif(StagedActivation):
 
     def step(self, pct_threshold=0.9):
         """ Executes all the stages for all agents """
-        #
-        for ag in self.agents[:]:
+
+        # TODO: following block should be a model method
+        for ag in self.agents:
             # set conversation counters to zero when step begins
             ag._conv_counts_per_step = 0
             # new step -> older age
             ag.grow()
-            for lang in ['L1', 'L12', 'L21', 'L2']:
+            for lang in self.model.langs:
                 # save copy of wc for each agent
                 ag.wc_init[lang] = ag.lang_stats[lang]['wc'].copy()
                 ag.update_word_activation_elapsed_time(lang)
@@ -26,7 +27,7 @@ class StagedActivationModif(StagedActivation):
         if self.shuffle:
             random.shuffle(self.agents)
 
-        # Network adj matrices will be constant through all stages of one step
+        # Network adj matrices will be constant through all stages of a given step
         self.model.nws.compute_adj_matrices()
 
         for stage in self.stage_list:
@@ -35,17 +36,14 @@ class StagedActivationModif(StagedActivation):
                     getattr(ag, stage)(ix_ag)
                 else:
                     getattr(ag, stage)()
-            if self.shuffle_between_stages:
-                random.shuffle(self.agents)
             self.time += self.stage_time
 
-        for ag in self.agents[:]:
-            for lang in ['L1', 'L12', 'L21', 'L2']:
-                ag.wc_final[lang] = ag.lang_stats[lang]['wc'].copy()
-
-        # check reproduction, death : make shallow copy of agents list,
+        # check reproduction, death : Need to make shallow copy of agents list,
         # since we are potentially removing agents as we iterate
         for ag in self.agents[:]:
+            # once all speaking interactions are over in current step, copy final wc values
+            for lang in self.model.langs:
+                ag.wc_final[lang] = ag.lang_stats[lang]['wc'].copy()
             # An agent might have changed type if hired as Teacher to replace dead one
             # Old agent instance will be removed from model but it might still be in the copied list !
             try:
@@ -54,6 +52,9 @@ class StagedActivationModif(StagedActivation):
                 ag.random_death()
             except KeyError:
                 pass
+
+        if not self.steps % (2 * self.model.steps_per_year):
+            self.model.update_friendships()
 
         # loop and update courses in schools and universities year after year
         # update jobs lang policy
