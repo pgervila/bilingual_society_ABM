@@ -1621,7 +1621,7 @@ class Young(IndepAgent):
 
         return job_clust
 
-    def get_job(self, keep_cluster=False, move_home=True):
+    def get_job(self, keep_cluster=False, move_home=True, ignore_lang_constraint=False):
         """
             Assign agent to a random job unless either personal or linguistic constraints
             do not make it possible
@@ -1629,6 +1629,8 @@ class Young(IndepAgent):
                 * keep_cluster: boolean. If True, job search will be limited to agent's current cluster
                     Otherwise, all clusters might be searched. It defaults to False
                 * move_home: boolean. True if moving to a new home is allowed
+                * ignore_lang_constraint: boolean. If True, lang knowledge is ignored when
+                    hiring. Default False
             Output:
                 * If constraints allow it, method assigns a new job to agent
         """
@@ -1638,7 +1640,8 @@ class Young(IndepAgent):
         # pick a job from chosen cluster
         job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
         if job.num_places and job.check_cand_conds(self, keep_cluster=keep_cluster):
-            job.hire_employee(self, move_home=move_home)
+            job.hire_employee(self, move_home=move_home,
+                              ignore_lang_constraint=ignore_lang_constraint)
 
     def get_current_job(self):
         """ Method that returns agent's current job """

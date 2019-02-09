@@ -27,11 +27,11 @@ from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 6239
+#rand_seed = 9558
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 3080
+#np_seed = 5543
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -558,7 +558,7 @@ class BiLangModel(Model):
         parent = family[0]
         # find random job
         job = random.choice(self.geo.clusters_info[clust_ix]['jobs'])
-        job.hire_employee(parent, move_home=False, force_hiring=True)
+        job.hire_employee(parent, move_home=False, ignore_lang_constraint=True)
         # assign same home to all family members
         fam_home = parent.find_home(criteria="close_to_job")
         fam_home.assign_to_agent(family)

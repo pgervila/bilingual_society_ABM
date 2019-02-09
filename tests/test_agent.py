@@ -13,7 +13,7 @@ from bilangsim import BiLangModel
 
 
 np_seed = np.random.randint(10000)
-# np_seed = 3240
+#np_seed = 8638
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 

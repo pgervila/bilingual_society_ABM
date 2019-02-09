@@ -8,24 +8,15 @@ def model():
     return BiLangModel(100, num_clusters=1, init_lang_distrib=[0.5, 0.5, 0.])
 
 
-def test_networks_consistency(model):
-    family = model.schedule.agents[:4]
-    # test family network
-    father, mother, child_1, child_2 = family
-    assert model.nws.family_network[father][mother]['fam_link'] == 'consort'
-    assert model.nws.family_network[father][child_1]['fam_link'] == 'child'
-    assert model.nws.family_network[child_1][mother]['fam_link'] == 'mother'
-    assert model.nws.family_network[child_1][child_2]['fam_link'] == 'sibling'
-
-
-def test_newborn_family_links(model):
+@pytest.fixture(scope="function")
+def newborn_family(model):
     father = [ag for ag in model.schedule.agents if type(ag) == Child and
               ag.info['sex'] == 'M' and ag.info['language'] in [0, 1]][0]
     mother = [ag for ag in model.schedule.agents if type(ag) == Child
               and ag.info['sex'] == 'F' and ag.info['language'] in [0, 1] and
               ag not in father.get_family_relative('sibling')][0]
-    father.grow(growth_inc=36*20 - father.info['language'])
-    mother.grow(growth_inc=36*20 - mother.info['language'])
+    father.grow(growth_inc=model.steps_per_year*20 - father.info['language'])
+    mother.grow(growth_inc=model.steps_per_year*20 - mother.info['language'])
 
     father = father.evolve(Adolescent, ret_output=True)
     father = father.evolve(Young, ret_output=True)
@@ -33,7 +24,7 @@ def test_newborn_family_links(model):
     mother = mother.evolve(Adolescent, ret_output=True)
     mother = mother.evolve(Young, ret_output=True)
 
-    father.get_job()
+    father.get_job(ignore_lang_constraint=True)
     father.update_acquaintances(mother, 0)
     father.get_married(mother)
     father.reproduce(day_prob=1.)
@@ -46,6 +37,23 @@ def test_newborn_family_links(model):
     uncles = [x for x in uncles_and_aunts if x.info['sex'] == 'M']
     aunts = [x for x in uncles_and_aunts if x.info['sex'] == 'F']
     cousins = [cousin for x in uncles_and_aunts for cousin in x.get_family_relative('child')]
+
+    return father, mother, child, grandfathers, grandmothers, uncles, aunts, cousins
+
+
+def test_networks_consistency(model):
+    family = model.schedule.agents[:4]
+    # test family network
+    father, mother, child_1, child_2 = family
+    assert model.nws.family_network[father][mother]['fam_link'] == 'consort'
+    assert model.nws.family_network[father][child_1]['fam_link'] == 'child'
+    assert model.nws.family_network[child_1][mother]['fam_link'] == 'mother'
+    assert model.nws.family_network[child_1][child_2]['fam_link'] == 'sibling'
+
+
+def test_newborn_family_links(newborn_family):
+
+    father, mother, child, grandfathers, grandmothers, uncles, aunts, cousins = newborn_family
 
     assert child.get_family_relative('father') == father
     assert child in father.get_family_relative('child')

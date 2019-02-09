@@ -835,8 +835,9 @@ class Job:
             are compatible with job hiring
             Args:
                 * agent: instance.
-                * job_steps_years: integer. Number of years of seniority in current job before being allowed to
-                    move to a new job in another cluster
+                * keep_cluster: boolean
+                * job_steps_years: integer. Number of years of seniority in current job before
+                    being allowed to move to a new job in another cluster
             Output:
                 * True if checking is satisfactory, None otherwise
         """
@@ -862,7 +863,6 @@ class Job:
                                     return True
                             except KeyError:
                                 return True
-
                     else:
                         return True
 
@@ -894,7 +894,7 @@ class Job:
                 self.hire_employee(ag)
                 break
 
-    def hire_employee(self, agent, move_home=True, force_hiring=False):
+    def hire_employee(self, agent, move_home=True, ignore_lang_constraint=False):
         """
             Method to remove agent from former employment (if any) and hire it
             into a new one. Method checks that job's language policy is compatible
@@ -903,6 +903,8 @@ class Job:
             Args:
                 * agent: agent instance. Defines agent that will be hired
                 * move_home: boolean. True if agent is allowed to move home
+                * ignore_lang_constraint: boolean. True if agent is guaranteed to be hired regardless
+                    of their language knowledge
         """
         # First prevent agent from being hired by other companies
         # during hiring cascade after removal from current company
@@ -917,7 +919,7 @@ class Job:
             pass
 
         # hire agent
-        if agent.info['language'] in self.info['lang_policy'] or force_hiring:
+        if agent.info['language'] in self.info['lang_policy'] or ignore_lang_constraint:
             self.assign_employee(agent)
             # move agent to new home closer to job if necessary (and requested)
             if move_home:
@@ -941,7 +943,7 @@ class Job:
             Args:
                 * agent: class instance.
         """
-        self.num_places -= 1
+        # self.num_places -= 1 #TODO: disable constraint until implementing endogenous economy model
         self.info['employees'].add(agent)
         # assign job to agent
         agent.loc_info['job'] = self

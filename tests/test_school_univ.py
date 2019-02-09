@@ -9,7 +9,7 @@ print('python hash seed is', os.environ['PYTHONHASHSEED'])
 
 # set random seed
 np_seed = np.random.randint(10000)
-#np_seed = 6848
+#np_seed = 5730
 np.random.seed(np_seed)
 print('test seed is {}'.format(np_seed))
 
