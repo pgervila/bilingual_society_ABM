@@ -77,7 +77,7 @@ class BiLangModel(Model):
     num_words_conv = {'VS': 1, 'S': 3, 'M': 10, 'L': 100}
 
     def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
-                 init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, max_run_steps=1000,
+                 init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, immigration=False, pct_immigration=0.005,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3,
                  check_setup=False, rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
@@ -91,7 +91,10 @@ class BiLangModel(Model):
         self.max_people_factor = max_people_factor
         self.init_lang_distrib = init_lang_distrib
         self.num_clusters = num_clusters
-        self.max_run_steps = max_run_steps
+        if immigration:
+            self.pct_immigration = pct_immigration
+        else:
+            self.pct_immigration = None
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
         self.seeds = [rand_seed, np_seed]
@@ -543,6 +546,40 @@ class BiLangModel(Model):
                         break
                 except AttributeError:
                     break
+
+    def add_immigration_family(self, lang, clust_ix):
+        """ Method to add an immigration family
+            Args:
+                * lang: integer in [0, 1, 2]
+                * clust_ix: integer. Index of cluster where family will live
+        """
+        family_langs = [lang] * self.family_size
+        family = self.geo.create_new_family(family_langs)
+        parent = family[0]
+        # find random job
+        job = random.choice(self.geo.clusters_info[clust_ix]['jobs'])
+        job.hire_employee(parent, move_home=False, force_hiring=True)
+        # assign same home to all family members
+        fam_home = parent.find_home(criteria="close_to_job")
+        fam_home.assign_to_agent(family)
+        for agent in family:
+            self.add_new_agent_to_model(agent)
+        self.nws.define_family_links(family)
+        # find closest school to home
+        for child in family[2:]:
+            child.register_to_school()
+
+    def add_immigration(self):
+        """ Method to add a random number of immigration families per year"""
+        expected_num_fam = int(self.pct_immigration * self.schedule.get_agent_count() /
+                               self.family_size)
+        num_fam = sum([random.random() < (expected_num_fam / self.steps_per_year)
+                       for _ in range(self.steps_per_year)])
+        for fam in range(num_fam):
+            # the larger the cluster the more likely that it attracts immigration
+            prob = self.geo.cluster_sizes / self.geo.cluster_sizes.sum()
+            clust_ix = np.random.choice(self.num_clusters, p=prob)
+            self.add_immigration_family(0, clust_ix)
 
     def remove_from_locations(self, agent, replace=False, grown_agent=None, upd_course=False):
         """

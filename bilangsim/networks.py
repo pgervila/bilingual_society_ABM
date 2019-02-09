@@ -54,6 +54,25 @@ class NetworkBuilder:
         self.define_friendship_networks()
         self.define_jobs_network()
 
+    def define_family_links(self, family):
+        """ Method to define all links between all members of a given family
+            Args:
+                * family: list of agent instances
+        """
+        # find out lang of interaction btw family members
+        (lang_consorts, lang_with_father,
+         lang_with_mother, lang_siblings) = self.model.get_lang_fam_members(family)
+        # initialize family network
+        # add family edges in family and known_people networks ( both are DIRECTED networks ! )
+        self.set_link_with_relatives(family[0], family[1],
+                                     'consort', lang_with_relatives=lang_consorts)
+        self.set_link_with_relatives([family[2], family[3]], family[0],
+                                     'father', lang_with_relatives=lang_with_father)
+        self.set_link_with_relatives([family[2], family[3]], family[1],
+                                     'mother', lang_with_relatives=lang_with_mother)
+        self.set_link_with_relatives(family[2], family[3],
+                                     'sibling', lang_with_relatives=lang_siblings)
+
     def define_family_networks(self):
         """
             Method to define family links between agents. It also adds relatives to known_people_network
@@ -66,22 +85,7 @@ class NetworkBuilder:
         for clust_idx, clust_info in self.model.geo.clusters_info.items():
             # trick to iterate over groups of agents of size = self.model.family_size
             for idx, family in enumerate(zip(*[iter(clust_info['agents'])] * self.model.family_size)):
-                # set linguistic ICs to family
-                self.model.set_lang_ics_in_family(family)
-                # find out lang of interaction btw family members
-                (lang_consorts, lang_with_father,
-                 lang_with_mother, lang_siblings) = self.model.get_lang_fam_members(family)
-                # initialize family network
-                # add family edges in family and known_people networks ( both are DIRECTED networks ! )
-                self.set_link_with_relatives(family[0], family[1],
-                                             'consort', lang_with_relatives=lang_consorts)
-                self.set_link_with_relatives([family[2], family[3]], family[0],
-                                             'father', lang_with_relatives=lang_with_father)
-                self.set_link_with_relatives([family[2], family[3]], family[1],
-                                             'mother', lang_with_relatives=lang_with_mother)
-                self.set_link_with_relatives(family[2], family[3],
-                                             'sibling', lang_with_relatives=lang_siblings)
-
+                self.define_family_links(family)
             # set up agents left out of family partition of cluster
             len_clust = len(clust_info['agents'])
             num_left_agents = len_clust % self.model.family_size
@@ -130,7 +134,7 @@ class NetworkBuilder:
         nodes_mapping = {i: j for i, j in enumerate(jobs)}
         self.jobs_network = nx.relabel_nodes(self.jobs_network, nodes_mapping)
 
-    def set_family_links(self, agent, father, mother, lang_with_father, lang_with_mother):
+    def set_newborn_family_links(self, agent, father, mother, lang_with_father, lang_with_mother):
         """
             Method to define family links and interaction language of a newborn agent.
             Corresponding edges are created in family and known people networks

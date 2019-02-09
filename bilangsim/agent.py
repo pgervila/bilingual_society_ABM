@@ -1264,7 +1264,7 @@ class Baby(ListenerAgent):
     def __init__(self, father, mother, lang_with_father, lang_with_mother, *args, school=None, **kwargs):
 
         super().__init__(*args, **kwargs)
-        self.model.nws.set_family_links(self, father, mother, lang_with_father, lang_with_mother)
+        self.model.nws.set_newborn_family_links(self, father, mother, lang_with_father, lang_with_mother)
         if school:
             school.assign_student(self)
         else:
@@ -1766,6 +1766,8 @@ class Young(IndepAgent):
                 job_dist_fun = lambda home: (pdist([job_1.pos, home.pos]) + pdist([job_2.pos, home.pos]))[0]
                 sorted_homes = sorted(free_homes_job_1_clust, key=job_dist_fun)
                 new_home = sorted_homes[0]
+            elif criteria == 'empty':
+                new_home = random.choice(free_homes_job_1_clust)
         else:
             # build new home
             new_home = self.model.geo.add_new_home(job_1_clust)

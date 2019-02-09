@@ -60,6 +60,9 @@ class StagedActivationModif(StagedActivation):
         # update jobs lang policy
         if self.steps and not self.steps % self.model.steps_per_year:
             self.model.update_centers()
+            # Add immigration families if requested
+            if self.model.pct_immigration:
+                self.model.add_immigration()
 
         self.steps += 1
 

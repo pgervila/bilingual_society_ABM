@@ -35,6 +35,7 @@ class GeoMapper:
 
     def import_model_ics(self):
         """ Import data from save model computation and map it to current model """
+        pass
 
     def map_model_objects(self):
         """ Instantiate and locate all model objects on 2-D grid """
@@ -278,6 +279,69 @@ class GeoMapper:
             for x, y in zip(x_h, y_h):
                 self.clusters_info[clust_idx]['homes'].append(Home(clust_idx, (x, y)))
 
+    def create_new_agent(self, ag_class, ag_id, lang, sex=None, age=None, age_range=None):
+        if not sex:
+            sex = 'M' if random.random() < 0.5 else 'F'
+        else:
+            sex = sex
+        ag = ag_class(self.model, ag_id, lang, sex)
+        if not age:
+            if age_range:
+                ag.info['age'] = self.model.steps_per_year * np.random.randint(age_range[0],
+                                                                               age_range[1])
+            else:
+                ag.info['age'] = self.model.steps_per_year * np.random.randint(0, 100)
+        else:
+            ag.info['age'] = age
+        return ag
+
+    def create_new_family(self, family_langs, parents_age_range=(25, 50),
+                          children_age_range=(2, 17), max_age_diff=35):
+        """ Method to create 4 new agent instances: 2 parents and two children
+            Args:
+                * family_langs: list of integers.
+                * parents_age_range: tuple. Minimum and maximum parent's age
+                * children_age_range: tuple. Minimum and maximum children's age
+                * max_age_diff: integer. Maximum allowed age difference between parent and child"""
+        av_ags_ids = self.model.set_available_ids
+        # family sexes
+        family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
+        # get parents ages
+        age1 = np.random.randint(*parents_age_range)
+        age2 = max(parents_age_range[0],
+                   min(parents_age_range[1], age1 + np.random.randint(-5, 5)))
+        # instantiate 2 adults with neither job nor home assigned
+        # lang ics will be set later on when defining family network
+        ag_type = Adult if age1 >= 30 else Young
+        ag1 = ag_type(self.model, av_ags_ids.pop(), family_langs[0], family_sexes[0],
+                      age=self.model.steps_per_year * age1, married=True, num_children=2)
+        ag_type = Adult if age2 >= 30 else Young
+        ag2 = ag_type(self.model, av_ags_ids.pop(), family_langs[1], family_sexes[1],
+                      age=self.model.steps_per_year * age2, married=True, num_children=2)
+        # instantiate 2 children with neither school nor home assigned
+        # lang ics will be set later on when defining family network
+        # get children ages
+        age3, age4 = np.random.randint(max(2, age2 - max_age_diff),
+                                       min(children_age_range[1],
+                                           age2 - parents_age_range[0] + children_age_range[0] + 1),
+                                       size=2)
+        if age3 == age4:
+            if age4 + 2 <= children_age_range[1]:
+                age4 += 2
+            elif age4 - 2 >= children_age_range[0]:
+                age4 -= 2
+
+        ag_type = Adolescent if age3 >= 12 else Child
+        ag3 = ag_type(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2],
+                      age=self.model.steps_per_year * age3)
+        ag_type = Adolescent if age4 >= 12 else Child
+        ag4 = ag_type(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3],
+                      age=self.model.steps_per_year * age4)
+        family = [ag1, ag2, ag3, ag4]
+        # set linguistic ICs to family
+        self.model.set_lang_ics_in_family(family)
+        return family
+
     def add_new_home(self, clust_id):
         """ Method to add a random new home to a given cluster
             Args:
@@ -366,43 +430,9 @@ class GeoMapper:
         av_ags_ids = self.model.set_available_ids
         for clust_idx, clust_info in self.clusters_info.items():
             for idx, family_langs in enumerate(zip(*[iter(self.langs_per_clust[clust_idx])] * self.model.family_size)):
-                # family sexes
-                family_sexes = ['M', 'F'] + ['M' if random.random() < 0.5 else 'F' for _ in range(2)]
-                # get parents ages
-                age1 = np.random.randint(*parents_age_range)
-                age2 = max(parents_age_range[0],
-                           min(parents_age_range[1], age1 + np.random.randint(-5, 5)))
-                # instantiate 2 adults with neither job nor home assigned
-                # lang ics will be set later on when defining family network
-                ag_type = Adult if age1 >= 30 else Young
-                ag1 = ag_type(self.model, av_ags_ids.pop(), family_langs[0], family_sexes[0],
-                              age=self.model.steps_per_year * age1, married=True, num_children=2)
-                ag_type = Adult if age2 >= 30 else Young
-                ag2 = ag_type(self.model, av_ags_ids.pop(), family_langs[1], family_sexes[1],
-                              age=self.model.steps_per_year * age2, married=True, num_children=2)
-
-                # instantiate 2 children with neither school nor home assigned
-                # lang ics will be set later on when defining family network
-                # get children ages
-                age3, age4 = np.random.randint(max(2, age2 - max_age_diff),
-                                               min(children_age_range[1],
-                                                   age2 - parents_age_range[0] + children_age_range[0] + 1),
-                                               size=2)
-                if age3 == age4:
-                    if age4 + 2 <= children_age_range[1]:
-                        age4 += 2
-                    elif age4 - 2 >= children_age_range[0]:
-                        age4 -= 2
-
-                ag_type = Adolescent if age3 >= 12 else Child
-                ag3 = ag_type(self.model, av_ags_ids.pop(), family_langs[2], family_sexes[2],
-                              age=self.model.steps_per_year * age3)
-                ag_type = Adolescent if age4 >= 12 else Child
-                ag4 = ag_type(self.model, av_ags_ids.pop(), family_langs[3], family_sexes[3],
-                              age=self.model.steps_per_year * age4)
-
+                family_agents = self.create_new_family(family_langs, parents_age_range,
+                                                       children_age_range, max_age_diff)
                 # assign same home to all family members to locate them at step = 0
-                family_agents = [ag1, ag2, ag3, ag4]
                 home = clust_info['homes'][idx]
                 home.assign_to_agent(family_agents)
                 # add agents to clust_info, schedule and grid, but not yet to networks
