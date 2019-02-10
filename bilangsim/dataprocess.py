@@ -1,15 +1,14 @@
 import os
+from collections import Counter, defaultdict
 
 import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
-from collections import Counter, defaultdict
+from matplotlib.animation import FuncAnimation
 import deepdish as dd
 import dill
 
 from mesa.datacollection import DataCollector
-from .agent import Baby, Child, Adolescent, Young, YoungUniv
-from .agent import Adult, Teacher, TeacherUniv, Pensioner
 
 
 class DataProcessor(DataCollector):
@@ -406,3 +405,39 @@ class PostProcessor:
                                                                   'tokens_per_step_spa']].sum(1)
         data = self.agent_data[['agent_type', 'tot_tokens_per_step']]
         data.groupby(['Step', 'agent_type']).mean().unstack().plot(y='tot_tokens_per_step', grid=True)
+
+    def animate_grid(self, max_num_steps=1000, num_col='pct_cat_knowledge'):
+        """ Method to animate a 2-D grid year-by-year with average value on each cell """
+        pct_per_loc_and_step = self.agent_data.groupby(['Step',
+                                                        'x', 'y'])[['x', 'y', num_col]].mean()
+        grid = (100, 100)
+
+        # create figure and set up axes
+        fig, ax = plt.subplots()
+        ax.set_xlim(0, grid[0] - 1)
+        ax.set_ylim(0, grid[1] - 1)
+
+        # initialize
+        dots = ax.scatter([], [], c=[], vmin=0, vmax=1, cmap='viridis', s=5)
+        fig.colorbar(dots)
+
+        def init_show():
+            dots.set_offsets([0, 0])
+            return dots,
+
+        def update_plot(i):
+            data = pct_per_loc_and_step.loc[i].values
+            coords = data[:, :2]
+            values = data[:, -1]
+
+            dots.set_offsets(coords)
+            dots.set_array(values)
+            ax.set_title("Year: {}".format(int(i / 36)), fontsize=20)
+            return dots,
+
+        # generate persistent animation object
+        anim = FuncAnimation(fig, update_plot, init_func=init_show,
+                             frames=range(0, max_num_steps, 36), interval=1000,
+                             blit=False, repeat=False)
+        return anim
+
