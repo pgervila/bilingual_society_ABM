@@ -374,9 +374,6 @@ class PostProcessor:
         return self.agent_data.loc[step, :].groupby(group_by)[['pct_cat_knowledge', 'pct_spa_knowledge',
                                                                'pct_L21_knowledge', 'pct_L12_knowledge']].describe()
 
-    def plot_lang_trend(self):
-        return self.model_data[['pct_bil', 'pct_spa', 'pct_cat']].plot(grid=True)
-
     def get_num_tokens_per_agent_type(self, step):
         idx = pd.IndexSlice
         df_num_tokens = self.agent_data[
@@ -400,3 +397,12 @@ class PostProcessor:
 
     def plot_population_size(self, max_num_steps):
         self.agent_data.count(level='Step').iloc[:max_num_steps].age.plot(grid=True)
+
+    def plot_lang_trend(self):
+        return self.model_data[['pct_bil', 'pct_spa', 'pct_cat']].plot(grid=True)
+
+    def plot_num_tokens_per_agent_type(self):
+        self.agent_data['tot_tokens_per_step'] = self.agent_data[['tokens_per_step_cat',
+                                                                  'tokens_per_step_spa']].sum(1)
+        data = self.agent_data[['agent_type', 'tot_tokens_per_step']]
+        data.groupby(['Step', 'agent_type']).mean().unstack().plot(y='tot_tokens_per_step', grid=True)
