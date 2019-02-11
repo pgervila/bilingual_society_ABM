@@ -382,17 +382,11 @@ class PostProcessor:
                                                        'tokens_per_step_cat']].sum(1)
         return df_num_tokens.groupby('agent_type').total_tokens.agg(['max', 'min', 'mean'])
 
-    def group_by_step_and_agent_type(self, *cols, method='mean'):
-        grouped_data = self.agent_data[[*cols,
-                                        'agent_type']].groupby(['Step', 'agent_type'])
-        aggregated_data = getattr(grouped_data, method)()
-        return aggregated_data.unstack()
+    def group_by_step_and_agent_type(self, cols, method='mean'):
+        return self.agent_data.pivot_table(cols, index='Step', columns='agent_type', aggfunc=method)
 
-    def group_by_step_and_language_type(self, *cols, method='mean'):
-        grouped_data = self.agent_data[[*cols,
-                                        'language']].groupby(['Step', 'language'])
-        aggregated_data = getattr(grouped_data, method)()
-        return aggregated_data.unstack()
+    def group_by_step_and_language_type(self, cols, method='mean'):
+        return self.agent_data.pivot_table(cols, index='Step', columns='language', aggfunc=method)
 
     def plot_population_size(self, max_num_steps):
         self.agent_data.count(level='Step').iloc[:max_num_steps].age.plot(grid=True)
