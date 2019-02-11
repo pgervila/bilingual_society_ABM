@@ -24,7 +24,7 @@ def newborn_family(model):
     mother = mother.evolve(Adolescent, ret_output=True)
     mother = mother.evolve(Young, ret_output=True)
 
-    father.get_job(ignore_lang_constraint=True)
+    father.get_job(keep_cluster=True, ignore_lang_constraint=True)
     father.update_acquaintances(mother, 0)
     father.get_married(mother)
     father.reproduce(day_prob=1.)

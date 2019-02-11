@@ -1634,12 +1634,16 @@ class Young(IndepAgent):
             Output:
                 * If constraints allow it, method assigns a new job to agent
         """
-        # TODO: break while loop to avoid infinite looping
 
         job_clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # pick a job from chosen cluster
-        job = np.random.choice(self.model.geo.clusters_info[job_clust]['jobs'])
-        if job.num_places and job.check_cand_conds(self, keep_cluster=keep_cluster):
+        try:
+            job = np.random.choice([job for job in self.model.geo.clusters_info[job_clust]['jobs']
+                                    if job.num_places > 0])
+        except ValueError:
+            job = np.random.choice([job for job in self.model.geo.clusters_info[job_clust]['jobs']])
+            job.increase_staff()
+        if job.check_cand_conds(self, keep_cluster=keep_cluster):
             job.hire_employee(self, move_home=move_home,
                               ignore_lang_constraint=ignore_lang_constraint)
 

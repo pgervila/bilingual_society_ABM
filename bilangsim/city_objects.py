@@ -928,7 +928,7 @@ class Job:
                 if agent_clust != job_clust:
                     agent.move_to_new_home(marriage=False)
 
-        # if hiring is unsuccessful, we know it is because of lang reasons
+        # if hiring is unsuccessful, we know for sure it is because of lang reasons
         if not agent.loc_info['job']:
             lang = 'L2' if agent.info['language'] == 0 else 'L1'
             agent.react_to_lang_exclusion(lang)
@@ -943,7 +943,7 @@ class Job:
             Args:
                 * agent: class instance.
         """
-        # self.num_places -= 1 #TODO: disable constraint until implementing endogenous economy model
+        self.num_places -= 1
         self.info['employees'].add(agent)
         # assign job to agent
         agent.loc_info['job'] = self
@@ -965,6 +965,9 @@ class Job:
             del agent.info['job_steps']
             if not self.model.init_mode:
                 self.look_for_employee(excluded_ag=agent)
+
+    def increase_staff(self, num_extra_vacancies=1):
+        self.num_places += num_extra_vacancies
 
     def __repr__(self):
         return 'Job_{0[clust]!r}_{1.pos!r}'.format(self.info, self)
