@@ -46,7 +46,9 @@ class DataProcessor(DataCollector):
                            'grid_height': self.model.grid.height,
                            'init_lang_distrib': self.model.init_lang_distrib,
                            'sort_by_dist': self.model.lang_ags_sorted_by_dist,
-                           'sort_within_clust': self.model.lang_ags_sorted_in_clust}
+                           'sort_within_clust': self.model.lang_ags_sorted_in_clust,
+                           'immigration': self.model.pct_immigration,
+                           'school_lang_policy': self.model.school_lang_policy}
 
         self.save_dir = save_dir
 
@@ -359,15 +361,14 @@ class PostProcessor:
                 * ag_id: integer. Agent unique id
         """
         idx = pd.IndexSlice
-        return self.agent_data.unstack().loc[idx[:], idx[:, ag_id]]
+        return self.agent_data.loc[idx[:, ag_id], idx[:]]
 
     def ag_results_by_type(self, ag_type):
-        """ Args:
+        """
+            Args:
                 * ag_type: string. Agent class type
         """
         return self.agent_data[self.agent_data['agent_type'] == ag_type].unstack()
-    # self.agent_data[self.agent_data['agent_type'] == 'Child'][filter_tokens].sum(1).unstack()
-    # self.agent_data[self.agent_data['agent_type'] == 'Child'][filter_tokens].sum(1).unstack().mean().mean()
 
     def get_grouped_lang_stats(self, step, group_by='agent_type'):
         return self.agent_data.loc[step, :].groupby(group_by)[['pct_cat_knowledge', 'pct_spa_knowledge',
