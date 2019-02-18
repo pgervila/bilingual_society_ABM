@@ -803,6 +803,13 @@ class SpeakerAgent(ListenerAgent):
 
     """ ListenerAgent class augmented with speaking-related methods """
 
+    @staticmethod
+    def get_unique_words_and_counts(word_samples):
+        # get unique words and counts
+        bcs = np.bincount(word_samples)
+        bool_non_zero_counts = bcs > 0
+        return np.where(bool_non_zero_counts)[0], bcs[bool_non_zero_counts]
+
     def get_num_words_per_conv(self, conv_length='M'):
         """ Computes number of words spoken per conversation for a given age
             based on a 'num_words vs age' curve
@@ -832,8 +839,8 @@ class SpeakerAgent(ListenerAgent):
         num_words = num_words * num_days
         word_samples = randZipf(self.model.cdf_data['s'][self.info['age']], num_words)
         # get unique words and counts
-        bcs = np.bincount(word_samples)
-        act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
+        act, act_c = self.get_unique_words_and_counts(word_samples)
+
         studied_words = {lang: [act, act_c]}
         # TODO : not all unknown words can be learned
         # TODO : customize 'process_unknown_words' method for read words ??
@@ -868,7 +875,6 @@ class SpeakerAgent(ListenerAgent):
         # TODO: VERY IMPORTANT -> Model language switch btw bilinguals, reflecting easiness of retrieval
         # TODO : model 'Grammatical foreigner talk' =>
         # TODO : how word choice is adapted by native speakers when speaking to adult learners
-        # TODO: NEED MODEL of how to deal with missed words = > L12 and L21, emergent langs with mixed vocab ???
 
         # sample must come from AVAILABLE words in R (retrievability) !!!! This can be modeled in following STEPS
 
@@ -884,8 +890,7 @@ class SpeakerAgent(ListenerAgent):
             word_samples = randZipf(self.model.cdf_data['s'][self.info['age']], num_words)
 
         # get unique words and counts
-        bcs = np.bincount(word_samples)
-        act, act_c = np.where(bcs > 0)[0], bcs[bcs > 0]
+        act, act_c = self.get_unique_words_and_counts(word_samples)
         # SLOWER BUT CLEANER APPROACH =>  act, act_c = np.unique(word_samples, return_counts=True)
 
         # check if conversation is btw bilinguals and therefore lang switch is possible
@@ -2197,7 +2202,7 @@ class Pensioner(Adult):
         for child in children:
             self.model.run_conversation(self, child, num_days=1)
 
-    def update_mem_decay(self, thresh=0.01, step_decay=0.1):
+    def update_mem_decay(self, thresh=0.01, step_decay=0.05):
         """
             Method to model memory loss because of old age
             Args:
