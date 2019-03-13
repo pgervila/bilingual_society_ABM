@@ -36,7 +36,7 @@ np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
 print('np_seed is {}'.format(np_seed))
-print('python hash seed is', os.environ['PYTHONHASHSEED'])
+print('python hash seed is {}'.format(os.environ['PYTHONHASHSEED']))
 
 
 class BiLangModel(Model):
@@ -62,10 +62,6 @@ class BiLangModel(Model):
 
     ic_pct_keys = [10, 25, 50, 75, 90]
     family_size = 4
-    # TODO : lang policies should be model params, not class attrs
-    school_lang_policy = [0, 1]
-    jobs_lang_policy = None
-    media_lang_policy = None
 
     steps_per_year = 36
     max_lifetime = 4000
@@ -77,9 +73,10 @@ class BiLangModel(Model):
     num_words_conv = {'VS': 1, 'S': 3, 'M': 10, 'L': 100}
 
     def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
-                 init_lang_distrib=[0.25, 0.65, 0.1], num_clusters=10, immigration=False, pct_immigration=0.005,
-                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True, mean_word_distance=0.3,
-                 check_setup=False, rand_seed=rand_seed, np_seed=np_seed):
+                 init_lang_distrib=(0.25, 0.65, 0.1), num_clusters=10, immigration=False, pct_immigration=0.005,
+                 lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True,
+                 school_lang_policy=[0, 1], univ_lang_policy=[0, 1], jobs_lang_policy=None, media_lang_policy=None,
+                 mean_word_distance=0.3, check_setup=False, rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
         if spoken_only:
@@ -97,6 +94,14 @@ class BiLangModel(Model):
             self.pct_immigration = None
         self.lang_ags_sorted_by_dist = lang_ags_sorted_by_dist
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
+
+        # Language policy
+        self.school_lang_policy = school_lang_policy
+        self.univ_lang_policy = univ_lang_policy
+        self.jobs_lang_policy = jobs_lang_policy
+        self.media_lang_policy = media_lang_policy
+
+        # Store random seeds for reproducibility
         self.seeds = [rand_seed, np_seed]
 
         self.conv_length_age_factor = None
