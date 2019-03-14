@@ -78,7 +78,7 @@ class BaseAgent:
     max_life_steps = 3600
 
     def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
-                 lang_passive_thresh=0.025, import_ic=False):
+                 lang_passive_thresh=0.025, import_ic=False, pct_use_lang_1=None):
         """ language => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
@@ -97,7 +97,10 @@ class BaseAgent:
         self.step_mask = {lang: np.zeros(self.model.vocab_red, dtype=np.bool)
                           for lang in self.model.langs}
         if import_ic:
-            self.set_lang_ics()
+            if pct_use_lang_1:
+                self.set_lang_ics(pct_use_key=pct_use_lang_1)
+            else:
+                self.set_lang_ics()
         else:
             # set null knowledge in all possible langs
             for lang in self.model.langs:
@@ -167,12 +170,12 @@ class BaseAgent:
         # set memory weights to evaluate lang exclusion
         self.set_excl_weights()
 
-    def set_lang_ics(self, s_0=0.01, t_0=1000, biling_key=None):
+    def set_lang_ics(self, s_0=0.01, t_0=1000, pct_use_key=None):
         """ Set agent's linguistic Initial Conditions by calling set up methods
         Args:
             * s_0: float <= 1. Initial memory intensity
             * t_0: elapsed days from last word-activation
-            * biling_key: integer from [10, 25, 50, 75, 90, 100]. Numbers specify amount of time
+            * pct_use_key: integer from [10, 25, 50, 75, 90, 100]. Numbers specify amount of time
                 agent has spoken given language throughout life. Specify only if specific bilingual level
                 is needed as input
         """
@@ -182,12 +185,12 @@ class BaseAgent:
         elif self.info['language'] == 2:
             self._set_null_lang_attrs('L1', s_0, t_0)
             self._set_lang_attrs('L2', '100_pct')
-        else: # BILINGUAL
+        else:
             # if key is not given, compute it randomly
-            if not biling_key:
-                biling_key = np.random.choice(self.model.ic_pct_keys)
-            L1_key = str(biling_key) + '_pct'
-            L2_key = str(100 - biling_key) + '_pct'
+            if not pct_use_key:
+                pct_use_key = np.random.choice(self.model.ic_pct_keys)
+            L1_key = str(pct_use_key) + '_pct'
+            L2_key = str(100 - pct_use_key) + '_pct'
             for lang, key in zip(['L1', 'L2'], [L1_key, L2_key]):
                 self._set_lang_attrs(lang, key)
         # always null conditions for transition languages
@@ -1845,6 +1848,27 @@ class Young(IndepAgent):
             self.look_for_partner()
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Adult)
+
+    def meets_lang_conds(self, langs, level):
+        """
+            Method to check if an agent meets the necessary linguistic
+            conditions requested by any hiring place
+            Args:
+                * langs: string or list of strings identifying languages (e.g. 'L1', 'L2')
+                * level: float. Minimum language knowledge percentage to be a school/univ teacher
+            Output:
+                * boolean. True if all conditions met, False otherwise
+        """
+        if type(langs) != list:
+            langs = [langs]
+            levels = [level]
+        else:
+            levels = [level] * 2
+        lang_conds = [self.lang_stats[lang]['pct'][self.info['age']] > level
+                      for lang, level in zip(langs, levels)]
+        return all(lang_conds)
+
+
 
 
 class YoungUniv(Adolescent):

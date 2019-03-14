@@ -72,14 +72,14 @@ class EducationCenter:
     """ Common methods to all educational centers such as Schools, Faculties """
 
     def __init__(self, model, pos, clust, num_places, age_range,
-                 lang_policy, min_age_teacher):
+                 lang_policy, min_age_teacher, min_lang_knowledge):
         self.model = model
         self.pos = pos
         self.agents_in = set()
         self.info = {'employees': set(), 'students': set(),
                      'lang_policy': lang_policy, 'clust': clust,
                      'age_range': age_range, 'num_places': num_places,
-                     'min_age_teacher': min_age_teacher}
+                     'min_age_teacher': min_age_teacher, 'min_lang_knowledge': min_lang_knowledge}
         self.grouped_studs = dict()
 
     def group_students_per_year(self):
@@ -198,13 +198,14 @@ class EducationCenter:
         Find teachers for the specified courses. Method looks first among available
         courseless teachers in educational centers from current cluster, then from other clusters.
         If not all places can be covered, method hires ordinary employees from closest to farthest
-        clusters
+        clusters. If no appropriate person is found for a vacancy, a new agent meeting all necessary
+        conditions is created
             Args:
                 * courses_keys: list of integer(s). Identifies courses for which teachers are missing
                     through age of its students
                 * ret_output: boolean. True when output needs to be returned
             Output:
-                *
+                * set of hired teachers instances
         """
         num_needed_teachers = len(set([c_id for c_id in courses_keys if c_id]))
         hired_teachers = []
@@ -226,9 +227,11 @@ class EducationCenter:
             teacher_type = Teacher if type(self) == School else TeacherUniv
             for _ in range(num_missing_teachers):
                 unique_id = self.model.set_available_ids.pop()
-                language = 0 if 0 in self.info['lang_policy'] else 2 # monolingual
+                lp = self.info['lang_policy']
+                language = 0 if 0 in lp else 1 if lp == [1] else 2
                 sex = 'M' if random.random() < 0.5 else 'F'
-                age = self.model.steps_per_year * self.info['min_age_teacher']
+                age = random.randint(self.model.steps_per_year * self.info['min_age_teacher'],
+                                     int(1.5 * self.model.steps_per_year * self.info['min_age_teacher']))
                 # find home for new agent
                 job_clust = self.info['clust']
                 av_homes = [home for home in self.model.geo.clusters_info[job_clust]['homes']
@@ -236,8 +239,10 @@ class EducationCenter:
                 random.shuffle(av_homes)
                 home = av_homes[0]
                 # create new agent
+                pct_use_lang_1 = 100 if language == 0 else 50 if language == 1 else 0
                 new_teacher = teacher_type(self.model, unique_id, language, sex,
-                                           age=age, home=home, import_ic=True)
+                                           age=age, home=home, import_ic=True,
+                                           pct_use_lang_1=pct_use_lang_1)
                 self.model.add_new_agent_to_model(new_teacher)
                 hired_teachers.append(new_teacher)
 
@@ -299,8 +304,6 @@ class EducationCenter:
             # delete blocked attribute
             del teacher.blocked
 
-
-
     def get_free_staff_from_cluster(self):
         """ This method will be implemented in subclasses """
         pass
@@ -323,9 +326,12 @@ class EducationCenter:
         for ix in self.model.geo.clusters_info[center_clust]['closest_clusters']:
             # list cluster teacher candidates.
             # TODO : hire teachers based on fact they have UNIV education !!!
+            lp = self.info['lang_policy']
+            needed_lang = 'L1' if lp == [0, 1] else ['L1', 'L2'] if lp == [1] else 'L2'
             new_teachers = [ag for ag in self.model.geo.clusters_info[ix]['agents']
-                            if ag.info['language'] in self.info['lang_policy'] and
-                            ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
+                            if ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
+                            ag.info['language'] in self.info['lang_policy'] and
+                            ag.meets_lang_conds(needed_lang, self.info['min_lang_knowledge']) and
                             not isinstance(ag, (Teacher, TeacherUniv, Pensioner))]
             # keep only one agent per marriage to avoid excessive recursion in agent moving
             candidates, consorts = [], []
@@ -483,14 +489,15 @@ class School(EducationCenter):
                 [1, 2] -> both 1, 2 agents may work here
     """
     def __init__(self, model, pos, clust, num_places, age_range=(1, 18),
-                 lang_policy=None, min_age_teacher=30):
+                 lang_policy=None, min_age_teacher=30, min_lang_knowledge=0.9):
         self.model = model
         self.pos = pos
         self.agents_in = set()
         self.info = {'employees': set(), 'students': set(),
                      'lang_policy': lang_policy, 'clust': clust,
                      'age_range': age_range, 'num_places': num_places,
-                     'min_age_teacher': min_age_teacher}
+                     'min_age_teacher': min_age_teacher,
+                     'min_lang_knowledge': min_lang_knowledge}
         self.grouped_studs = dict()
 
     def group_students_per_year(self):
@@ -639,7 +646,7 @@ class Faculty(EducationCenter):
                      'lang_policy': univ.info['lang_policy'],
                      'age_range': univ.info['age_range'],
                      'min_age_teacher': univ.info['min_age_teacher'], 'type': fac_type,
-                     'clust': univ.info['clust']}
+                     'clust': univ.info['clust'], 'min_lang_knowledge': univ.info['min_lang_knowledge']}
         self.grouped_studs = dict()
 
     def group_students_per_year(self):
@@ -756,11 +763,12 @@ class University:
     """ class that defines a University object for tertiary studies """
 
     def __init__(self, model, pos, clust, age_range=(19, 23),
-                 lang_policy=None, min_age_teacher=35):
+                 lang_policy=None, min_age_teacher=35, min_lang_knowledge=0.9):
         self.model = model
         self.pos = pos
         self.info = {'clust': clust, 'lang_policy': lang_policy, 'students': set(),
-                     'employees': set(), 'age_range': age_range, 'min_age_teacher': min_age_teacher}
+                     'employees': set(), 'age_range': age_range, 'min_age_teacher': min_age_teacher,
+                     'min_lang_knowledge': min_lang_knowledge}
         if lang_policy:
             self.info['lang_policy'] = lang_policy
         else:

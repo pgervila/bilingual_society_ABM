@@ -27,11 +27,11 @@ from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 9558
+# rand_seed = 5166
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-#np_seed = 5543
+# np_seed = 8464
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -75,7 +75,7 @@ class BiLangModel(Model):
     def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
                  init_lang_distrib=(0.25, 0.65, 0.1), num_clusters=10, immigration=False, pct_immigration=0.005,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True,
-                 school_lang_policy=[0, 1], univ_lang_policy=[0, 1], jobs_lang_policy=None, media_lang_policy=None,
+                 school_lang_policy=[1], univ_lang_policy=[1], jobs_lang_policy=None, media_lang_policy=None,
                  mean_word_distance=0.3, check_setup=False, rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
@@ -461,7 +461,7 @@ class BiLangModel(Model):
                 if ix_member < 2 and member.info['language'] == 1:
                     key = np.random.choice(self.ic_pct_keys)
                     key_parents.append(key)
-                    member.set_lang_ics(biling_key=key)
+                    member.set_lang_ics(pct_use_key=key)
                 elif ix_member < 2:
                     lang_mono = member.info['language']
                     member.set_lang_ics()
@@ -478,7 +478,7 @@ class BiLangModel(Model):
                                                  key,
                                                  hi=len(self.ic_pct_keys) - 1)
                     key = self.ic_pct_keys[idx_key]
-                    member.set_lang_ics(biling_key=key)
+                    member.set_lang_ics(pct_use_key=key)
         else:  # monolingual parents
             # check if children are bilingual
             if 1 in [m.info['language'] for m in family[2:]]:
@@ -488,7 +488,7 @@ class BiLangModel(Model):
                     else:
                         if member.info['language'] == 1:
                             # logical that child has much better knowledge of parents lang
-                            member.set_lang_ics(biling_key=90)
+                            member.set_lang_ics(pct_use_key=90)
                         else:
                             member.set_lang_ics()
             else:
