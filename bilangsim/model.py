@@ -27,7 +27,7 @@ from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-#rand_seed = 9558
+#rand_seed = 8042
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
