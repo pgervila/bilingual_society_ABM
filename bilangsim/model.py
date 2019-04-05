@@ -27,11 +27,11 @@ from .dataprocess import DataProcessor, DataViz
 
 # setting random seed
 rand_seed = random.randint(0, 10000)
-# rand_seed = 5166
+# rand_seed = 6968
 random.seed(rand_seed)
 # setting numpy seed
 np_seed = np.random.randint(10000)
-# np_seed = 8464
+# np_seed = 4955
 np.random.seed(np_seed)
 
 print('rand_seed is {}'.format(rand_seed))
@@ -60,29 +60,34 @@ class BiLangModel(Model):
                 return func(self, ag_init, others, *args, **kwargs)
             return wrapper
 
-    ic_pct_keys = [10, 25, 50, 75, 90]
-    family_size = 4
-
     steps_per_year = 36
-    max_lifetime = 4000
     langs = ('L1', 'L12', 'L21', 'L2')
     similarity_corr = {'L1': 'L2', 'L2': 'L1', 'L12': 'L2', 'L21': 'L1'}
+    real_vocab_size = 20000
+    compr_ratio = 40
     # avg conversation : 3 min, 20 sec
     # 125 words per minute on average
-    # 400 words per avg conversation -> avg conv has 10 tokens if comp_ratio = 40
+    # 400 words per avg conversation -> avg conv ( 'M' ) has 10 tokens if compr_ratio = 40
     num_words_conv = {'VS': 1, 'S': 3, 'M': 10, 'L': 100}
+    ic_pct_keys = [10, 25, 50, 75, 90]
 
-    def __init__(self, num_people, spoken_only=True, width=100, height=100, max_people_factor=5,
-                 init_lang_distrib=(0.25, 0.65, 0.1), num_clusters=10, immigration=False, pct_immigration=0.005,
+    family_size = 4
+    max_lifetime = 4000
+
+    def __init__(self, num_people, width=100, height=100, max_people_factor=5,
+                 init_lang_distrib=(0.25, 0.65, 0.1), num_clusters=10,
+                 immigration=False, pct_immigration=0.005,
                  lang_ags_sorted_by_dist=True, lang_ags_sorted_in_clust=True,
-                 school_lang_policy=[1], univ_lang_policy=[1], jobs_lang_policy=None, media_lang_policy=None,
+                 school_system={'split': True, 'LR1': 0.1, 'LR2': 0.1, 'min_pct': 0.2},
+                 univ_system={'split': True, 'LR1': 0.1, 'LR2': 0.1, 'min_pct': 0.2},
+                 job_system={'endogenous': False, 'pct_bilang_jobs': None },
+                 media_system={'endogenous': False, 'pct_L1': None},
                  mean_word_distance=0.3, check_setup=False, rand_seed=rand_seed, np_seed=np_seed):
         # TODO: group all attrs in a dict to keep it more tidy
         self.num_people = num_people
-        if spoken_only:
-            self.vocab_red = 500
-        else:
-            self.vocab_red = 1000
+
+        self.vocab_red = int(self.real_vocab_size / self.compr_ratio)
+
         self.grid_width = width
         self.grid_height = height
         self.max_people_factor = max_people_factor
@@ -96,10 +101,15 @@ class BiLangModel(Model):
         self.lang_ags_sorted_in_clust = lang_ags_sorted_in_clust
 
         # Language policy
-        self.school_lang_policy = school_lang_policy
-        self.univ_lang_policy = univ_lang_policy
-        self.jobs_lang_policy = jobs_lang_policy
-        self.media_lang_policy = media_lang_policy
+        self.school_system = school_system
+        self.univ_system = univ_system
+        self.job_system = job_system
+        self.media_system = media_system
+
+        # self.school_lang_policy = school_lang_policy
+        # self.univ_lang_policy = univ_lang_policy
+        # self.jobs_lang_policy = jobs_lang_policy
+        # self.media_lang_policy = media_lang_policy
 
         # Store random seeds for reproducibility
         self.seeds = [rand_seed, np_seed]
@@ -269,7 +279,7 @@ class BiLangModel(Model):
                 * def_conv_length: string. Default conversation length. Value may be modified
                     depending on agents linguistic knowledge. Values are from keys of 'num_words_conv'
                     model class attribute ('VS', 'S', 'M', 'L')
-                * num_days: integer [1, 10]. Number of days in one 10day-step this kind of speech is done
+                * num_days: integer 1-10. Number of days in one 10day-step this kind of speech is done
             Output:
                 * Method updates lang arrays for all active agents involved. It also updates acquaintances
         """
@@ -494,6 +504,9 @@ class BiLangModel(Model):
             else:
                 for member in family:
                     member.set_lang_ics()
+
+    def get_family_dominant_lang(self, family):
+        return int(self.get_conv_params(family)['lang_group'][0])
 
     def get_lang_fam_members(self, family):
         """

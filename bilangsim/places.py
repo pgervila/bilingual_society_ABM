@@ -69,15 +69,18 @@ class Home:
 
 
 class EducationCenter:
-    """ Common methods to all educational centers such as Schools, Faculties """
+    """
+        Class encapsulating attributes and methods common to all educational
+        centers such as Schools, Faculties
+    """
 
     def __init__(self, model, pos, clust, num_places, age_range,
-                 lang_policy, min_age_teacher, min_lang_knowledge):
+                 lang_system, min_age_teacher, min_lang_knowledge):
         self.model = model
         self.pos = pos
         self.agents_in = set()
         self.info = {'employees': set(), 'students': set(),
-                     'lang_policy': lang_policy, 'clust': clust,
+                     'lang_system': lang_system, 'clust': clust,
                      'age_range': age_range, 'num_places': num_places,
                      'min_age_teacher': min_age_teacher, 'min_lang_knowledge': min_lang_knowledge}
         self.grouped_studs = dict()
@@ -193,6 +196,11 @@ class EducationCenter:
             elif c_info['teacher'].info['age'] >= retirement_age:
                 c_info['teacher'].evolve(Pensioner)
 
+    def get_school_lang_from_policy(self):
+        lp = self.info['lang_policy']
+        language = 0 if 0 in lp else 1 if lp == [1] else 2
+        return language
+
     def find_teachers(self, courses_keys):
         """
         Find teachers for the specified courses. Method looks first among available
@@ -237,6 +245,8 @@ class EducationCenter:
                 av_homes = [home for home in self.model.geo.clusters_info[job_clust]['homes']
                             if not home.info['occupants']]
                 random.shuffle(av_homes)
+                if not av_homes:
+                    av_homes = [self.model.geo.add_new_home(job_clust)]
                 home = av_homes[0]
                 # create new agent
                 pct_use_lang_1 = 100 if language == 0 else 50 if language == 1 else 0
@@ -488,16 +498,32 @@ class School(EducationCenter):
                 [1] -> only 1 agents may work here
                 [1, 2] -> both 1, 2 agents may work here
     """
-    def __init__(self, model, pos, clust, num_places, age_range=(1, 18),
-                 lang_policy=None, min_age_teacher=30, min_lang_knowledge=0.9):
+    def __init__(self, model, pos, clust, num_places, lang_system,
+                 age_range=(1, 18), lang_policy=None, min_age_teacher=30,
+                 min_lang_knowledge=0.9, num_school_days_per_step=7):
         self.model = model
         self.pos = pos
         self.agents_in = set()
-        self.info = {'employees': set(), 'students': set(),
-                     'lang_policy': lang_policy, 'clust': clust,
+        # assuming seven days of school per step
+        if lang_system == 1:
+            lang_policy = [1]
+            num_days_lang1 = (1 - self.model.school_system['LR1']) * num_school_days_per_step
+            num_days_lang2 = self.model.school_system['LR1'] * num_school_days_per_step
+        elif lang_system == 0:
+            lang_policy = [0, 1]
+            num_days_lang1 = (1 - self.model.school_system['LR1']) * num_school_days_per_step
+            num_days_lang2 = self.model.school_system['LR1'] * num_school_days_per_step
+        elif lang_system == 2:
+            lang_policy = [1, 2]
+            num_days_lang1 = self.model.school_system['LR2'] * num_school_days_per_step
+            num_days_lang2 = (1 - self.model.school_system['LR2']) * num_school_days_per_step
+
+        self.info = {'employees': set(), 'students': set(), 'clust': clust,
+                     'lang_system': lang_system, 'lang_policy': lang_policy,
                      'age_range': age_range, 'num_places': num_places,
                      'min_age_teacher': min_age_teacher,
-                     'min_lang_knowledge': min_lang_knowledge}
+                     'min_lang_knowledge': min_lang_knowledge,
+                     'num_days_lang1': num_days_lang1, 'num_days_lang2': num_days_lang2}
         self.grouped_studs = dict()
 
     def group_students_per_year(self):

@@ -1,5 +1,4 @@
-import sys
-from importlib import reload
+import itertools as it
 import numpy as np
 import random
 from scipy.spatial.distance import pdist
@@ -11,7 +10,7 @@ from math import ceil
 # import city_objects
 # reload(sys.modules['city_objects'])
 from .agent import Child, Adolescent, Young, Adult
-from .city_objects import Job, School, University, Home
+from .places import Job, School, University, Home
 
 
 class GeoMapper:
@@ -242,28 +241,69 @@ class GeoMapper:
 
         for clust_idx, (clust_size, clust_c_coords) in enumerate(zip(self.cluster_sizes,
                                                                      self.clust_centers)):
-            school_places_per_cluster = int(buffer_factor * clust_size / 2)
-            num_schools_per_cluster = ceil(school_places_per_cluster / max_school_size)
-            # generate school coords
-            x_s, y_s = self.generate_points_coords(clust_c_coords, num_schools_per_cluster, clust_idx)
-            if (not self.model.lang_ags_sorted_by_dist) and self.model.lang_ags_sorted_in_clust:
-                x_s, y_s = self.sort_coords_in_clust(x_s, y_s, clust_idx)
-            for x, y in zip(x_s, y_s):
-                if school_places_per_cluster < max_school_size:
-                    school_size = max(min_school_size, school_places_per_cluster)
-                else:
-                    school_size = max_school_size
-                school = School(self.model, (x, y), clust_idx, school_size,
-                                lang_policy=self.model.school_lang_policy)
-                self.clusters_info[clust_idx]['schools'].append(school)
-                school_places_per_cluster -= school_size
+            if not self.model.school_system['split']:
+                school_places_per_cluster = int(buffer_factor * clust_size / 2)
+                num_schools_per_cluster = ceil(school_places_per_cluster / max_school_size)
+                # generate school coords
+                x_s, y_s = self.generate_points_coords(clust_c_coords, num_schools_per_cluster, clust_idx)
+                if (not self.model.lang_ags_sorted_by_dist) and self.model.lang_ags_sorted_in_clust:
+                    x_s, y_s = self.sort_coords_in_clust(x_s, y_s, clust_idx)
+                for x, y in zip(x_s, y_s):
+                    if school_places_per_cluster < max_school_size:
+                        school_size = max(min_school_size, school_places_per_cluster)
+                    else:
+                        school_size = max_school_size
+                    school = School(self.model, (x, y), clust_idx, school_size,
+                                    lang_system=1)
+                    self.clusters_info[clust_idx]['schools'].append(school)
+                    school_places_per_cluster -= school_size
+            else:
+                langs = [0, 2]
+                school_places_per_cluster = int(buffer_factor * clust_size / 2)
+                pcts = self.get_lang_distrib_per_clust(clust_idx)
+                num_schools_per_cl_and_lang = []
+                for lang in langs:
+                    pct = pcts[lang] + pcts[1]/2
+                    if pct >= self.model.school_system['min_pct']:
+                        num_schools_per_cl_and_lang.append(ceil(pct * school_places_per_cluster /
+                                                                max_school_size))
+                    else:
+                        num_schools_per_cl_and_lang.append(0)
+                num_schools_per_cluster = sum(num_schools_per_cl_and_lang)
+
+                # generate school coords
+                x_s, y_s = self.generate_points_coords(clust_c_coords,
+                                                       num_schools_per_cluster,
+                                                       clust_idx)
+                if (not self.model.lang_ags_sorted_by_dist) and self.model.lang_ags_sorted_in_clust:
+                    x_s, y_s = self.sort_coords_in_clust(x_s, y_s, clust_idx)
+                zipped_coords = zip(x_s, y_s)
+                slices = (num_schools_per_cl_and_lang[0], num_schools_per_cl_and_lang[1])
+                iterable = iter(zipped_coords)
+                sliced_zipped_coords = [list(it.islice(iterable, sl)) for sl in slices]
+                for coords, lang in zip(sliced_zipped_coords, langs):
+                    for x, y in coords:
+                        school = School(self.model, (x, y), clust_idx,
+                                        max_school_size, lang_system=lang)
+                        self.clusters_info[clust_idx]['schools'].append(school)
+
+
+
+
+
+
+
+
+
+
 
     def map_universities(self, pct_univ_towns=0.2):
         num_univ = ceil(pct_univ_towns * self.num_clusters)
         ixs_sorted = np.argsort(self.cluster_sizes)[::-1][:num_univ]
         for clust_idx in ixs_sorted:
             x_u, y_u = self.generate_points_coords(self.clust_centers[clust_idx], 1, clust_idx)
-            univ = University(self.model, (x_u[0], y_u[0]), clust_idx)
+            univ = University(self.model, (x_u[0], y_u[0]), clust_idx,
+                              lang_policy=self.model.univ_lang_policy)
             self.clusters_info[clust_idx]['university'] = univ
 
     def map_homes(self, num_people_per_home=4):
@@ -354,7 +394,7 @@ class GeoMapper:
         self.model.geo.clusters_info[clust_id]['homes'].append(new_home)
         return new_home
 
-    def add_new_school(self, clust_id):
+    def add_new_school(self, clust_id, lang_system):
         """ Method to add a new school to a given cluster
             Args:
                 * clust_id: integer. Cluster index
@@ -363,7 +403,7 @@ class GeoMapper:
         x_nsc = self.model.geo.generate_dim_coord(self.model.grid.width, x_c)
         y_nsc = self.model.geo.generate_dim_coord(self.model.grid.height, y_c)
         new_school = School(self.model, (x_nsc, y_nsc), clust_id, num_places=400,
-                            lang_policy=self.model.school_lang_policy)
+                            lang_system=lang_system)
         self.clusters_info[clust_id]['schools'].append(new_school)
         return new_school
 

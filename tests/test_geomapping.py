@@ -9,9 +9,8 @@ def model():
 
 
 def test_add_new_school(model):
-
     num_schools = len(model.geo.clusters_info[0]['schools'])
-    new_school = model.geo.add_new_school(0)
+    new_school = model.geo.add_new_school(0, lang_system=1)
     new_num_schools = len(model.geo.clusters_info[0]['schools'])
 
     assert new_num_schools == num_schools + 1

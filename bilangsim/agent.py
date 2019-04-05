@@ -239,7 +239,7 @@ class BaseAgent:
                 * lang: integer. Value from [0, 1]
             Output:
                 * Percentage knowledge in specified lang or
-                  percentage knowledges in both langs if lang arg is
+                  percentage knowledges in both langs if 'lang' arg is
                   not specified
         """
         if lang is None:
@@ -347,6 +347,11 @@ class BaseAgent:
             self.model.remove_after_death(self)
             if ret_out:
                 return True
+
+    def get_close_family(self):
+        close_family = [ag for ag, labels in self.model.nws.family_network[self].items()
+                        if labels['fam_link'] in ['father', 'mother', 'sibling']]
+        return close_family
 
     def get_family_relative(self, fam_link):
         """
@@ -769,8 +774,15 @@ class ListenerAgent(BaseAgent):
         # find school in cluster (with needed course available) from closest to farthest
         clust_info = self.model.geo.clusters_info[self['clust']]
 
-        schools_with_course = [school for school in clust_info['schools']
-                               if school.find_course_key(self) in school.grouped_studs]
+        if self.model.school_system['split']:
+            ag_family = [self] + self.get_close_family()
+            picked_lang = self.model.get_family_dominant_lang(ag_family)
+            schools_with_course = [school for school in clust_info['schools']
+                                   if school.info['lang_system'] == picked_lang
+                                   and school.find_course_key(self) in school.grouped_studs]
+        else:
+            schools_with_course = [school for school in clust_info['schools']
+                                   if school.find_course_key(self) in school.grouped_studs]
 
         sorted_ixs_with_course = np.argsort([pdist([self.loc_info['home'].pos, school.pos])[0]
                                              for school in schools_with_course])
@@ -798,7 +810,11 @@ class ListenerAgent(BaseAgent):
                     break
             else:
                 # create new school
-                school = self.model.geo.add_new_school(self['clust'])
+                if self.model.school_system['split']:
+                    lang_system = 0 if picked_lang == 0 else 2
+                else:
+                    lang_system = 1
+                school = self.model.geo.add_new_school(self['clust'], lang_system=lang_system)
         school.assign_student(self)
 
 
@@ -856,7 +872,7 @@ class SpeakerAgent(ListenerAgent):
     def pick_vocab(self, lang, num_words=None, conv_length='M', min_age_interlocs=None,
                    biling_interloc=False, num_days=10):
         """ Method that models word choice by self agent in a conversation and
-            updates agent's corresponding lang arrays
+            updates agent's corresponding lang arrays.
             Word choice is governed by vocabulary knowledge constraints
             Args:
                 * lang: integer in [0, 1] {0:'spa', 1:'cat'}
@@ -886,7 +902,7 @@ class SpeakerAgent(ListenerAgent):
         # TODO : VI BETTER IDEA. Known thoughts are determined by UNION of all words known in L1 + L12 + L21 + L2
 
         if not num_words:
-            num_words = self.get_num_words_per_conv(conv_length) * num_days
+            num_words = int(self.get_num_words_per_conv(conv_length) * num_days)
         if min_age_interlocs:
             word_samples = randZipf(self.model.cdf_data['s'][min_age_interlocs], num_words)
         else:
@@ -1815,6 +1831,25 @@ class Young(IndepAgent):
         except IndexError:
             pass
 
+    def meets_lang_conds(self, langs, level):
+        """
+            Method to check if an agent meets the necessary linguistic
+            conditions requested by any hiring place
+            Args:
+                * langs: string or list of strings identifying languages (e.g. 'L1', 'L2')
+                * level: float. Minimum language knowledge percentage to be a school/univ teacher
+            Output:
+                * boolean. True if all conditions met, False otherwise
+        """
+        if type(langs) != list:
+            langs = [langs]
+            levels = [level]
+        else:
+            levels = [level] * 2
+        lang_conds = [self.lang_stats[lang]['pct'][self.info['age']] > level
+                      for lang, level in zip(langs, levels)]
+        return all(lang_conds)
+
     def stage_1(self, ix_agent, num_days=7):
         self.evaluate_lang_exclusion()
         SpeakerAgent.stage_1(self, num_days=num_days)
@@ -1848,27 +1883,6 @@ class Young(IndepAgent):
             self.look_for_partner()
         if self.info['age'] == self.age_high * self.model.steps_per_year:
             self.evolve(Adult)
-
-    def meets_lang_conds(self, langs, level):
-        """
-            Method to check if an agent meets the necessary linguistic
-            conditions requested by any hiring place
-            Args:
-                * langs: string or list of strings identifying languages (e.g. 'L1', 'L2')
-                * level: float. Minimum language knowledge percentage to be a school/univ teacher
-            Output:
-                * boolean. True if all conditions met, False otherwise
-        """
-        if type(langs) != list:
-            langs = [langs]
-            levels = [level]
-        else:
-            levels = [level] * 2
-        lang_conds = [self.lang_stats[lang]['pct'][self.info['age']] > level
-                      for lang, level in zip(langs, levels)]
-        return all(lang_conds)
-
-
 
 
 class YoungUniv(Adolescent):
@@ -2061,15 +2075,19 @@ class Teacher(Adult):
 
     def speak_to_class(self):
         # TODO: help students to learn meaning of unknown words
-        job, course_key = self.loc_info['job']
+        school, course_key = self.loc_info['job']
+
+        # TODO: need quick function ( dict?? ) to get language to be spoken from school type
+        lp = self.model.school_lang_policy
+
         if course_key:
             # teacher speaks to entire course
-            studs = list(job.grouped_studs[course_key]['students'])
+            studs = list(school.grouped_studs[course_key]['students'])
             if studs:
-                self.speak_to_group(studs, lang=0, conv_length='L', num_days=7)
-
-    def speak_with_colleagues(self):
-        pass
+                self.speak_to_group(studs, lang=0, conv_length='L',
+                                    num_days=school.info['num_days_lang1'])
+                self.speak_to_group(studs, lang=1, conv_length='L',
+                                    num_days=school.info['num_days_lang2'])
 
     def stage_1(self, ix_agent, num_days=7):
         super().stage_1(ix_agent, num_days=num_days)
