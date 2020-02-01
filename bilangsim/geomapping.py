@@ -594,7 +594,7 @@ class GeoMapper:
                 * numpy array where indices are lang cathegories and values are percentages
         """
         if self.clusters_info[clust_ix]['agents']:
-            clust_lang_cts = Counter([ag.info['language'] for ag
+            clust_lang_cts = Counter([ag.info['lang_type'] for ag
                                       in self.clusters_info[clust_ix]['agents']])
         else:
             clust_lang_cts = Counter(self.langs_per_clust[clust_ix])

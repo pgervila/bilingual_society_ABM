@@ -50,7 +50,7 @@ def family_and_stranger_ags(model):
         pass
     try:
         for ag in model.schedule.agents:
-            if type(ag) == Adult and ag.info['language'] == 1:
+            if type(ag) == Adult and ag.info['lang_type'] == 1:
                 pct1 = ag.lang_stats['L1']['pct'][ag.info['age']]
                 pct2 = ag.lang_stats['L2']['pct'][ag.info['age']]
                 if pct2 > pct1 > 0.5:
@@ -62,7 +62,7 @@ def family_and_stranger_ags(model):
         parent, child = ag, ch
 
     for stranger in model.schedule.agents:
-        if type(stranger) == Adult and stranger.info['language'] == 0:
+        if type(stranger) == Adult and stranger.info['lang_type'] == 0:
             if stranger.lang_stats['L2']['pct'][stranger.info['age']] <= 0.05:
                 break
 
@@ -135,15 +135,15 @@ def test_model_consistency(model_param):
 def test_run_conversation(model):
     kn_p_nw = model.nws.known_people_network
     for ag in model.schedule.agents:
-        if ag.info['language'] == 0 and isinstance(ag, Young):
+        if ag.info['lang_type'] == 0 and isinstance(ag, Young):
             ag_init = ag
             break
     for ag in model.schedule.agents:
-        if ag.info['language'] == 1 and ag not in kn_p_nw[ag_init]:
+        if ag.info['lang_type'] == 1 and ag not in kn_p_nw[ag_init]:
             ag1 = ag
             break
     for ag in model.schedule.agents:
-        if ag.info['language'] == 2 and ag not in kn_p_nw[ag_init]:
+        if ag.info['lang_type'] == 2 and ag not in kn_p_nw[ag_init]:
             ag2 = ag
             break
     others = [ag1, ag2]
@@ -167,7 +167,7 @@ def test_run_conversation(model):
 def test_get_conv_params_strangers(model, stranger_ags, langs, pcts_1, pcts_2, expected):
     agents = stranger_ags[:len(langs)]
     for idx, agent in enumerate(agents):
-        agent.info['language'] = langs[idx]
+        agent.info['lang_type'] = langs[idx]
         agent.lang_stats['L1']['pct'][agent.info['age']] = pcts_1[idx]
         agent.lang_stats['L2']['pct'][agent.info['age']] = pcts_2[idx]
     params = model.get_conv_params(agents)
@@ -180,7 +180,7 @@ def test_get_conv_params_family(model, family_ags,
                                 langs, pcts_1, pcts_2, langs_with_known, expected):
     agents = family_ags[:len(langs)]
     for idx, agent in enumerate(agents):
-        agent.info['language'] = langs[idx]
+        agent.info['lang_type'] = langs[idx]
         agent.lang_stats['L1']['pct'][agent.info['age']] = pcts_1[idx]
         agent.lang_stats['L2']['pct'][agent.info['age']] = pcts_2[idx]
     # set spoken language between acquainted agents

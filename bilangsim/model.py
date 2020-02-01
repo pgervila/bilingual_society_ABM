@@ -244,7 +244,7 @@ class BiLangModel(Model):
         pcts = np.array(parent1.get_langs_pcts() + parent2.get_langs_pcts())
         langs_with_parents = []
         for pcs, parent in zip([pcts[:2], pcts[2:]], [parent1, parent2]):
-            par_lang = parent.info['language']
+            par_lang = parent.info['lang_type']
             if par_lang in [0, 2]:
                 lang_with_parent = 0 if par_lang == 0 else 1
             else:
@@ -293,7 +293,7 @@ class BiLangModel(Model):
         except ZeroDivisionError:
             return
         for ix, (ag, lang) in enumerate(zip(ags, conv_params['lang_group'])):
-            if ag.info['language'] != conv_params['mute_type']:
+            if ag.info['lang_type'] != conv_params['mute_type']:
                 spoken_words = ag.pick_vocab(lang, conv_length=conv_params['conv_length'],
                                              min_age_interlocs=conv_params['min_group_age'],
                                              num_days=num_days)
@@ -307,21 +307,21 @@ class BiLangModel(Model):
         # update acquaintances
         if isinstance(others, list):
             for ix, ag in enumerate(others):
-                if ag.info['language'] != conv_params['mute_type']:
+                if ag.info['lang_type'] != conv_params['mute_type']:
                     ag_init.update_acquaintances(ag, conv_params['lang_group'][0])
                     ag.update_acquaintances(ag_init, conv_params['lang_group'][ix + 1])
         else:
-            if others.info['language'] != conv_params['mute_type']:
+            if others.info['lang_type'] != conv_params['mute_type']:
                 ag_init.update_acquaintances(others, conv_params['lang_group'][0])
                 others.update_acquaintances(ag_init, conv_params['lang_group'][1])
 
     def get_conv_params(self, ags, def_conv_length='M'): # TODO: add higher thresholds for job conversation
         """
         Method to find out parameters of conversation between 2 or more agents:
-            conversation lang or lang spoken by each involved speaker,
-            conversation type(mono or bilingual),
-            mute agents (agents that only listen),
-            conversation length.
+            - conversation lang or lang spoken by each involved speaker,
+            - conversation type(mono or bilingual),
+            - mute agents (agents that only listen),
+            - conversation length.
         It implements MAXIMIN language rule from Van Parijs
         Args:
             * ags : list of all agent class instances that take part in conversation
@@ -347,7 +347,7 @@ class BiLangModel(Model):
         conv_params = dict(multilingual=False, mute_type=None, conv_length=def_conv_length)
 
         # get set of language types involved
-        ags_lang_types = set([ag.info['language'] for ag in ags])
+        ags_lang_types = set([ag.info['lang_type'] for ag in ags])
         # get lists of favorite language per agent
         fav_langs_and_pcts = [ag.get_dominant_lang(ret_pcts=True) for ag in ags]
         # define lists with agent competences and preferences in each language
@@ -410,7 +410,7 @@ class BiLangModel(Model):
                 # slight bias towards L1 => conversation in L1 (if initiator belongs to this group)
                 # but some speakers will stay mute = > short conversation
                 mute_type = 2
-                if ag_init.info['language'] != mute_type:
+                if ag_init.info['lang_type'] != mute_type:
                     lang_group = 0
                 else:
                     lang_group, mute_type = 1, 0
@@ -419,10 +419,10 @@ class BiLangModel(Model):
             elif not idxs_real_monolings_l1 and idxs_real_monolings_l2:
                 # There are real L2 monolinguals in the group
                 # Everybody partially understands L2, but some agents don't understand L1 at all
-                # Some agents only understand and speak l2, while others partially understand but can't speak L2
+                # Some agents only understand and speak L2, while others partially understand but can't speak L2
                 # slight bias towards l2 => conversation in L2 but some speakers will stay mute = > short conversation
                 mute_type = 0
-                if ag_init.info['language'] != mute_type:
+                if ag_init.info['lang_type'] != mute_type:
                     lang_group = 1
                 else:
                     lang_group, mute_type = 0, 2
@@ -431,7 +431,7 @@ class BiLangModel(Model):
                 # There are agents on both lang sides unable to follow other's speech.
                 # Initiator agent will speak with whom understands him, others will listen but understand nothing
 
-                if ag_init.info['language'] == 1:
+                if ag_init.info['lang_type'] == 1:
                     # init agent is bilingual
                     # pick majority lang
                     num_l1_speakers = sum([1 if pct >= 0.1 else 0 for pct in l1_pcts])
@@ -464,16 +464,16 @@ class BiLangModel(Model):
         """
         # apply correlation between parents' and children's lang knowledge if parents bilinguals
         # check if at least a parent is bilingual
-        if 1 in [m.info['language'] for m in family[:2]]:
+        if 1 in [m.info['lang_type'] for m in family[:2]]:
             # define list to store bilingual parents' percentage knowledge
             key_parents = []
             for ix_member, member in enumerate(family):
-                if ix_member < 2 and member.info['language'] == 1:
+                if ix_member < 2 and member.info['lang_type'] == 1:
                     key = np.random.choice(self.ic_pct_keys)
                     key_parents.append(key)
                     member.set_lang_ics(pct_use_key=key)
                 elif ix_member < 2:
-                    lang_mono = member.info['language']
+                    lang_mono = member.info['lang_type']
                     member.set_lang_ics()
                 elif ix_member >= 2:
                     if len(key_parents) == 1:  # if only one bilingual parent
@@ -491,12 +491,12 @@ class BiLangModel(Model):
                     member.set_lang_ics(pct_use_key=key)
         else:  # monolingual parents
             # check if children are bilingual
-            if 1 in [m.info['language'] for m in family[2:]]:
+            if 1 in [m.info['lang_type'] for m in family[2:]]:
                 for ix_member, member in enumerate(family):
                     if ix_member < 2:
                         member.set_lang_ics()
                     else:
-                        if member.info['language'] == 1:
+                        if member.info['lang_type'] == 1:
                             # logical that child has much better knowledge of parents lang
                             member.set_lang_ics(pct_use_key=90)
                         else:
@@ -703,31 +703,31 @@ class BiLangModel(Model):
         self.data_process.collect()
         #print('Completed step number {}'.format(self.schedule.steps))
 
-    def update_centers(self):
-        """ Method to update students, teachers and courses
+    def update_places_partial(self, update_phase, job_update=False, teacher_swap=False):
+        """ Method to update all universities in model """
+        for clust_idx, clust_info in self.geo.clusters_info.items():
+            if 'university' in clust_info:
+                for fac in clust_info['university'].faculties.values():
+                    if fac.info['students']:
+                        getattr(fac, update_phase)()
+            for school in clust_info['schools']:
+                getattr(school, update_phase)()
+                if teacher_swap:
+                    # every 4 years only, make teachers swap
+                    if not self.schedule.steps % (4 * self.steps_per_year):
+                        school.swap_teachers_courses()
+            # set lang policy in job centers
+            if job_update:
+                for job in clust_info['jobs']:
+                    job.set_lang_policy()
+
+    def update_places(self):
+        """
+            Method to update students, teachers and courses
             at the end of each year, as well as jobs' language policy
         """
-        for clust_idx, clust_info in self.geo.clusters_info.items():
-            if 'university' in clust_info:
-                for fac in clust_info['university'].faculties.values():
-                    if fac.info['students']:
-                        fac.update_courses_phase_1()
-            for school in clust_info['schools']:
-                school.update_courses_phase_1()
-            # set lang policy in job centers
-            for job in clust_info['jobs']:
-                job.set_lang_policy()
-        for clust_idx, clust_info in self.geo.clusters_info.items():
-            if 'university' in clust_info:
-                for fac in clust_info['university'].faculties.values():
-                    if fac.info['students']:
-                        fac.update_courses_phase_2()
-            for school in clust_info['schools']:
-                school.update_courses_phase_2()
-                # every 4 years only, make teachers swap
-                if not self.schedule.steps % (4 * self.steps_per_year):
-                    school.swap_teachers_courses()
-                # TODO: check if courses have more than 25 students enrolled => Create new school
+        self.update_places_partial('update_courses_phase_1', job_update=True)
+        self.update_places_partial('update_courses_phase_2', teacher_swap=True)
 
     def run_model(self, steps, save_data_freq=50, pickle_model_freq=5000,
                   viz_steps_period=None, save_dir=''):

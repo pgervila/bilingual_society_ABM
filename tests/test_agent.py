@@ -27,7 +27,7 @@ def model():
 def dummy_agent(model):
     # find agent that speaks L1
     for ag in model.schedule.agents:
-        if ag.info['language'] == 0:
+        if ag.info['lang_type'] == 0:
             agent = ag
             break
     return agent

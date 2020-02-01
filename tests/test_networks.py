@@ -11,12 +11,12 @@ def model():
 @pytest.fixture(scope="function")
 def newborn_family(model):
     father = [ag for ag in model.schedule.agents if type(ag) == Child and
-              ag.info['sex'] == 'M' and ag.info['language'] in [0, 1]][0]
+              ag.info['sex'] == 'M' and ag.info['lang_type'] in [0, 1]][0]
     mother = [ag for ag in model.schedule.agents if type(ag) == Child
-              and ag.info['sex'] == 'F' and ag.info['language'] in [0, 1] and
+              and ag.info['sex'] == 'F' and ag.info['lang_type'] in [0, 1] and
               ag not in father.get_family_relative('sibling')][0]
-    father.grow(growth_inc=model.steps_per_year*20 - father.info['language'])
-    mother.grow(growth_inc=model.steps_per_year*20 - mother.info['language'])
+    father.grow(growth_inc=model.steps_per_year*20 - father.info['lang_type'])
+    mother.grow(growth_inc=model.steps_per_year*20 - mother.info['lang_type'])
 
     father = father.evolve(Adolescent, ret_output=True)
     father = father.evolve(Young, ret_output=True)

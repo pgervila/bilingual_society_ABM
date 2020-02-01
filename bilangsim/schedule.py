@@ -59,7 +59,7 @@ class StagedActivationModif(StagedActivation):
         # loop and update courses in schools and universities year after year
         # update jobs lang policy
         if self.steps and not self.steps % self.model.steps_per_year:
-            self.model.update_centers()
+            self.model.update_places()
             # Add immigration families if requested
             if self.model.pct_immigration:
                 self.model.add_immigration()

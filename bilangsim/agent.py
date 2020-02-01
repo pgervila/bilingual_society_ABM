@@ -60,7 +60,7 @@ class BaseAgent:
             * unique_id: integer. Value must be unique because it is used to construct
                 the instance hash value. It should never be modified. Value should be drawn
                 from available values in model.set_available_ids
-            * language: integer in [0, 1, 2]. 0 -> mono L1, 1 -> bilingual, 2 -> mono L2
+            * lang_type: integer in [0, 1, 2]. 0 -> mono L1, 1 -> bilingual, 2 -> mono L2
             * sex: string. Either 'M' or 'F'
             * age: integer
             * home: home class instance
@@ -77,14 +77,14 @@ class BaseAgent:
     k = np.log(10 / 9)
     max_life_steps = 3600
 
-    def __init__(self, model, unique_id, language, sex, age=0, home=None, lang_act_thresh=0.1,
+    def __init__(self, model, unique_id, lang_type, sex, age=0, home=None, lang_act_thresh=0.1,
                  lang_passive_thresh=0.025, import_ic=False, pct_use_lang_1=None):
-        """ language => 0, 1, 2 => spa, bil, cat  """
+        """ lang_type => 0, 1, 2 => spa, bil, cat  """
         self.model = model
         self.unique_id = unique_id
         # generate random number of maxim friends with fat-tail distribution
         max_num_friends = np.clip(np.random.lognormal(1, 1), a_min=3, a_max=None).astype(int)
-        self.info = {'age': age, 'language': language, 'sex': sex, 'max_num_friends': max_num_friends }
+        self.info = {'age': age, 'lang_type': lang_type, 'sex': sex, 'max_num_friends': max_num_friends}
         self.loc_info = {'home': None}
         if home:
             home.assign_to_agent(self)
@@ -179,10 +179,10 @@ class BaseAgent:
                 agent has spoken given language throughout life. Specify only if specific bilingual level
                 is needed as input
         """
-        if self.info['language'] == 0:
+        if self.info['lang_type'] == 0:
             self._set_lang_attrs('L1', '100_pct')
             self._set_null_lang_attrs('L2', s_0, t_0)
-        elif self.info['language'] == 2:
+        elif self.info['lang_type'] == 2:
             self._set_null_lang_attrs('L1', s_0, t_0)
             self._set_lang_attrs('L2', '100_pct')
         else:
@@ -278,17 +278,17 @@ class BaseAgent:
 
         # TODO : adapt all languages spoken to known people when threshold reaches 0.1
 
-        if self.info['language'] == 0:
+        if self.info['lang_type'] == 0:
             if self.get_langs_pcts(1) >= switch_threshold:
-                self.info['language'] = 1
-        elif self.info['language'] == 2:
+                self.info['lang_type'] = 1
+        elif self.info['lang_type'] == 2:
             if self.get_langs_pcts(0) >= switch_threshold:
-                self.info['language'] = 1
-        elif self.info['language'] == 1:
+                self.info['lang_type'] = 1
+        elif self.info['lang_type'] == 1:
             if self.get_langs_pcts(0) < switch_threshold:
-                self.info['language'] = 2
+                self.info['lang_type'] = 2
             elif self.get_langs_pcts(1) < switch_threshold:
-                self.info['language'] = 0
+                self.info['lang_type'] = 0
 
     def grow(self, growth_inc=1):
         """ Convenience method to update agent age at each step """
@@ -305,7 +305,7 @@ class BaseAgent:
                     Default False
         """
         # create new_agent instance
-        grown_agent = new_class(self.model, self.unique_id, self.info['language'], self.info['sex'])
+        grown_agent = new_class(self.model, self.unique_id, self.info['lang_type'], self.info['sex'])
 
         # copy all current instance attributes to the new agent instance
         for key, val in self.__dict__.items():
@@ -1016,7 +1016,7 @@ class SpeakerAgent(ListenerAgent):
     def update_lang_exclusion(self):
         """ Method to update exclusion counter after failed conversation
             Method is called after running 'run_conversation' model method """
-        excl_lang = 'L1' if self.info['language'] == 2 else 'L2'
+        excl_lang = 'L1' if self.info['lang_type'] == 2 else 'L2'
         self.lang_stats[excl_lang]['excl_c'][self.info['age']] += 1
 
     def evaluate_lang_exclusion(self, mem_window_length=5):
@@ -1029,7 +1029,7 @@ class SpeakerAgent(ListenerAgent):
             Args:
                 * mem_window_length: integer. Number of steps to compute EMA (length of exclusion memory)
         """
-        lang = 'L2' if self.info['language'] == 0 else 'L1'
+        lang = 'L2' if self.info['lang_type'] == 0 else 'L1'
         age = self.info['age']
         # implementing exponential moving average
         excl_history = self.lang_stats[lang]['excl_c'][age - mem_window_length:age]
@@ -1076,7 +1076,7 @@ class SpeakerAgent(ListenerAgent):
             max_num_friends = min(self.info['max_num_friends'], init_max_num_friends)
             max_num_friends_other = min(other.info['max_num_friends'], init_max_num_friends)
 
-        if (abs(other.info['language'] - self.info['language']) <= 1 and
+        if (abs(other.info['lang_type'] - self.info['lang_type']) <= 1 and
                 len(self.model.nws.friendship_network[self]) < max_num_friends and
                 len(self.model.nws.friendship_network[other]) < max_num_friends_other and
                 other not in self.model.nws.friendship_network[self] and
@@ -1539,7 +1539,7 @@ class Young(IndepAgent):
         # define boolean variables
         link_description = self.model.nws.known_people_network[self][cand_agent]
         sex_diff = cand_agent.info['sex'] != self.info['sex']
-        lang_diff = abs(cand_agent.info['language'] - self.info['language'])
+        lang_diff = abs(cand_agent.info['lang_type'] - self.info['lang_type'])
         age_diff = abs(self.info['age'] - cand_agent.info['age'])
 
         # define knowledge of each agent in common language
@@ -2033,7 +2033,7 @@ class Teacher(Adult):
 
     def _set_up_init_job(self, job):
         self.loc_info['job'] = None
-        if job and self.info['language'] in job.info['lang_policy']:
+        if job and self.info['lang_type'] in job.info['lang_policy']:
             job.assign_teacher(self)
 
     def get_school_and_course(self):
@@ -2066,7 +2066,7 @@ class Teacher(Adult):
         clust = self.pick_cluster_for_job_search(keep_cluster=keep_cluster)
         # assign teacher to first school that matches teacher lang profile
         for school in self.model.geo.clusters_info[clust]['schools']:
-            if self.info['language'] in school.info['lang_policy']:
+            if self.info['lang_type'] in school.info['lang_policy']:
                 school.assign_teacher(self)
                 break
 
@@ -2149,7 +2149,7 @@ class TeacherUniv(Teacher):
 
         if 'university' in self.model.geo.clusters_info[clust]:
             univ = self.model.geo.clusters_info[clust]['university']
-            if self.info['language'] in univ.info['lang_policy']:
+            if self.info['lang_type'] in univ.info['lang_policy']:
                 fac = univ[random.choice('abcde')]
                 fac.assign_teacher(self)
 

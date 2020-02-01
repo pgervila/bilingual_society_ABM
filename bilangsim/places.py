@@ -340,7 +340,7 @@ class EducationCenter:
             needed_lang = 'L1' if lp == [0, 1] else ['L1', 'L2'] if lp == [1] else 'L2'
             new_teachers = [ag for ag in self.model.geo.clusters_info[ix]['agents']
                             if ag.info['age'] > (self.info['min_age_teacher'] * self.model.steps_per_year) and
-                            ag.info['language'] in self.info['lang_policy'] and
+                            ag.info['lang_type'] in self.info['lang_policy'] and
                             ag.meets_lang_conds(needed_lang, self.info['min_lang_knowledge']) and
                             not isinstance(ag, (Teacher, TeacherUniv, Pensioner))]
             # keep only one agent per marriage to avoid excessive recursion in agent moving
@@ -570,7 +570,7 @@ class School(EducationCenter):
         cluster_candidates = [t for school in self.model.geo.clusters_info[school_clust]['schools']
                               for t in school.info['employees']
                               if not t.loc_info['job'][1] and
-                              t.info['language'] in self.info['lang_policy']]
+                              t.info['lang_type'] in self.info['lang_policy']]
 
         cluster_candidates[:] = [t for t in cluster_candidates if not hasattr(t, 'blocked')]
 
@@ -587,7 +587,7 @@ class School(EducationCenter):
         for clust in self.model.geo.clusters_info[school_clust]['closest_clusters'][1:]:
             clust_free_staff = [t for sc in self.model.geo.clusters_info[clust]['schools']
                                 for t in sc.info['employees'] if not t.loc_info['job'][1]
-                                and t.info['language'] in self.info['lang_policy']]
+                                and t.info['lang_type'] in self.info['lang_policy']]
             clust_free_staff[:] = [t for t in clust_free_staff if not hasattr(t, 'blocked')]
             other_clusters_free_staff.extend(clust_free_staff)
             if len(other_clusters_free_staff) >= num_teachers:
@@ -731,7 +731,7 @@ class Faculty(EducationCenter):
                 univ = self.model.geo.clusters_info[clust]['university']
                 clust_free_staff = [t for t in univ.info['employees']
                                     if not t.loc_info['job'][1] and
-                                    t.info['language'] in univ.info['lang_policy']]
+                                    t.info['lang_type'] in univ.info['lang_policy']]
                 clust_free_staff[:] = [t for t in clust_free_staff if not hasattr(t, 'blocked')]
                 other_clusters_free_staff.extend(clust_free_staff)
                 if len(other_clusters_free_staff) >= num_teachers:
@@ -742,7 +742,7 @@ class Faculty(EducationCenter):
             for clust in self.model.geo.clusters_info[fac_clust]['closest_clusters']:
                 clust_school_free_staff = [t for sc in self.model.geo.clusters_info[clust]['schools']
                                            for t in sc.info['employees'] if not t.loc_info['job'][1]
-                                           and t.info['language'] in self.info['lang_policy']]
+                                           and t.info['lang_type'] in self.info['lang_policy']]
                 clust_school_free_staff[:] = [t for t in clust_school_free_staff
                                               if not hasattr(t, 'blocked')]
                 other_clusters_free_staff.extend(clust_school_free_staff)
@@ -953,7 +953,7 @@ class Job:
             pass
 
         # hire agent
-        if agent.info['language'] in self.info['lang_policy'] or ignore_lang_constraint:
+        if agent.info['lang_type'] in self.info['lang_policy'] or ignore_lang_constraint:
             self.assign_employee(agent)
             # move agent to new home closer to job if necessary (and requested)
             if move_home:
@@ -964,7 +964,7 @@ class Job:
 
         # if hiring is unsuccessful, we know it is because of lang reasons
         if not agent.loc_info['job']:
-            lang = 'L2' if agent.info['language'] == 0 else 'L1'
+            lang = 'L2' if agent.info['lang_type'] == 0 else 'L1'
             agent.react_to_lang_exclusion(lang)
 
         # free agent from temporary hiring block
